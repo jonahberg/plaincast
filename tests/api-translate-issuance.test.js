@@ -35,6 +35,14 @@ mock.module('../api/_utils.js', () => ({
     productUrlFromItem: (item) => item?.id || null,
 }));
 
+// Hermetic: the real _snapshots.js is env-gated Vercel Blob — a provisioned
+// environment (BLOB_READ_WRITE_TOKEN) must never make unit tests do live I/O.
+let mockSnapshots = {};
+mock.module('../api/_snapshots.js', () => ({
+    getSnapshot: async (office, id) => mockSnapshots[`${office}|${id}`] || null,
+    putSnapshot: async (office, id, payload) => { mockSnapshots[`${office}|${id}`] = payload; return true; },
+}));
+
 const { default: handler } = await import('../api/translate-issuance.js');
 
 function createRes() {
@@ -150,12 +158,61 @@ describe('GET /api/translate-issuance', () => {
         expect(res.statusCode).toBe(502);
     });
 
+    it('does not freeze partial translations: short cache, no snapshot, retry heals', async () => {
+        const id = freshId();
+        mockList = [{ id }];
+        mockSnapshots = {};
+        let call = 0;
+        mockGenerateText = async (args) => {
+            call++;
+            if (args.system.includes('Section name for context: Aviation')) throw new Error('hiccup');
+            return { text: 'ok', finishReason: 'stop' };
+        };
+        const first = createRes();
+        await handler(createReq({ office: 'LOX', id }), first);
+        expect(first.statusCode).toBe(200);
+        expect(first.body.complete).toBe(false);
+        expect(first.headers['cache-control']).toContain('s-maxage=300');
+        expect(Object.keys(mockSnapshots).length).toBe(0); // partial never snapshotted
+
+        // Retry with the model healthy again: full result, long cache, snapshot
+        mockGenerateText = async () => ({ text: 'ok', finishReason: 'stop' });
+        const second = createRes();
+        await handler(createReq({ office: 'LOX', id }), second);
+        expect(second.body.cached).toBe(false); // partial was NOT cached
+        expect(second.body.complete).toBe(true);
+        expect(second.headers['cache-control']).toContain('s-maxage=86400');
+        expect(Object.keys(mockSnapshots).length).toBe(1);
+    });
+
+    it('deduplicates concurrent cold requests into one model fan-out', async () => {
+        const id = freshId();
+        mockList = [{ id }];
+        let modelCalls = 0;
+        mockGenerateText = async () => {
+            modelCalls++;
+            await new Promise(r => setTimeout(r, 20));
+            return { text: 'ok', finishReason: 'stop' };
+        };
+        const resA = createRes();
+        const resB = createRes();
+        await Promise.all([
+            handler(createReq({ office: 'LOX', id }), resA),
+            handler(createReq({ office: 'LOX', id }), resB),
+        ]);
+        expect(resA.statusCode).toBe(200);
+        expect(resB.statusCode).toBe(200);
+        // one fan-out (sections in the fixture), not two
+        expect(modelCalls).toBeLessThanOrEqual(4);
+        expect([resA.body.cached, resB.body.cached]).toContain(true);
+    });
+
     it('rate limits per IP below the single-section endpoint budget', async () => {
         const ip = uniqueIp();
         const id = freshId();
         mockList = [{ id }];
         let last = 0;
-        for (let i = 0; i < 21; i++) {
+        for (let i = 0; i < 7; i++) {
             const res = createRes();
             await handler(createReq({ office: 'LOX', id }, ip), res);
             last = res.statusCode;

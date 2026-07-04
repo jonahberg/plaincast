@@ -94,8 +94,13 @@ export function buildTimelineEntries(products, { parseSections, computeDiff }) {
     const entries = [];
     for (let i = 0; i + 1 < products.length; i++) {
         const curr = products[i];
-        const prev = products[i + 1];
-        if (typeof curr?.text !== 'string' || typeof prev?.text !== 'string') continue;
+        if (typeof curr?.text !== 'string') continue;
+        // Failed fetches sit as null placeholders (positional pagination);
+        // pair with the nearest OLDER real product rather than losing entries.
+        let j = i + 1;
+        while (j < products.length && typeof products[j]?.text !== 'string') j++;
+        if (j >= products.length) break;
+        const prev = products[j];
         const currParsed = parseSections(curr.text);
         const prevParsed = parseSections(prev.text);
         const diffs = computeDiff(

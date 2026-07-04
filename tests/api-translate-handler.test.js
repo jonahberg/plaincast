@@ -83,8 +83,13 @@ const validBody = () => ({
 // component: a client-controlled key component is a billing lever.)
 let windowCounter = 0;
 function freshText() {
-    const start = (windowCounter++ * 3) % (AFD_SYNOPSIS.length - 160);
-    return AFD_SYNOPSIS.slice(start, start + 150);
+    const offset = windowCounter++ * 3;
+    // Fail LOUDLY when the window space is exhausted — silent modulo wrap
+    // would reuse earlier windows and turn cache-miss assertions into lies.
+    if (offset >= AFD_SYNOPSIS.length - 160) {
+        throw new Error('freshText exhausted: extend AFD_SYNOPSIS before adding more tests');
+    }
+    return AFD_SYNOPSIS.slice(offset, offset + 150);
 }
 const freshBody = (overrides = {}) => ({
     ...validBody(),

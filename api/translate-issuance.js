@@ -15,6 +15,7 @@ import { getSnapshot, putSnapshot } from './_snapshots.js';
 const cache = new Map();
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const CACHE_MAX = 200;
+const inFlight = new Map(); // cacheKey -> Promise<payload> during the fan-out
 
 function setCache(key, payload) {
     if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value);
@@ -25,7 +26,7 @@ function setCache(key, payload) {
 // this endpoint gets a tighter budget than single-section /api/translate.
 const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW = 60 * 1000;
-const RATE_LIMIT_MAX = 20;
+const RATE_LIMIT_MAX = 6; // each cold request fans out to ~8 model calls
 
 function checkRateLimit(ip) {
     const now = Date.now();
@@ -86,28 +87,46 @@ export default async function handler(req, res) {
         return res.status(200).json({ ...hit.payload, cached: true });
     }
 
-    // Durable snapshot (if Blob is provisioned): serves permalinks even after
-    // the issuance ages out of NWS retention, and skips re-translation.
-    const snap = await getSnapshot(office, id);
-    if (snap && snap.sections) {
-        setCache(cacheKey, snap);
-        res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=2592000');
-        return res.status(200).json({ ...snap, cached: true });
+    // In-flight dedup: N readers arriving in the cold window (a new issuance,
+    // a launch spike) must share ONE pipeline run, not trigger N×8 model calls.
+    // Fluid Compute shares this module across concurrent requests. The shared
+    // promise covers the WHOLE cold path (snapshot check → NWS fetches →
+    // fan-out); it is registered synchronously, so there is no await-window in
+    // which a second request can start a duplicate run.
+    const pending = inFlight.get(cacheKey);
+    if (pending) {
+        try {
+            const payload = await pending;
+            res.setHeader('Cache-Control', payload.complete
+                ? 'public, s-maxage=86400, stale-while-revalidate=2592000'
+                : 'public, s-maxage=300');
+            return res.status(200).json({ ...payload, cached: true });
+        } catch (e) {
+            const code = e?.statusCode || 502;
+            if (code === 404) res.setHeader('Cache-Control', 'public, s-maxage=60');
+            return res.status(code).json({ error: e?.publicMessage || 'Translation unavailable' });
+        }
     }
 
-    try {
+    const work = (async () => {
+        // Durable snapshot (if Blob is provisioned): serves permalinks even
+        // after the issuance ages out of NWS retention, skips re-translation.
+        const snap = await getSnapshot(office, id);
+        if (snap && snap.sections) return { ...snap, complete: true };
+
         // The id must name a genuinely retained issuance of this office — the
         // list lookup is what makes this endpoint's input unforgeable.
         const list = (await fetchAFDList(office, { signal: AbortSignal.timeout(8000) })).slice(0, 40);
         const item = list.find(it => (it?.id || it?.['@id']) === id);
         if (!item) {
-            res.setHeader('Cache-Control', 'public, s-maxage=600');
-            return res.status(404).json({ error: 'Unknown edition' });
+            // Short CDN window on the 404: an NWS list flap must not poison a
+            // real edition for long.
+            throw Object.assign(new Error('unknown edition'), { statusCode: 404, publicMessage: 'Unknown edition' });
         }
 
         const prod = await fetchAFDProduct(productUrlFromItem(item), { signal: AbortSignal.timeout(8000) });
         const productText = typeof prod?.productText === 'string' ? prod.productText : '';
-        if (!productText) return res.status(502).json({ error: 'Empty product' });
+        if (!productText) throw Object.assign(new Error('empty product'), { statusCode: 502, publicMessage: 'Empty product' });
         const issuanceTime = typeof prod.issuanceTime === 'string' ? prod.issuanceTime : null;
 
         const sections = extractSections(productText)
@@ -115,11 +134,11 @@ export default async function handler(req, res) {
             .filter(s => !SKIP_KEYS.has(s.key))
             .filter(s => s.text.length >= MIN_SECTION_CHARS && s.text.length <= MAX_SECTION_CHARS)
             .slice(0, MAX_SECTIONS);
-        if (sections.length === 0) return res.status(502).json({ error: 'No translatable sections' });
+        if (sections.length === 0) throw Object.assign(new Error('no sections'), { statusCode: 502, publicMessage: 'No translatable sections' });
 
-        // Translate the whole issuance in one parallel pass. Individual section
-        // failures degrade gracefully — the client falls back to per-section
-        // POST /api/translate for any key missing from the response.
+        // Translate the whole issuance in one parallel pass. Individual
+        // section failures degrade gracefully — the client falls back to
+        // per-section POST /api/translate for any key missing here.
         const settled = await Promise.all(sections.map(async (s) => {
             try {
                 const result = await generateText({
@@ -136,23 +155,46 @@ export default async function handler(req, res) {
                 return null;
             }
         }));
-
         const translations = {};
         for (const t of settled) {
             if (t) translations[t.key] = t.text;
         }
         if (Object.keys(translations).length === 0) {
-            return res.status(502).json({ error: 'Translation unavailable' });
+            throw Object.assign(new Error('all sections failed'), { statusCode: 502, publicMessage: 'Translation unavailable' });
         }
-
         // productText rides along so a snapshot can reconstruct the full
         // edition (facsimile column included) after NWS deletes the product.
-        const payload = { office, id, issuanceTime, productText, sections: translations };
-        setCache(cacheKey, payload);
-        await putSnapshot(office, id, payload);
-        res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=2592000');
+        const complete = Object.keys(translations).length === sections.length;
+        return { office, id, issuanceTime, productText, sections: translations, complete };
+    })();
+    inFlight.set(cacheKey, work); // no await between creation and registration
+
+    try {
+        let payload;
+        try {
+            payload = await work;
+        } finally {
+            inFlight.delete(cacheKey);
+        }
+
+        // A PARTIAL result (some sections failed) must not be frozen: no
+        // snapshot, no long CDN window, no in-memory entry — a retry heals it.
+        if (payload.complete) {
+            setCache(cacheKey, payload);
+            await putSnapshot(office, id, payload);
+            res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=2592000');
+        } else {
+            res.setHeader('Cache-Control', 'public, s-maxage=300');
+        }
         return res.status(200).json({ ...payload, cached: false });
     } catch (err) {
+        if (err?.statusCode) {
+            if (err.statusCode === 404) res.setHeader('Cache-Control', 'public, s-maxage=60');
+            return res.status(err.statusCode).json({ error: err.publicMessage || 'Error' });
+        }
+        if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+            return res.status(504).json({ error: 'Translation timed out' });
+        }
         console.error('Issuance translation error:', err);
         return res.status(500).json({ error: 'Internal error' });
     }

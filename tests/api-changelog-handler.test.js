@@ -92,7 +92,9 @@ describe('GET /api/changelog', () => {
         mockItems = [{ id: `solo-${idCounter++}` }];
         mockProducts = { [mockItems[0].id]: { productText: CURR, issuanceTime: 'x' } };
         const res = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), res);
+        // BUF: own office — the per-office latestMemo makes same-office no-id
+        // tests order-coupled otherwise.
+        await handler(createReq({ query: { office: 'BUF' } }), res);
         expect(res.statusCode).toBe(200);
         expect(res.body.changelog).toBeNull();
     });

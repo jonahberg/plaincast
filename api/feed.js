@@ -135,7 +135,11 @@ ${rssItems}  </channel>
 </rss>`;
 
         res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=7200');
+        // An empty feed (NWS list flap or every product fetch failing) must not
+        // occupy the CDN for an hour — let it heal in a minute.
+        res.setHeader('Cache-Control', rssItems
+            ? 'public, s-maxage=3600, stale-while-revalidate=7200'
+            : 'public, s-maxage=60');
         return res.status(200).send(rss);
     } catch (err) {
         console.error('Feed error:', err);

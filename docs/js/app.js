@@ -78,7 +78,9 @@ async function fetchAlerts(office) {
         // the auto-refresh poll (forecasts move fast in exactly these hours).
         const severeNow = Object.entries(alertMap).some(([event, list]) =>
             /warning/i.test(event) && list.some(a => /severe|extreme/i.test(a.severity)));
-        if (severeNow !== severeAlertActive) {
+        // Office-guarded: a slow response for the PREVIOUS office must not set
+        // the posture for the current one.
+        if (office === currentOffice && severeNow !== severeAlertActive) {
             severeAlertActive = severeNow;
             startRefreshPolling();
         }
@@ -1048,6 +1050,17 @@ async function fetchAFD(office) {
             const { time, prodData } = JSON.parse(cached);
             if (Date.now() - time < 15 * 60 * 1000) {
                 if (thisGen === fetchGeneration) renderAFD(prodData, office);
+                // The cache may hide a fresh issuance (the ledger and editions
+                // dropdown would show a newer edition than the spread): check
+                // the list in the background and offer the refresh banner.
+                fetchAFDListShared(office).then(graph => {
+                    if (thisGen !== fetchGeneration) return;
+                    const latest = graph[0];
+                    if (latest && latest.id && latest.id !== prodData.id) {
+                        const banner = document.getElementById('refresh-banner');
+                        if (banner) banner.style.display = '';
+                    }
+                }).catch(() => {});
                 return;
             }
         } catch(e) { console.debug('Cache parse error, refetching', e); }
@@ -1263,9 +1276,14 @@ function selectOffice(office, updateUrl) {
         url.searchParams.delete('office');
         url.searchParams.delete('edition'); // a new office always opens on its latest edition
         history.pushState({}, '', url);
+        renderedRoute = currentRoute();
     }
     try { localStorage.setItem('plaincast-office', office); } catch(e) { /* quota */ }
     updateTitle(office);
+    // The baked footer index highlights the page's office; keep it honest
+    // when navigation happens in-app.
+    document.querySelectorAll('.office-index-list a[aria-current]').forEach(a => a.removeAttribute('aria-current'));
+    document.querySelector(`.office-index-list a[href="/o/${office}/"]`)?.setAttribute('aria-current', 'page');
     // Update RSS auto-discovery link
     const rssLink = document.getElementById('rss-link');
     if (rssLink) rssLink.href = `/api/feed?office=${office}`;
@@ -1281,8 +1299,10 @@ officeSelect.addEventListener('change', () => selectOffice(officeSelect.value));
 // Falls back to the latest forecast if the id has aged out of NWS retention.
 async function loadEdition(office, editionId) {
     currentOffice = office;
+    const thisGen = ++fetchGeneration; // stale responses must never clobber a newer render
     try {
         const items = await fetchHistoryList(office, TIMELINE_LOOKBACK);
+        if (thisGen !== fetchGeneration) return;
         timelineItems = items;
         const item = items.find(i => i.id === editionId);
         if (!item) {
@@ -1291,8 +1311,8 @@ async function loadEdition(office, editionId) {
             const snap = await fetch(`/api/translate-issuance?office=${encodeURIComponent(office)}&id=${encodeURIComponent(editionId)}`)
                 .then(r => (r.ok ? r.json() : null))
                 .catch(() => null);
+            if (thisGen !== fetchGeneration) return;
             if (snap && snap.productText) {
-                fetchGeneration++;
                 viewingHistorical = true;
                 renderAFD({ id: editionId, productText: snap.productText, issuanceTime: snap.issuanceTime }, office);
                 return;
@@ -1306,32 +1326,48 @@ async function loadEdition(office, editionId) {
         const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }, signal: AbortSignal.timeout(10000) });
         if (!res.ok) throw new Error('Fetch failed');
         const prodData = await res.json();
-        fetchGeneration++;
+        if (thisGen !== fetchGeneration) return;
         viewingHistorical = item.id !== items[0]?.id;
         renderAFD(prodData, office);
     } catch (e) {
         console.debug('Edition deep link failed', e);
-        fetchAFD(office);
+        if (thisGen === fetchGeneration) fetchAFD(office);
     }
 }
 
-// Handle browser back/forward
-window.addEventListener('popstate', () => {
+// Handle browser back/forward. Hash-only navigation (clicking a #section-…
+// anchor in the contents nav) also fires popstate — that must NOT re-render
+// the spread, so no-op when the meaningful route is unchanged.
+function currentRoute() {
     const params = new URLSearchParams(window.location.search);
     const pathM = window.location.pathname.match(/\/o\/([A-Za-z]{3})\/?$/);
-    const office = params.get('office')?.toUpperCase() || pathM?.[1]?.toUpperCase();
-    const target = (office && officeSelect.querySelector(`option[value="${office}"]`)) ? office : currentOffice;
+    return {
+        office: params.get('office')?.toUpperCase() || pathM?.[1]?.toUpperCase() || null,
+        view: params.get('view') || null,
+        edition: params.get('edition') || null,
+    };
+}
+let renderedRoute = currentRoute();
+
+window.addEventListener('popstate', () => {
+    const route = currentRoute();
+    if (route.office === renderedRoute.office
+        && route.view === renderedRoute.view
+        && route.edition === renderedRoute.edition) {
+        return; // fragment-only navigation
+    }
+    renderedRoute = route;
+    const target = (route.office && officeSelect.querySelector(`option[value="${route.office}"]`)) ? route.office : currentOffice;
     officeSelect.value = target;
-    if (params.get('view') === 'changelog') {
+    if (route.view === 'changelog') {
         showChangelogView(target, false);
         return;
     }
     currentView = 'forecast';
     document.body.classList.remove('view-changelog');
-    const edition = params.get('edition');
-    if (edition) {
+    if (route.edition) {
         updateTitle(target);
-        loadEdition(target, edition);
+        loadEdition(target, route.edition);
     } else {
         selectOffice(target, false);
     }
@@ -1469,6 +1505,9 @@ function startRefreshPolling() {
         if (document.hidden) return;
         try {
             const graph = await fetchAFDListShared(currentOffice, { force: true });
+            // Severe posture must also stand down on its own: re-check alerts
+            // so an expired Warning returns the poll to its calm cadence.
+            if (severeAlertActive) fetchAlerts(currentOffice).catch(() => {});
             const latest = graph[0];
             if (latest && lastProductId && latest.id !== lastProductId) {
                 document.getElementById('refresh-banner').style.display = '';
@@ -1610,6 +1649,7 @@ document.getElementById('refresh-load')?.addEventListener('click', () => {
     document.getElementById('refresh-banner').style.display = 'none';
     // Clear cache so fetchAFD doesn't serve stale data
     sessionStorage.removeItem(`afd-${currentOffice}`);
+    if (currentView === 'changelog') leaveChangelogChrome();
     fetchAFD(currentOffice);
 });
 document.getElementById('refresh-dismiss')?.addEventListener('click', () => {
@@ -1732,12 +1772,22 @@ function renderHistorySelector(items, currentId) {
         opt.textContent = 'No previous forecasts';
         sel.appendChild(opt);
     } else {
+        // An edition older than this window (deep link near the retention
+        // horizon) must not masquerade as "Latest edition".
+        const inWindow = items.some(i => i.id === currentId);
+        if (!inWindow && viewingHistorical) {
+            const opt = document.createElement('option');
+            opt.disabled = true;
+            opt.selected = true;
+            opt.textContent = 'Archived edition';
+            sel.appendChild(opt);
+        }
         items.forEach((item, i) => {
             const opt = document.createElement('option');
             opt.value = item.id;
             const label = item.time.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', weekday: 'short', month: 'short', day: 'numeric', timeZone: tz, timeZoneName: 'short' });
             opt.textContent = i === 0 ? 'Latest edition' : `${label} (${timeAgo(item.time)})`;
-            if (item.id === currentId) opt.selected = true;
+            if (inWindow && item.id === currentId) opt.selected = true;
             sel.appendChild(opt);
         });
     }
@@ -1758,6 +1808,7 @@ function renderHistorySelector(items, currentId) {
             if (viewingHistorical) url.searchParams.set('edition', item.id);
             else url.searchParams.delete('edition');
             history.pushState({}, '', url);
+        renderedRoute = currentRoute();
             renderAFD(prodData, currentOffice);
         } catch(e) { console.debug('History fetch failed', e); }
     });
@@ -1765,7 +1816,11 @@ function renderHistorySelector(items, currentId) {
 
     // The ledger's front door lives beside the editions control in the colophon.
     // (`line` is the #editions-line node declared at the top of this function.)
-    if (line && !document.getElementById('colophon-changelog-link')) {
+    const existingLink = document.getElementById('colophon-changelog-link');
+    if (existingLink) {
+        existingLink.href = `/o/${encodeURIComponent(currentOffice)}/?view=changelog`;
+    }
+    if (line && !existingLink) {
         const sep = document.createTextNode(' · ');
         const a = document.createElement('a');
         a.id = 'colophon-changelog-link';
@@ -1789,7 +1844,10 @@ function renderHistorySelector(items, currentId) {
 // of the file: deep links call showChangelogView during init.)
 
 async function fetchTimelineProducts(items) {
-    const results = await Promise.all(items.map(async (item) => {
+    // POSITIONAL results — a failed fetch stays as null so pagination indices
+    // into timelineItems never drift (a dropped slot once produced a
+    // duplicated entry that "diffed" an issuance against itself).
+    return Promise.all(items.map(async (item) => {
         try {
             const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }, signal: AbortSignal.timeout(10000) });
             if (!res.ok) return null;
@@ -1799,7 +1857,6 @@ async function fetchTimelineProducts(items) {
                 : null;
         } catch (e) { return null; }
     }));
-    return results.filter(Boolean);
 }
 
 function timelineDateline(time, tz) {
@@ -1826,7 +1883,7 @@ function timelineEntryHTML(entry, tz) {
     const conf = confidenceSentence(entry.confidence);
     const byline = entry.forecaster ? `<span class="timeline-byline">— ${escapeHTML(entry.forecaster)}</span>` : '';
     const summary = entry.changedKeys.length
-        ? `<p class="timeline-summary pending" data-id="${escapeHTML(entry.id)}"><span class="ai-loading"></span></p>`
+        ? `<p class="timeline-summary pending" data-id="${escapeAttr(entry.id)}"><span class="ai-loading"></span></p>`
         : `<p class="timeline-summary timeline-summary-quiet">The forecast carried forward unchanged.</p>`;
     const diff = entry.changed.length ? `
         <details class="timeline-diff">
@@ -1838,18 +1895,18 @@ function timelineEntryHTML(entry, tz) {
             </div>`).join('')}
         </details>` : '';
     return `
-    <article class="timeline-entry" data-entry-id="${escapeHTML(entry.id)}">
-        <div class="timeline-dateline">
+    <article class="timeline-entry" data-entry-id="${escapeAttr(entry.id)}">
+        <h3 class="timeline-dateline">
             <span class="timeline-date">${escapeHTML(dl.date)}</span>
-            <span class="timeline-sep">·</span>
+            <span class="timeline-sep" aria-hidden="true">·</span>
             <span class="timeline-clock">${escapeHTML(dl.clock)}</span>
-            <span class="timeline-sep">·</span>
+            <span class="timeline-sep" aria-hidden="true">·</span>
             <span class="timeline-edition">${escapeHTML(dl.edition)} Edition</span>
-        </div>
+        </h3>
         ${summary}
         <p class="timeline-meta">${revised} <span class="timeline-confidence">${conf}</span> ${byline}</p>
         ${diff}
-        <p class="timeline-read"><a href="/o/${encodeURIComponent(currentOffice)}/?edition=${encodeURIComponent(entry.id)}" data-edition-id="${escapeHTML(entry.id)}">Read this edition</a></p>
+        <p class="timeline-read"><a href="/o/${encodeURIComponent(currentOffice)}/?edition=${encodeURIComponent(entry.id)}" data-edition-id="${escapeAttr(entry.id)}">Read this edition</a></p>
     </article>`;
 }
 
@@ -1864,6 +1921,8 @@ async function fillTimelineSummary(office, el) {
         el.classList.remove('pending');
         if (data && data.changelog) {
             el.textContent = data.changelog;
+        } else if (data && data.transient) {
+            el.remove(); // a model/NWS failure is not a "nothing changed" verdict
         } else {
             el.textContent = 'Minor refinements — timing and wording, no headline change.';
             el.classList.add('timeline-summary-quiet');
@@ -1893,17 +1952,19 @@ function observeTimelineSummaries(office, root) {
 async function openEditionFromTimeline(id) {
     const item = timelineItems.find(i => i.id === id);
     if (!item) return;
+    const thisGen = ++fetchGeneration; // capture BEFORE the fetch, not after
     try {
         const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }, signal: AbortSignal.timeout(10000) });
         if (!res.ok) throw new Error('Fetch failed');
         const prodData = await res.json();
+        if (thisGen !== fetchGeneration) return; // user moved on mid-fetch
         const isHistorical = item.id !== timelineItems[0]?.id;
         // Permalink: archived editions carry ?edition= so the URL IS the artifact
         leaveChangelogChrome(isHistorical ? item.id : null);
-        fetchGeneration++;
         viewingHistorical = isHistorical;
         renderAFD(prodData, currentOffice);
         window.scrollTo(0, 0);
+        announce('Opened edition');
     } catch (e) { console.debug('Edition open failed', e); }
 }
 
@@ -1916,6 +1977,7 @@ function leaveChangelogChrome(editionId) {
     if (editionId) url.searchParams.set('edition', editionId);
     else url.searchParams.delete('edition');
     history.pushState({}, '', url);
+    renderedRoute = currentRoute();
 }
 
 function appendTimelineEntries(entries, container, office) {
@@ -1936,14 +1998,20 @@ async function loadEarlierEditions(container, office, btn) {
     try {
         // Need one product past the visible window to diff the last pair.
         const nextItems = timelineItems.slice(timelineProducts.length, timelineProducts.length + TIMELINE_BATCH);
+        if (!nextItems.length) { btn.closest('.timeline-more')?.remove(); return; }
         const fetched = await fetchTimelineProducts(nextItems);
-        if (!fetched.length) { btn.closest('.timeline-more')?.remove(); return; }
+        // Focus safety: if the button (about to be moved/removed) holds focus,
+        // park focus on the container before mutating.
         const overlapFrom = timelineProducts.length - 1; // last already-fetched product heads the new pairs
         timelineProducts = timelineProducts.concat(fetched);
         const entries = buildTimelineEntries(timelineProducts.slice(overlapFrom), { parseSections, computeDiff });
         appendTimelineEntries(entries, container, office);
         if (timelineProducts.length >= timelineItems.length) {
-            btn.closest('.timeline-more')?.remove();
+            const more = btn.closest('.timeline-more');
+            if (more && more.contains(document.activeElement)) {
+                container.querySelector('.timeline-entry:last-of-type a')?.focus();
+            }
+            more?.remove();
         } else {
             btn.disabled = false;
             btn.textContent = 'Earlier editions';
@@ -1973,6 +2041,7 @@ async function showChangelogView(office, updateUrl) {
         const url = new URL(window.location);
         url.searchParams.set('view', 'changelog');
         history.pushState({}, '', url);
+        renderedRoute = currentRoute();
     }
 
     const thisGen = ++fetchGeneration;
@@ -1995,7 +2064,7 @@ async function showChangelogView(office, updateUrl) {
         container.className = 'timeline';
         container.innerHTML = `
         <header class="timeline-header">
-            <div class="timeline-kicker">The Changelog</div>
+            <h2 class="timeline-kicker">The Changelog</h2>
             <p class="timeline-standfirst">Every revision to the ${escapeHTML(name)} forecast, newest first —
             what changed with each update, and whether the forecasters' confidence rose or fell.</p>
             <p class="timeline-back"><a href="/o/${encodeURIComponent(office)}/" id="timeline-back-link">← Back to the forecast</a></p>

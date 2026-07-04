@@ -1,5 +1,5 @@
 // Plaincast Service Worker — offline-capable weather forecasts
-const CACHE_NAME = 'plaincast-v5';
+const CACHE_NAME = 'plaincast-v6';
 const APP_SHELL = [
     '/',
     '/og-image.png',
@@ -37,9 +37,12 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Cache-first for app shell (HTML, CSS, JS, images)
+    // Cache-first for app shell (HTML, CSS, JS, fonts, images). /o/<CODE>/
+    // office pages are the canonical share URLs — offline they get the cached
+    // app shell (app.js reads the office from the path).
     if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/og-image.png'
-        || url.pathname === '/styles.css' || url.pathname.startsWith('/js/')) {
+        || url.pathname === '/styles.css' || url.pathname.startsWith('/js/')
+        || url.pathname.startsWith('/fonts/') || /^\/o\/[A-Za-z]{3}\/?$/.test(url.pathname)) {
         event.respondWith(
             caches.match(event.request).then(cached => {
                 const fetchPromise = fetch(event.request).then(response => {
@@ -49,7 +52,13 @@ self.addEventListener('fetch', (event) => {
                     }
                     return response;
                 }).catch(() => cached);
-                return cached || fetchPromise;
+                if (cached) return cached;
+                // Offline /o/ page never seen before: fall back to the cached
+                // root shell — same app; the office resolves from the path.
+                if (/^\/o\/[A-Za-z]{3}\/?$/.test(url.pathname)) {
+                    return fetchPromise.then(r => r || caches.match('/'));
+                }
+                return fetchPromise;
             })
         );
         return;

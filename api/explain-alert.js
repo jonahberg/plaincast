@@ -11,6 +11,7 @@ import { fetchAlertById } from './_utils.js';
 const cache = new Map(); // alert id -> { explanation, time }
 const CACHE_TTL = 4 * 60 * 60 * 1000;
 const CACHE_MAX = 300;
+const inFlight = new Map(); // alert id -> Promise<string> (dedup concurrent misses)
 
 function setCache(id, explanation) {
     if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value);
@@ -73,6 +74,19 @@ export default async function handler(req, res) {
         return res.status(200).json({ explanation: hit.explanation, cached: true });
     }
 
+    // Dedup concurrent misses: everyone opening the same Warning's modal in
+    // the same minute shares one model call.
+    const pending = inFlight.get(id);
+    if (pending) {
+        try {
+            const explanation = await pending;
+            res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=3600');
+            return res.status(200).json({ explanation, cached: true });
+        } catch (e) {
+            return res.status(e?.statusCode || 502).json({ error: e?.publicMessage || 'Explanation unavailable' });
+        }
+    }
+
     try {
         const alert = await fetchAlertById(id, { signal: AbortSignal.timeout(8000) });
         if (!alert) {
@@ -93,19 +107,34 @@ export default async function handler(req, res) {
             return res.status(502).json({ error: 'Alert has no explainable text' });
         }
 
-        const result = await generateText({
-            model: 'anthropic/claude-haiku-4.5',
-            system: SYSTEM,
-            prompt,
-            maxOutputTokens: 400,
-            abortSignal: AbortSignal.timeout(15000),
-        });
+        const work = (async () => {
+            const result = await generateText({
+                model: 'anthropic/claude-haiku-4.5',
+                system: SYSTEM,
+                prompt,
+                maxOutputTokens: 400,
+                abortSignal: AbortSignal.timeout(15000),
+            });
+            if (result.finishReason === 'content-filter') {
+                throw Object.assign(new Error('filtered'), { statusCode: 503, publicMessage: 'Explanation skipped' });
+            }
+            const text = (result.text || '').trim();
+            if (!text) throw Object.assign(new Error('empty'), { statusCode: 502, publicMessage: 'Empty explanation' });
+            return text;
+        })();
+        inFlight.set(id, work);
 
-        if (result.finishReason === 'content-filter') {
-            return res.status(503).json({ error: 'Explanation skipped', reason: 'content-filter' });
+        let explanation;
+        try {
+            explanation = await work;
+        } catch (e) {
+            if (e?.statusCode) {
+                return res.status(e.statusCode).json({ error: e.publicMessage, ...(e.statusCode === 503 ? { reason: 'content-filter' } : {}) });
+            }
+            throw e;
+        } finally {
+            inFlight.delete(id);
         }
-        const explanation = (result.text || '').trim();
-        if (!explanation) return res.status(502).json({ error: 'Empty explanation' });
 
         setCache(id, explanation);
         res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=3600');

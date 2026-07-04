@@ -92,6 +92,21 @@ function checkRateLimit(ip) {
 // this is the only path that will translate unverified text.
 const degradedRateLimitMap = new Map();
 const DEGRADED_RATE_LIMIT_MAX = 5; // per IP per minute (normal mode: 30)
+// Instance-wide budget for degraded mode: during an NWS outage the endpoint
+// translates UNVERIFIED text, so cap the whole instance, not just each IP —
+// rotating IPs must not turn an outage into an open LLM proxy.
+let degradedGlobal = { windowStart: 0, count: 0 };
+const DEGRADED_GLOBAL_MAX = 30; // unverified translations per minute per instance
+
+function checkDegradedGlobalBudget() {
+    const now = Date.now();
+    if (now - degradedGlobal.windowStart > RATE_LIMIT_WINDOW) {
+        degradedGlobal = { windowStart: now, count: 0 };
+    }
+    if (degradedGlobal.count >= DEGRADED_GLOBAL_MAX) return false;
+    degradedGlobal.count += 1;
+    return true;
+}
 const DEGRADED_TEXT_MAX = 6000;    // chars (normal mode: 10000)
 const DEGRADED_MAX_TOKENS = 512;   // output tokens (normal mode: 1024)
 
@@ -332,7 +347,7 @@ export default async function handler(req, res) {
         }
     } else {
         console.warn(`[translate] degraded mode (AFD source unavailable): office=${officeCode}`);
-        if (!checkDegradedRateLimit(clientIp)) {
+        if (!checkDegradedRateLimit(clientIp) || !checkDegradedGlobalBudget()) {
             return res.status(429).json({ error: 'Too many requests. Please try again later.' });
         }
         if (text.length > DEGRADED_TEXT_MAX) {
