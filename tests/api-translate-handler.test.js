@@ -26,6 +26,7 @@ VFR conditions expected through the period.
 
 $$`;
 mock.module('../api/_utils.js', () => ({
+    fetchAlertById: async () => null,
     fetchAFDList: async () => {
         if (mockAFDThrows) throw new Error('NWS down');
         return [{ id: 'p1', '@id': 'https://api.weather.gov/products/p1' }];

@@ -195,6 +195,7 @@ describe('sectionHealth', () => {
 let mockItems = [];
 let mockProducts = {};
 mock.module('../api/_utils.js', () => ({
+    fetchAlertById: async () => null,
     fetchAFDList: async () => mockItems,
     fetchAFDProduct: async (url) => mockProducts[url] || {},
     productUrlFromItem: (item) => item?.id || null,
@@ -272,7 +273,7 @@ describe('GET /api/feed with Key Message format AFDs', () => {
         expect(res.headers['content-type']).toContain('application/rss+xml');
         expect(res.headers['cache-control']).toContain('s-maxage=3600');
         expect(res.body).toContain('<rss version="2.0"');
-        expect(res.body).toContain('<guid isPermaLink="false">feed-okx-2</guid>');
+        expect(res.body).toContain('<guid isPermaLink="true">https://plaincast.live/o/OKX/?edition=feed-okx-2</guid>');
     });
 
     it('warns once per office when zero sections parse (format drift)', async () => {

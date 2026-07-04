@@ -1,0 +1,120 @@
+// Vercel serverless function: plain-English explanation of one NWS alert.
+// The alert modal shows p.description + p.instruction verbatim — the highest-
+// stakes text on the page was the only text that never got the plain-language
+// treatment. This endpoint fetches the alert SERVER-SIDE by its URN id, so the
+// model's input is unforgeable (nothing client-supplied is translated), then
+// caches per alert id — NWS issues updated alerts under new ids, so an id's
+// content is effectively immutable.
+import { generateText } from 'ai';
+import { fetchAlertById } from './_utils.js';
+
+const cache = new Map(); // alert id -> { explanation, time }
+const CACHE_TTL = 4 * 60 * 60 * 1000;
+const CACHE_MAX = 300;
+
+function setCache(id, explanation) {
+    if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value);
+    cache.set(id, { explanation, time: Date.now() });
+}
+
+// Alerts are urgent-path requests; keep the budget tight anyway — every miss
+// is a model call, and alert ids are enumerable from the public alerts feed.
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW = 60 * 1000;
+const RATE_LIMIT_MAX = 10;
+
+function checkRateLimit(ip) {
+    const now = Date.now();
+    const entry = rateLimitMap.get(ip);
+    if (!entry) {
+        rateLimitMap.set(ip, { timestamps: [now] });
+        return true;
+    }
+    entry.timestamps = entry.timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
+    if (entry.timestamps.length >= RATE_LIMIT_MAX) return false;
+    entry.timestamps.push(now);
+    return true;
+}
+
+const rateLimitCleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [ip, entry] of rateLimitMap) {
+        entry.timestamps = entry.timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
+        if (entry.timestamps.length === 0) rateLimitMap.delete(ip);
+    }
+    if (rateLimitMap.size > 10_000) rateLimitMap.clear();
+}, 5 * 60 * 1000);
+rateLimitCleanupTimer.unref?.();
+
+const SYSTEM = `You translate National Weather Service alerts into calm, plain English for a general reader. Given an alert's official text, write a short explanation covering: what is happening, exactly where and until when, and what a person there should actually do. Rules:
+- Preserve ALL specifics: place names, times, amounts, wind speeds, road names
+- Calm and factual — no hype, no exclamation points, no alarmist framing beyond what the alert itself states
+- Plain prose in 1-3 short paragraphs, 120 words maximum
+- Bold the single most important action with **markdown bold**; no headers, lists, or quotes
+- Do not add information that is not in the alert`;
+
+export default async function handler(req, res) {
+    if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+
+    const id = typeof req.query.id === 'string' ? req.query.id.trim() : '';
+    // NWS alert ids are URNs like urn:oid:2.49.0.1.840.0.<digits>...
+    if (!id || id.length > 300 || !/^urn:oid:[\w.:,-]+$/.test(id)) {
+        return res.status(400).json({ error: 'Invalid alert id' });
+    }
+
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+    if (!checkRateLimit(clientIp)) {
+        return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    }
+
+    const hit = cache.get(id);
+    if (hit && Date.now() - hit.time < CACHE_TTL) {
+        res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=3600');
+        return res.status(200).json({ explanation: hit.explanation, cached: true });
+    }
+
+    try {
+        const alert = await fetchAlertById(id, { signal: AbortSignal.timeout(8000) });
+        if (!alert) {
+            res.setHeader('Cache-Control', 'public, s-maxage=600');
+            return res.status(404).json({ error: 'Alert not found' });
+        }
+
+        const parts = [
+            alert.event && `Event: ${alert.event}`,
+            alert.headline && `Headline: ${alert.headline}`,
+            alert.areaDesc && `Areas: ${alert.areaDesc}`,
+            alert.expires && `Expires: ${alert.expires}`,
+            alert.description && `Description:\n${alert.description}`,
+            alert.instruction && `Instructions:\n${alert.instruction}`,
+        ].filter(Boolean);
+        const prompt = parts.join('\n\n').slice(0, 12000);
+        if (prompt.length < 40) {
+            return res.status(502).json({ error: 'Alert has no explainable text' });
+        }
+
+        const result = await generateText({
+            model: 'anthropic/claude-haiku-4.5',
+            system: SYSTEM,
+            prompt,
+            maxOutputTokens: 400,
+            abortSignal: AbortSignal.timeout(15000),
+        });
+
+        if (result.finishReason === 'content-filter') {
+            return res.status(503).json({ error: 'Explanation skipped', reason: 'content-filter' });
+        }
+        const explanation = (result.text || '').trim();
+        if (!explanation) return res.status(502).json({ error: 'Empty explanation' });
+
+        setCache(id, explanation);
+        res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=3600');
+        return res.status(200).json({ explanation, cached: false });
+    } catch (err) {
+        if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+            return res.status(504).json({ error: 'Explanation timed out' });
+        }
+        console.error('Explain-alert error:', err);
+        return res.status(500).json({ error: 'Internal error' });
+    }
+}

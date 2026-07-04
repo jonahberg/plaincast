@@ -12,6 +12,7 @@ let mockItems = [];
 let mockProducts = {};
 let mockListThrows = false;
 mock.module('../api/_utils.js', () => ({
+    fetchAlertById: async () => null,
     fetchAFDList: async () => { if (mockListThrows) throw new Error('NWS down'); return mockItems; },
     fetchAFDProduct: async (url) => mockProducts[url] || {},
     productUrlFromItem: (item) => item?.id || null,
