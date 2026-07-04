@@ -6,12 +6,20 @@
     <title>Tucson NWS Forecast in Plain English · Plaincast</title>
     <meta name="description" content="The latest National Weather Service Area Forecast Discussion for Tucson (TWC), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.">
     <meta name="keywords" content="NWS, weather forecast, Area Forecast Discussion, AFD, plain English, meteorology, National Weather Service, weather translation, jargon decoder">
-    <meta name="theme-color" content="#0F4C45">
+    <meta name="theme-color" content="#f7f3ea">
     <meta name="author" content="Jonah Berg">
     <meta property="og:locale" content="en_US">
     <meta name="google-site-verification" content="IdNCtGpFPAc0ZPT6T41Z-KgfP-AzHr7qfAn-7asX96Y">
     <link rel="canonical" href="https://plaincast.live/o/TWC/">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>">
+    <!-- api.weather.gov gates all forecast content; warm the connection early -->
+    <link rel="preconnect" href="https://api.weather.gov" crossorigin>
+    <link rel="modulepreload" href="/js/app.js">
+    <link rel="modulepreload" href="/js/glossary.js">
+    <link rel="modulepreload" href="/js/offices.js">
+    <link rel="modulepreload" href="/js/abbreviations.js">
+    <link rel="modulepreload" href="/js/diff.js">
+    <link rel="modulepreload" href="/js/timeline.js">
     <link rel="preload" href="/fonts/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/fonts/source-serif-4-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -41,7 +49,8 @@
     <meta property="og:title" content="Tucson NWS Forecast in Plain English · Plaincast">
     <meta property="og:description" content="The latest National Weather Service Area Forecast Discussion for Tucson (TWC), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.">
     <meta property="og:site_name" content="Plaincast">
-    <meta property="og:image" content="https://plaincast.live/og-image.png">
+    <meta property="og:image" content="https://plaincast.live/api/og?office=TWC">
+    <meta property="og:image:type" content="image/png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
 
@@ -49,7 +58,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Tucson NWS Forecast in Plain English · Plaincast">
     <meta name="twitter:description" content="The latest National Weather Service Area Forecast Discussion for Tucson (TWC), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.">
-    <meta name="twitter:image" content="https://plaincast.live/og-image.png">
+    <meta name="twitter:image" content="https://plaincast.live/api/og?office=TWC">
 
     <!-- Structured Data -->
     <script type="application/ld+json">
