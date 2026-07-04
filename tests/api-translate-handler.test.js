@@ -11,11 +11,13 @@ mock.module('ai', () => ({
 // contains validBody().text, so legitimate bodies pass verification. Set
 // mockAFDThrows to simulate an NWS outage (handler should then fail open).
 let mockAFDThrows = false;
+const AFD_ISSUANCE_TIME = '2026-03-24T18:25:00+00:00';
+const AFD_SYNOPSIS = 'A dry pattern holds through the weekend with highs in the low 80s across the valleys and mountains through Tuesday afternoon. Marine layer returns midweek with patchy drizzle possible along the coast during the overnight and early morning hours. Weak troughing aloft keeps temperatures near seasonal normals into the following weekend before high pressure rebuilds from the east and a gradual warming trend takes hold across the region.';
 const AFD_PRODUCT_TEXT = `000
 FXUS66 KLOX 241825
 AFDLOX
 
-.SYNOPSIS...A dry pattern holds through the weekend with highs in the low 80s across the valleys and mountains through Tuesday afternoon. Marine layer returns midweek.
+.SYNOPSIS...${AFD_SYNOPSIS}
 
 &&
 
@@ -28,7 +30,7 @@ mock.module('../api/_utils.js', () => ({
         if (mockAFDThrows) throw new Error('NWS down');
         return [{ id: 'p1', '@id': 'https://api.weather.gov/products/p1' }];
     },
-    fetchAFDProduct: async () => ({ productText: AFD_PRODUCT_TEXT }),
+    fetchAFDProduct: async () => ({ productText: AFD_PRODUCT_TEXT, issuanceTime: AFD_ISSUANCE_TIME }),
     productUrlFromItem: (item) => item?.['@id'] || null,
 }));
 
@@ -74,13 +76,18 @@ const validBody = () => ({
     issuanceTime: '2026-03-24T18:25:00+00:00',
 });
 
-// Bust the translation cache via a unique issuanceTime (part of the cache key)
-// rather than mutating `text` — that keeps `text` a clean substring of the
-// mocked AFD so source-verification still passes.
-let timeCounter = 0;
+// Bust the translation cache via a unique sliding window over the mocked AFD
+// synopsis — each window is still a contiguous chunk of the product text, so
+// source-verification passes. (issuanceTime is deliberately NOT a cache-key
+// component: a client-controlled key component is a billing lever.)
+let windowCounter = 0;
+function freshText() {
+    const start = (windowCounter++ * 3) % (AFD_SYNOPSIS.length - 160);
+    return AFD_SYNOPSIS.slice(start, start + 150);
+}
 const freshBody = (overrides = {}) => ({
     ...validBody(),
-    issuanceTime: `2026-03-24T18:25:00.${String(timeCounter++).padStart(3, '0')}Z`,
+    text: freshText(),
     ...overrides,
 });
 
@@ -367,5 +374,123 @@ describe('POST /api/translate — AFD-source verification', () => {
         const res = createRes();
         await handler(req, res);
         expect(res.statusCode).toBe(200);
+    });
+});
+
+describe('POST /api/translate — cache-key hardening (billing abuse)', () => {
+    beforeEach(() => {
+        mockGenerateText = async () => ({ text: 'hardened translation', finishReason: 'stop' });
+        mockAFDThrows = false;
+    });
+
+    it('ignores client issuanceTime for caching — varying it cannot force fresh AI calls', async () => {
+        const body = freshBody({ issuanceTime: '2026-03-24T18:25:00+00:00' });
+
+        const first = createRes();
+        await handler(createReq({ body }), first);
+        expect(first.body.cached).toBe(false);
+
+        mockGenerateText = async () => { throw new Error('cache busted: AI was re-billed'); };
+        const second = createRes();
+        await handler(createReq({ body: { ...body, issuanceTime: '2026-03-24T18:25:01+00:00' } }), second);
+        expect(second.statusCode).toBe(200);
+        expect(second.body.cached).toBe(true);
+    });
+
+    it('derives calendar context from the matched AFD product, not the client claim', async () => {
+        let aiArgs;
+        mockGenerateText = async (args) => {
+            aiArgs = args;
+            return { text: 'ok', finishReason: 'stop' };
+        };
+        // Client lies about the issuance date; the prompt must use the product's.
+        const res = createRes();
+        await handler(createReq({ body: freshBody({ issuanceTime: '1999-01-01T00:00:00+00:00' }) }), res);
+        expect(res.statusCode).toBe(200);
+        expect(aiArgs.system).toContain('March 24, 2026');
+        expect(aiArgs.system).not.toContain('1999');
+    });
+
+    it('canonicalizes section qualifiers — "SHORT TERM /THROUGH TONIGHT/" shares a cache entry with "Short Term"', async () => {
+        const text = freshText();
+
+        const first = createRes();
+        await handler(createReq({ body: freshBody({ text, section: 'Short Term' }) }), first);
+        expect(first.body.cached).toBe(false);
+
+        mockGenerateText = async () => { throw new Error('cache busted: AI was re-billed'); };
+        const second = createRes();
+        await handler(createReq({ body: freshBody({ text, section: 'SHORT TERM /THROUGH TONIGHT/' }) }), second);
+        expect(second.statusCode).toBe(200);
+        expect(second.body.cached).toBe(true);
+    });
+
+    it('buckets unknown section labels together — label variation cannot bust the cache', async () => {
+        const text = freshText();
+
+        const first = createRes();
+        await handler(createReq({ body: freshBody({ text, section: 'Zebra Poetry Hour 1' }) }), first);
+        expect(first.body.cached).toBe(false);
+
+        mockGenerateText = async () => { throw new Error('cache busted: AI was re-billed'); };
+        const second = createRes();
+        await handler(createReq({ body: freshBody({ text, section: 'Zebra Poetry Hour 2' }) }), second);
+        expect(second.statusCode).toBe(200);
+        expect(second.body.cached).toBe(true);
+    });
+});
+
+describe('POST /api/translate — degraded mode (NWS unreachable)', () => {
+    beforeEach(() => {
+        mockGenerateText = async () => ({ text: 'degraded translation', finishReason: 'stop' });
+        mockAFDThrows = true;
+    });
+
+    it('applies a stricter per-IP rate limit than normal mode', async () => {
+        const ip = uniqueIp();
+        let lastStatus = 0;
+        // Normal mode allows 30/min; degraded mode must clamp well below that.
+        for (let i = 0; i < 6; i++) {
+            const req = createReq({
+                body: freshBody({ office: 'SEW', text: `Degraded request number ${i} with enough length to pass validation checks.` }),
+                headers: { 'x-forwarded-for': ip },
+            });
+            const res = createRes();
+            await handler(req, res);
+            lastStatus = res.statusCode;
+        }
+        expect(lastStatus).toBe(429);
+    });
+
+    it('lowers maxOutputTokens for unverified text', async () => {
+        let aiArgs;
+        mockGenerateText = async (args) => {
+            aiArgs = args;
+            return { text: 'ok', finishReason: 'stop' };
+        };
+        const res = createRes();
+        await handler(createReq({ body: freshBody({ office: 'BOX', text: 'Some unverifiable forecast text long enough to pass the length validation.' }) }), res);
+        expect(res.statusCode).toBe(200);
+        expect(aiArgs.maxOutputTokens).toBeLessThanOrEqual(512);
+    });
+
+    it('rejects oversized text that normal mode would accept', async () => {
+        const res = createRes();
+        await handler(createReq({ body: freshBody({ office: 'MFL', text: 'a'.repeat(7000) }) }), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/too long/i);
+    });
+
+    it('keeps full maxOutputTokens when verification succeeds (normal mode)', async () => {
+        mockAFDThrows = false;
+        let aiArgs;
+        mockGenerateText = async (args) => {
+            aiArgs = args;
+            return { text: 'ok', finishReason: 'stop' };
+        };
+        const res = createRes();
+        await handler(createReq({ body: freshBody() }), res);
+        expect(res.statusCode).toBe(200);
+        expect(aiArgs.maxOutputTokens).toBe(1024);
     });
 });

@@ -723,7 +723,7 @@ function render(sections, productContext = {}) {
             </div>
             <div class="columns show-plain">
                 <div>
-                    <div class="col-label">In plain English · via <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a></div>
+                    <div class="col-label">In plain English</div>
                     <div class="plain-col">${plainHtml}</div>
                 </div>
                 <div>
@@ -768,6 +768,10 @@ function render(sections, productContext = {}) {
                 if (renderGen !== fetchGeneration) return;
                 plainCol.innerHTML = html;
                 plainCol.style.opacity = '1';
+                // Credit Claude only once its translation is actually on screen —
+                // the regex gloss shown before (or instead, on AI failure) isn't its work.
+                const colLabel = el.querySelector('.col-label');
+                if (colLabel) colLabel.innerHTML = 'In plain English · via <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a>';
                 setTimeout(() => { plainCol.style.minHeight = ''; }, 250);
             }, 200);
         } catch (err) {
