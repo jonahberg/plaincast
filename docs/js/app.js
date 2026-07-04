@@ -672,6 +672,33 @@ async function fetchAITranslation(text, section, office, issuanceTime) {
     return html;
 }
 
+// ─── Scroll-spy: the printed running head ────────────────────────
+// styles.css has styled .section-nav a[aria-current="true"] (rubric underline
+// sweep) since the Dispatch redesign — this is the JS that was never wired.
+let sectionSpyObserver = null;
+function setupScrollSpy() {
+    if (sectionSpyObserver) { sectionSpyObserver.disconnect(); sectionSpyObserver = null; }
+    if (!('IntersectionObserver' in window)) return;
+    const navEl = document.getElementById('section-nav');
+    if (!navEl) return;
+    const links = new Map();
+    navEl.querySelectorAll('a[href^="#section-"]').forEach(a => {
+        links.set(a.getAttribute('href').slice(1), a);
+    });
+    if (!links.size) return;
+    sectionSpyObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            navEl.querySelectorAll('a[aria-current]').forEach(a => a.removeAttribute('aria-current'));
+            links.get(entry.target.id)?.setAttribute('aria-current', 'true');
+        }
+    }, { rootMargin: '-15% 0px -75% 0px' });
+    for (const id of links.keys()) {
+        const el = document.getElementById(id);
+        if (el) sectionSpyObserver.observe(el);
+    }
+}
+
 // ─── Smart section ordering ──────────────────────────────────────
 // Reorder sections based on context: alerts first when active,
 // elevate Marine for coastal offices, Fire Weather for inland.
@@ -831,6 +858,8 @@ function render(sections, productContext = {}) {
             if (loadingLabel) loadingLabel.remove();
         }
     }
+
+    setupScrollSpy();
 
     // IntersectionObserver: translate sections as they scroll into view
     if ('IntersectionObserver' in window) {
@@ -1375,6 +1404,11 @@ if ('serviceWorker' in navigator) {
             sun.style.display = isDark() ? 'none' : 'block';
             moon.style.display = isDark() ? 'block' : 'none';
         }
+        toggle.setAttribute('aria-pressed', String(isDark()));
+        // Keep the browser-chrome tint on the current paper color — the baked
+        // meta was a pre-redesign teal that matched nothing in the palette.
+        document.querySelector('meta[name="theme-color"]')
+            ?.setAttribute('content', isDark() ? '#100f0c' : '#f7f3ea');
     }
     updateIcon();
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -1640,7 +1674,10 @@ document.addEventListener('keydown', (e) => {
                 if (arr[i].offsetTop < scrollY - 50) { target = arr[i]; break; }
             }
         }
-        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (target) {
+            const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+        }
     } else if (e.key === '/') {
         e.preventDefault();
         document.getElementById('office-select')?.focus();
@@ -1649,6 +1686,10 @@ document.addEventListener('keydown', (e) => {
         openKbd();
     } else if (e.key === 'Escape') {
         closeKbd();
+        // WCAG 1.4.13: hover/focus tooltips must be dismissible without moving
+        // the pointer or focus.
+        document.querySelectorAll('.jargon.tip-open').forEach(el => el.classList.remove('tip-open'));
+        if (document.activeElement?.closest?.('.jargon')) document.activeElement.blur();
     }
 });
 

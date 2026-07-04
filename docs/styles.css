@@ -808,6 +808,14 @@ body.view-changelog #changelog-line { display: none !important; }
 
 /* ─────────────────────────────  PRINT  ───────────────────────────── */
 @media print {
+    /* Fine-press page setup: generous margins, no widowed lines, sections
+       keep their headings attached. */
+    @page { margin: 18mm 15mm; }
+    p, .plain-col, .timeline-summary { widows: 3; orphans: 3; }
+    .section-title, .timeline-dateline, h2, h3 { break-after: avoid-page; }
+    .forecast-section, .timeline-entry { break-inside: avoid-page; }
+    .masthead, .ledger { break-after: avoid-page; }
+    .timeline-diff, .timeline-read, .timeline-more, .changelog-view-link { display: none !important; }
     .atmosphere, .utility-bar, .section-nav, .ai-toggle, .theme-toggle, .share-btn, .kbd-hint,
     .banner, .explainer, .alert-modal-overlay, #kbd-overlay, .diff-toggle, .colophon-editions,
     .annotated-col, .columns > div:last-child, .col-label, .ai-loading-label {
