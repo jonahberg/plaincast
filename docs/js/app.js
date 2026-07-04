@@ -1183,6 +1183,7 @@ function selectOffice(office, updateUrl) {
     // Update RSS auto-discovery link
     const rssLink = document.getElementById('rss-link');
     if (rssLink) rssLink.href = `/api/feed?office=${office}`;
+    document.getElementById('rss-colophon-link')?.setAttribute('href', `/api/feed?office=${office}`);
     // Switching offices keeps you in whichever view you're reading
     if (currentView === 'changelog') showChangelogView(office, false);
     else fetchAFD(office);

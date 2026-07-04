@@ -1,10 +1,11 @@
 // Vercel serverless function: RSS feed per NWS office
 // Uses regex translation (no AI cost) for feed content
 
-import { OFFICE_NAMES } from '../docs/js/offices.js';
+import { OFFICE_NAMES, OFFICE_TIMEZONES } from '../docs/js/offices.js';
 import { BASIC_ABBREVIATIONS } from '../docs/js/abbreviations.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractLede, sectionHealth, stripWmoHeader } from './_afd-sections.js';
+import { changedParagraphs } from './changelog.js';
 
 const VALID_OFFICES = new Set(Object.keys(OFFICE_NAMES));
 
@@ -24,6 +25,44 @@ function escapeXml(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// "Fri, Jul 3, 3:50 PM EDT" in the office's local time, so same-day issuances
+// stay distinguishable in feed readers. Date and time are formatted separately
+// (a single toLocaleString varies across ICU versions: "Jul 3, 3:50 PM" vs
+// "Jul 3 at 3:50 PM"), and the narrow no-break space some ICUs put before
+// AM/PM is normalized to a plain space for deterministic feed output.
+function formatIssuedLocal(issued, office) {
+    const timeZone = OFFICE_TIMEZONES[office] || 'UTC';
+    const date = issued.toLocaleDateString('en-US', { timeZone, weekday: 'short', month: 'short', day: 'numeric' });
+    const time = issued.toLocaleTimeString('en-US', { timeZone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+    return `${date}, ${time}`.replace(/[\u202f\u00a0]/g, ' ');
+}
+
+// Paragraphs that differ on every issuance but carry no forecast signal —
+// the product mast repeats the issuance timestamp, so a raw diff always
+// flags it as "changed".
+function isMastNoise(p) {
+    return /^(Area Forecast Discussion|National Weather Service)/i.test(p)
+        || /^\d{3,4} (AM|PM) [A-Z]{2,4}\b/.test(p);
+}
+
+// ".SHORT TERM (Today through Saturday)..." → just the body text after it.
+function stripSectionHeader(p) {
+    return p.replace(/^\.[A-Z][A-Z0-9 /()'&.-]*?\.\.\.\s*/, '').trim();
+}
+
+// Plain-English "what changed" summary from the paragraph-level diff against
+// the previous issuance. Pure text processing — zero AI spend from the feed.
+function buildDelta(prevText, currText) {
+    if (!prevText || !currText) return '';
+    return changedParagraphs(prevText, currText)
+        .filter(p => !isMastNoise(p))
+        .map(stripSectionHeader)
+        .filter(p => p.length >= 40)
+        .slice(0, 2)
+        .map(regexTranslate)
+        .join(' ');
+}
+
 export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
@@ -39,33 +78,49 @@ export default async function handler(req, res) {
         const feedTitle = `Plaincast — ${cityName} (${office}) Forecast`;
         const feedLink = `https://plaincast.live/?office=${office}`;
 
-        let rssItems = '';
+        // Phase 1: fetch the products (sequentially, as before), kept positional
+        // so each issuance can diff against the one before it (newest first).
+        const fetched = [];
         for (const item of items) {
             try {
                 const prodUrl = productUrlFromItem(item);
-                if (!prodUrl) continue;
+                if (!prodUrl || !item?.id) { fetched.push(null); continue; }
                 const prodData = await fetchAFDProduct(prodUrl, { signal: AbortSignal.timeout(10000) });
                 const text = typeof prodData?.productText === 'string' ? prodData.productText : '';
                 const issued = new Date(prodData?.issuanceTime);
-                if (!text || Number.isNaN(issued.getTime()) || !item?.id) continue;
-                // Extract the lede (SYNOPSIS or Key Message format sections) for description
-                const health = sectionHealth(text);
-                if (health.sectionCount === 0 && !warnedOffices.has(office)) {
-                    warnedOffices.add(office);
-                    console.warn(`[feed] AFD format drift: ${office} parsed 0 sections (format=${health.format})`);
-                }
-                const lede = extractLede(text);
-                const synopsis = regexTranslate(lede || stripWmoHeader(text).substring(0, 500));
-                const pubDate = issued.toUTCString();
+                if (!text || Number.isNaN(issued.getTime())) { fetched.push(null); continue; }
+                fetched.push({ id: String(item.id), text, issued });
+            } catch (e) { fetched.push(null); /* skip failed items */ }
+        }
 
-                rssItems += `    <item>
-      <title>${escapeXml(cityName)} Forecast - ${escapeXml(issued.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }))}</title>
-      <link>${escapeXml(feedLink)}</link>
-      <guid isPermaLink="false">${escapeXml(String(item.id))}</guid>
+        // Phase 2: compose the feed — delta-first descriptions, unique
+        // per-edition permalinks (readers dedupe items that share a link).
+        let rssItems = '';
+        for (let i = 0; i < fetched.length; i++) {
+            const cur = fetched[i];
+            if (!cur) continue;
+            const health = sectionHealth(cur.text);
+            if (health.sectionCount === 0 && !warnedOffices.has(office)) {
+                warnedOffices.add(office);
+                console.warn(`[feed] AFD format drift: ${office} parsed 0 sections (format=${health.format})`);
+            }
+            // Extract the lede (SYNOPSIS or Key Message format sections) for description
+            const lede = extractLede(cur.text);
+            const synopsis = regexTranslate(lede || stripWmoHeader(cur.text).substring(0, 500));
+            // The oldest fetched issuance has nothing to diff against → lede only.
+            const delta = buildDelta(fetched[i + 1]?.text, cur.text);
+            const deltaLine = delta ? `What changed: ${delta.substring(0, 600)}` : '';
+            const description = [deltaLine, synopsis].filter(Boolean).join('\n\n').substring(0, 1000);
+            const permalink = `https://plaincast.live/o/${office}/?edition=${encodeURIComponent(cur.id)}`;
+            const pubDate = cur.issued.toUTCString();
+
+            rssItems += `    <item>
+      <title>${escapeXml(cityName)} forecast — ${escapeXml(formatIssuedLocal(cur.issued, office))}</title>
+      <link>${escapeXml(permalink)}</link>
+      <guid isPermaLink="true">${escapeXml(permalink)}</guid>
       <pubDate>${escapeXml(pubDate)}</pubDate>
-      <description>${escapeXml(synopsis.substring(0, 1000))}</description>
+      <description>${escapeXml(description)}</description>
     </item>\n`;
-            } catch(e) { /* skip failed items */ }
         }
 
         const rss = `<?xml version="1.0" encoding="UTF-8"?>
