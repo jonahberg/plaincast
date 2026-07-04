@@ -3,12 +3,14 @@ import { GLOSSARY, GLOSSARY_COMPILED } from './glossary.js';
 import { OFFICE_TIMEZONES, OFFICE_COORDS, OFFICE_STATES, OFFICE_SENDER, OFFICE_NAMES, SECTION_NAMES } from './offices.js';
 import { FULL_ABBREVIATIONS } from './abbreviations.js';
 import { computeDiff, renderDiffHTML } from './diff.js';
+import { confidenceScore, confidenceWord, buildTimelineEntries } from './timeline.js';
 
 let currentOffice = 'LOX';
 let fetchGeneration = 0; // race condition guard for rapid office switching
 let issueTimeDate = null; // for auto-updating "X ago"
 let issuePrefix = ''; // "Issued 4:02 AM PDT" — stable half of the issue-time line
 let viewingHistorical = false; // true while reading an archived edition (skip diff/changelog)
+let currentView = 'forecast';  // 'forecast' (the spread) | 'changelog' (the edition ledger)
 let currentTranslationObserver = null; // IntersectionObserver for lazy AI translation
 
 // Fetch live alerts and return map of event name → alert URL
@@ -358,78 +360,20 @@ function displayConfidence(fullText) {
     const container = document.getElementById('confidence-container');
     const bar = document.getElementById('confidence-bar');
     const text = document.getElementById('confidence-text');
-    const t = fullText.toLowerCase();
 
-    // Weighted phrases: multi-word explicit confidence language scores higher
-    // than single common words that appear in nearly every forecast
-    const uncertainPhrases = [
-        // Explicit confidence statements (weight 3)
-        { pattern: 'low confidence', weight: 3 },
-        { pattern: 'remain uncertain', weight: 3 },
-        { pattern: 'low predictability', weight: 3 },
-        { pattern: 'highly uncertain', weight: 3 },
-        // Strong uncertainty signals (weight 2)
-        { pattern: 'uncertainty', weight: 2 },
-        { pattern: 'uncertain', weight: 2 },
-        { pattern: 'unclear', weight: 2 },
-        { pattern: 'can\'t rule out', weight: 2 },
-        { pattern: 'cannot rule out', weight: 2 },
-        { pattern: 'wide range', weight: 2 },
-        { pattern: 'disagreement', weight: 2 },
-        { pattern: 'inconsistent', weight: 2 },
-        { pattern: 'diverge', weight: 2 },
-        { pattern: 'tricky', weight: 2 },
-        { pattern: 'questionable', weight: 2 },
-        { pattern: 'iffy', weight: 2 },
-        // Mild uncertainty (weight 1)
-        { pattern: 'slight chance', weight: 1 },
-        { pattern: 'challenging', weight: 1 },
-        { pattern: 'complicated', weight: 1 },
-        { pattern: 'depends on', weight: 1 },
-        { pattern: 'perhaps', weight: 1 },
-        { pattern: 'spread', weight: 1 },
-    ];
-    const certainPhrases = [
-        // Explicit confidence statements (weight 3)
-        { pattern: 'high confidence', weight: 3 },
-        { pattern: 'increasing confidence', weight: 3 },
-        { pattern: 'increasingly likely', weight: 3 },
-        { pattern: 'remains on track', weight: 3 },
-        { pattern: 'on track', weight: 2 },
-        // Strong certainty signals (weight 2)
-        { pattern: 'confident', weight: 2 },
-        { pattern: 'good agreement', weight: 2 },
-        { pattern: 'consensus', weight: 2 },
-        { pattern: 'consistent', weight: 2 },
-        { pattern: 'strong signal', weight: 2 },
-        { pattern: 'well-defined', weight: 2 },
-    ];
-
-    let uncertainScore = 0;
-    let certainScore = 0;
-    for (const { pattern, weight } of uncertainPhrases) {
-        const m = t.match(new RegExp(pattern, 'gi'));
-        if (m) uncertainScore += m.length * weight;
-    }
-    for (const { pattern, weight } of certainPhrases) {
-        const m = t.match(new RegExp(pattern, 'gi'));
-        if (m) certainScore += m.length * weight;
-    }
-
-    const total = uncertainScore + certainScore;
-    if (total === 0) { container.style.display = 'none'; return; }
-
-    // Score: 0 (all uncertain) to 100 (all certain)
-    const score = Math.round((certainScore / total) * 100);
+    // Phrase weighting lives in timeline.js (shared with the changelog ledger).
+    const score = confidenceScore(fullText);
+    if (score === null) { container.style.display = 'none'; return; }
+    const label = confidenceWord(score);
 
     // The bar fill is a graphical object (3:1 suffices), but the text label
     // needs 4.5:1 — so the label gets a theme-aware .conf-* class (styles.css)
     // instead of the saturated bar color, which failed contrast in one theme.
-    let label, barColor;
-    if (score >= 75) { label = 'High'; barColor = '#16a34a'; }
-    else if (score >= 50) { label = 'Moderate'; barColor = '#0F766E'; }
-    else if (score >= 30) { label = 'Mixed'; barColor = '#d97706'; }
-    else { label = 'Low'; barColor = '#dc2626'; }
+    let barColor;
+    if (label === 'High') barColor = '#16a34a';
+    else if (label === 'Moderate') barColor = '#0F766E';
+    else if (label === 'Mixed') barColor = '#d97706';
+    else barColor = '#dc2626';
 
     bar.style.width = `${score}%`;
     bar.style.background = barColor;
@@ -1189,7 +1133,9 @@ function selectOffice(office, updateUrl) {
     // Update RSS auto-discovery link
     const rssLink = document.getElementById('rss-link');
     if (rssLink) rssLink.href = `/api/feed?office=${office}`;
-    fetchAFD(office);
+    // Switching offices keeps you in whichever view you're reading
+    if (currentView === 'changelog') showChangelogView(office, false);
+    else fetchAFD(office);
 }
 
 officeSelect.addEventListener('change', () => selectOffice(officeSelect.value));
@@ -1198,14 +1144,24 @@ officeSelect.addEventListener('change', () => selectOffice(officeSelect.value));
 window.addEventListener('popstate', () => {
     const params = new URLSearchParams(window.location.search);
     const office = params.get('office')?.toUpperCase();
-    if (office && officeSelect.querySelector(`option[value="${office}"]`)) {
-        selectOffice(office, false);
+    const target = (office && officeSelect.querySelector(`option[value="${office}"]`)) ? office : currentOffice;
+    if (params.get('view') === 'changelog') {
+        officeSelect.value = target;
+        showChangelogView(target, false);
+    } else {
+        currentView = 'forecast';
+        document.body.classList.remove('view-changelog');
+        selectOffice(target, false);
     }
 });
 
-// Load initial office
+// Load initial office (deep links may land straight on the changelog ledger)
 updateTitle(initialOffice);
-fetchAFD(initialOffice);
+if (urlParams.get('view') === 'changelog') {
+    showChangelogView(initialOffice, false);
+} else {
+    fetchAFD(initialOffice);
+}
 
 // Geolocation: auto-detect after initial load (non-blocking)
 if (!urlOffice && !pathOffice && !savedOffice && navigator.geolocation) {
@@ -1366,7 +1322,12 @@ function renderChangelog(text, since) {
         const takeaway = document.getElementById('takeaway-container');
         if (takeaway) takeaway.insertAdjacentElement('afterend', el);
     }
-    el.innerHTML = `<span class="changelog-label">Since ${escapeHTML(sinceText(since))}</span> ${escapeHTML(text)}`;
+    el.innerHTML = `<span class="changelog-label">Since ${escapeHTML(sinceText(since))}</span> ${escapeHTML(text)}`
+        + ` <a class="changelog-view-link" href="?office=${encodeURIComponent(currentOffice)}&view=changelog">See every revision →</a>`;
+    el.querySelector('.changelog-view-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        showChangelogView(currentOffice);
+    });
     el.style.display = '';
 }
 
@@ -1523,14 +1484,14 @@ document.addEventListener('keydown', (e) => {
 // ─── Forecast history ───────────────────────────────────────────────
 let historyList = [];
 
-async function fetchHistoryList(office) {
+async function fetchHistoryList(office, limit = 10) {
     try {
         const res = await fetch(`https://api.weather.gov/products/types/AFD/locations/${office}`, {
             headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }
         });
         if (!res.ok) return [];
         const data = await res.json();
-        return (data['@graph'] || []).slice(0, 10).map(item => ({
+        return (data['@graph'] || []).slice(0, limit).map(item => ({
             id: item.id,
             url: item['@id'] || `https://api.weather.gov/products/${item.id}`,
             time: new Date(item.issuanceTime)
@@ -1587,6 +1548,279 @@ function renderHistorySelector(items, currentId) {
         } catch(e) { console.debug('History fetch failed', e); }
     });
     container.appendChild(sel);
+
+    // The ledger's front door lives beside the editions control in the colophon.
+    // (`line` is the #editions-line node declared at the top of this function.)
+    if (line && !document.getElementById('colophon-changelog-link')) {
+        const sep = document.createTextNode(' · ');
+        const a = document.createElement('a');
+        a.id = 'colophon-changelog-link';
+        a.href = `?office=${encodeURIComponent(currentOffice)}&view=changelog`;
+        a.textContent = 'Changelog';
+        a.addEventListener('click', (e) => {
+            e.preventDefault();
+            showChangelogView(currentOffice);
+            window.scrollTo(0, 0);
+        });
+        line.appendChild(sep);
+        line.appendChild(a);
+    }
+}
+
+// ─── Changelog view — the edition ledger ────────────────────────────
+// Reverse-chronological record of every retained issuance: what each revision
+// changed, in the forecaster's own confidence language, with the full text
+// diff one fold away. Works for first-time visitors — nothing here depends on
+// sessionStorage having seen a previous edition.
+const TIMELINE_BATCH = 8;      // pairs per page (batch+1 product fetches)
+const TIMELINE_LOOKBACK = 40;  // list metadata to page through (~1 week)
+let timelineItems = [];        // metadata for every retained issuance
+let timelineProducts = [];     // fetched product texts, newest-first
+let timelineRendered = 0;      // entries currently in the DOM
+
+async function fetchTimelineProducts(items) {
+    const results = await Promise.all(items.map(async (item) => {
+        try {
+            const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' } });
+            if (!res.ok) return null;
+            const prod = await res.json();
+            return typeof prod.productText === 'string'
+                ? { id: item.id, time: item.time, text: prod.productText }
+                : null;
+        } catch (e) { return null; }
+    }));
+    return results.filter(Boolean);
+}
+
+function timelineDateline(time, tz) {
+    return {
+        date: time.toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: tz }),
+        clock: time.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' }),
+        edition: editionName(localHour(time, tz)),
+    };
+}
+
+function confidenceSentence(conf) {
+    if (!conf || !conf.word) return '';
+    if (conf.direction === 'rising') return `Confidence rising — now ${conf.word.toLowerCase()}.`;
+    if (conf.direction === 'falling') return `Confidence slipping — now ${conf.word.toLowerCase()}.`;
+    if (conf.direction === 'steady') return `Confidence ${conf.word.toLowerCase()}, holding steady.`;
+    return `Confidence ${conf.word.toLowerCase()}.`;
+}
+
+function timelineEntryHTML(entry, tz) {
+    const dl = timelineDateline(entry.time, tz);
+    const revised = entry.changedKeys.length
+        ? `Revised: ${entry.changedKeys.map(escapeHTML).join(', ')}.`
+        : 'No substantive revisions.';
+    const conf = confidenceSentence(entry.confidence);
+    const byline = entry.forecaster ? `<span class="timeline-byline">— ${escapeHTML(entry.forecaster)}</span>` : '';
+    const summary = entry.changedKeys.length
+        ? `<p class="timeline-summary pending" data-id="${escapeHTML(entry.id)}"><span class="ai-loading"></span></p>`
+        : `<p class="timeline-summary timeline-summary-quiet">The forecast carried forward unchanged.</p>`;
+    const diff = entry.changed.length ? `
+        <details class="timeline-diff">
+            <summary>Compare the text</summary>
+            ${entry.changed.map(d => `
+            <div class="timeline-diff-section">
+                <h3 class="timeline-diff-title">${escapeHTML(d.key)}</h3>
+                ${renderDiffHTML(d)}
+            </div>`).join('')}
+        </details>` : '';
+    return `
+    <article class="timeline-entry" data-entry-id="${escapeHTML(entry.id)}">
+        <div class="timeline-dateline">
+            <span class="timeline-date">${escapeHTML(dl.date)}</span>
+            <span class="timeline-sep">·</span>
+            <span class="timeline-clock">${escapeHTML(dl.clock)}</span>
+            <span class="timeline-sep">·</span>
+            <span class="timeline-edition">${escapeHTML(dl.edition)} Edition</span>
+        </div>
+        ${summary}
+        <p class="timeline-meta">${revised} <span class="timeline-confidence">${conf}</span> ${byline}</p>
+        ${diff}
+        <p class="timeline-read"><a href="?office=${encodeURIComponent(currentOffice)}" data-edition-id="${escapeHTML(entry.id)}">Read this edition</a></p>
+    </article>`;
+}
+
+async function fillTimelineSummary(office, el) {
+    const id = el.dataset.id;
+    if (!id) return;
+    delete el.dataset.id;
+    try {
+        const res = await fetch(`/api/changelog?office=${encodeURIComponent(office)}&id=${encodeURIComponent(id)}`);
+        if (!res.ok) throw new Error('changelog fetch failed');
+        const data = await res.json();
+        el.classList.remove('pending');
+        if (data && data.changelog) {
+            el.textContent = data.changelog;
+        } else {
+            el.textContent = 'Minor refinements — timing and wording, no headline change.';
+            el.classList.add('timeline-summary-quiet');
+        }
+    } catch (e) {
+        el.remove(); // the entry still carries the revised-sections line + diff
+    }
+}
+
+function observeTimelineSummaries(office, root) {
+    const els = Array.from(root.querySelectorAll('.timeline-summary[data-id]'));
+    if (!('IntersectionObserver' in window)) {
+        els.forEach(el => fillTimelineSummary(office, el));
+        return;
+    }
+    const io = new IntersectionObserver((entries) => {
+        for (const ent of entries) {
+            if (!ent.isIntersecting) continue;
+            io.unobserve(ent.target);
+            fillTimelineSummary(office, ent.target);
+        }
+    }, { rootMargin: '300px' });
+    els.forEach(el => io.observe(el));
+}
+
+// Open one edition as the full Dispatch spread (exits the ledger).
+async function openEditionFromTimeline(id) {
+    const item = timelineItems.find(i => i.id === id);
+    if (!item) return;
+    try {
+        const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' } });
+        if (!res.ok) throw new Error('Fetch failed');
+        const prodData = await res.json();
+        leaveChangelogChrome();
+        fetchGeneration++;
+        viewingHistorical = item.id !== timelineItems[0]?.id;
+        renderAFD(prodData, currentOffice);
+        window.scrollTo(0, 0);
+    } catch (e) { console.debug('Edition open failed', e); }
+}
+
+function leaveChangelogChrome() {
+    currentView = 'forecast';
+    document.body.classList.remove('view-changelog');
+    updateTitle(currentOffice);
+    const url = new URL(window.location);
+    url.searchParams.delete('view');
+    history.pushState({}, '', url);
+}
+
+function appendTimelineEntries(entries, container, office) {
+    const tz = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
+    const holder = document.createElement('div');
+    holder.innerHTML = entries.map(e => timelineEntryHTML(e, tz)).join('');
+    const more = container.querySelector('.timeline-more');
+    while (holder.firstChild) {
+        container.insertBefore(holder.firstChild, more || null);
+    }
+    timelineRendered += entries.length;
+    observeTimelineSummaries(office, container);
+}
+
+async function loadEarlierEditions(container, office, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Setting the type…';
+    try {
+        // Need one product past the visible window to diff the last pair.
+        const nextItems = timelineItems.slice(timelineProducts.length, timelineProducts.length + TIMELINE_BATCH);
+        const fetched = await fetchTimelineProducts(nextItems);
+        if (!fetched.length) { btn.closest('.timeline-more')?.remove(); return; }
+        const overlapFrom = timelineProducts.length - 1; // last already-fetched product heads the new pairs
+        timelineProducts = timelineProducts.concat(fetched);
+        const entries = buildTimelineEntries(timelineProducts.slice(overlapFrom), { parseSections, computeDiff });
+        appendTimelineEntries(entries, container, office);
+        if (timelineProducts.length >= timelineItems.length) {
+            btn.closest('.timeline-more')?.remove();
+        } else {
+            btn.disabled = false;
+            btn.textContent = 'Earlier editions';
+        }
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Earlier editions';
+    }
+}
+
+async function showChangelogView(office, updateUrl) {
+    currentOffice = office;
+    currentView = 'changelog';
+    viewingHistorical = false;
+    document.body.classList.add('view-changelog');
+    applySky(office);
+    renderLedger(office);
+    const name = OFFICE_NAMES[office] || office;
+    const cityEl = document.getElementById('dateline-city');
+    if (cityEl) cityEl.textContent = name;
+    const dlDate = document.getElementById('dateline-date');
+    if (dlDate) dlDate.textContent = 'Forecast Changelog';
+    const dlEd = document.getElementById('dateline-edition');
+    if (dlEd) dlEd.textContent = 'Every Revision';
+    document.title = `Forecast Changelog · ${name} · Plaincast`;
+    if (updateUrl !== false) {
+        const url = new URL(window.location);
+        url.searchParams.set('view', 'changelog');
+        history.pushState({}, '', url);
+    }
+
+    const thisGen = ++fetchGeneration;
+    const sectionsEl = document.getElementById('sections');
+    sectionsEl.innerHTML = `
+    <div class="skeleton" aria-hidden="true">
+        <div class="skeleton-line" style="width: 40%"></div>
+        <div class="skeleton-line" style="width: 90%"></div>
+        <div class="skeleton-line" style="width: 75%"></div>
+    </div>`;
+
+    try {
+        timelineItems = await fetchHistoryList(office, TIMELINE_LOOKBACK);
+        if (thisGen !== fetchGeneration) return;
+        timelineProducts = await fetchTimelineProducts(timelineItems.slice(0, TIMELINE_BATCH + 1));
+        if (thisGen !== fetchGeneration) return;
+        const entries = buildTimelineEntries(timelineProducts, { parseSections, computeDiff });
+
+        const container = document.createElement('div');
+        container.className = 'timeline';
+        container.innerHTML = `
+        <header class="timeline-header">
+            <div class="timeline-kicker">The Changelog</div>
+            <p class="timeline-standfirst">Every revision to the ${escapeHTML(name)} forecast, newest first —
+            what changed with each update, and whether the forecasters' confidence rose or fell.</p>
+            <p class="timeline-back"><a href="?office=${encodeURIComponent(office)}" id="timeline-back-link">← Back to the forecast</a></p>
+        </header>`;
+
+        if (entries.length === 0) {
+            container.insertAdjacentHTML('beforeend',
+                '<p class="timeline-empty">The archive is thin right now — check back after the next update.</p>');
+        }
+        if (timelineItems.length > timelineProducts.length) {
+            container.insertAdjacentHTML('beforeend',
+                '<p class="timeline-more"><button class="timeline-more-btn" type="button">Earlier editions</button></p>');
+        }
+        sectionsEl.innerHTML = '';
+        sectionsEl.appendChild(container);
+        timelineRendered = 0;
+        appendTimelineEntries(entries, container, office);
+
+        container.querySelector('.timeline-more-btn')?.addEventListener('click', (e) => {
+            loadEarlierEditions(container, office, e.currentTarget);
+        });
+        container.addEventListener('click', (e) => {
+            const editionLink = e.target.closest('a[data-edition-id]');
+            if (editionLink) {
+                e.preventDefault();
+                openEditionFromTimeline(editionLink.dataset.editionId);
+                return;
+            }
+            if (e.target.closest('#timeline-back-link')) {
+                e.preventDefault();
+                leaveChangelogChrome();
+                fetchAFD(office);
+            }
+        });
+        announce(`Forecast changelog for ${name}`);
+    } catch (e) {
+        if (thisGen !== fetchGeneration) return;
+        sectionsEl.innerHTML = '<div class="loading">Could not load the changelog. <button onclick="location.reload()" class="retry-btn">Try again</button></div>';
+    }
 }
 
 // ─── PWA install prompt ──────────────────────────────────────────

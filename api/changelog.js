@@ -39,14 +39,41 @@ export function changedParagraphs(prevText, currText) {
     });
 }
 
+// Requests for a specific (non-latest) issuance pair get long CDN caching —
+// a completed pair of AFDs never changes, so the summary is effectively
+// immutable. The latest pair keeps a shorter window (a newer AFD supersedes it).
+const LATEST_CACHE = 'public, s-maxage=3600, stale-while-revalidate=7200';
+const PINNED_CACHE = 'public, s-maxage=86400, stale-while-revalidate=604800';
+
 export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
     const office = (req.query.office || '').toUpperCase();
     if (!OFFICE_NAMES[office]) return res.status(400).json({ error: 'Invalid office' });
 
+    // Optional: pin the summary to a specific issuance (?id=<productId>) so the
+    // changelog timeline can label every retained edition, not just the latest.
+    const pinnedId = typeof req.query.id === 'string' ? req.query.id.trim() : '';
+    if (pinnedId && (pinnedId.length > 64 || !/^[\w.:-]+$/.test(pinnedId))) {
+        return res.status(400).json({ error: 'Invalid id' });
+    }
+
     try {
-        const items = (await fetchAFDList(office, { signal: AbortSignal.timeout(8000) })).slice(0, 2);
+        const list = await fetchAFDList(office, { signal: AbortSignal.timeout(8000) });
+        let items;
+        let cacheHeader = LATEST_CACHE;
+        if (pinnedId) {
+            const idx = list.findIndex(it => (it?.id || it?.['@id']) === pinnedId);
+            if (idx === -1 || idx + 1 >= list.length) {
+                // Unknown or oldest-retained issuance: nothing to diff against.
+                res.setHeader('Cache-Control', 'public, s-maxage=3600');
+                return res.status(200).json({ changelog: null });
+            }
+            items = [list[idx], list[idx + 1]];
+            if (idx > 0) cacheHeader = PINNED_CACHE;
+        } else {
+            items = list.slice(0, 2);
+        }
         if (items.length < 2) {
             res.setHeader('Cache-Control', 'public, s-maxage=600');
             return res.status(200).json({ changelog: null });
@@ -55,7 +82,7 @@ export default async function handler(req, res) {
         const currentId = items[0]?.id || items[0]?.['@id'] || null;
         const hit = currentId && cache.get(currentId);
         if (hit && Date.now() - hit.time < CACHE_TTL) {
-            res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=7200');
+            res.setHeader('Cache-Control', cacheHeader);
             return res.status(200).json({ changelog: hit.changelog, since: hit.since, updated: hit.updated, cached: true });
         }
 
@@ -73,7 +100,7 @@ export default async function handler(req, res) {
         if (changes.length === 0) {
             const payload = { changelog: null, since, updated };
             if (currentId) setCache(currentId, payload);
-            res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=7200');
+            res.setHeader('Cache-Control', cacheHeader);
             return res.status(200).json({ ...payload, cached: false });
         }
 
@@ -95,7 +122,7 @@ export default async function handler(req, res) {
 
         const payload = { changelog, since, updated };
         if (currentId) setCache(currentId, payload);
-        res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=7200');
+        res.setHeader('Cache-Control', cacheHeader);
         return res.status(200).json({ ...payload, cached: false });
     } catch (err) {
         console.error('Changelog error:', err);
