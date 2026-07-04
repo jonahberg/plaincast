@@ -562,6 +562,37 @@ function formatAlerts(text, alertMap) {
 const aiCache = new Map();
 const AI_CACHE_MAX = 100;
 
+// Raw model output → display HTML (markdown bold + paragraphs), shared by the
+// per-issuance GET path and the per-section POST fallback.
+function formatTranslationHTML(raw) {
+    const safe = stripAIArtifacts(raw)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return safe
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .split(/\n\s*\n+/)
+        .filter(b => b.trim())
+        .map(b => `<p>${b.trim().replace(/\n/g, ' ')}</p>`)
+        .join('');
+}
+
+// Whole-issuance translation, one GET per (office, productId). The server
+// translates every section once and the CDN serves everyone after — see
+// api/translate-issuance.js. Resolves to a {sectionKey: rawText} map or null.
+let issuanceMapKey = '';
+let issuanceMapPromise = null;
+
+function getIssuanceTranslations(office, productId) {
+    const key = `${office}|${productId}`;
+    if (issuanceMapKey !== key) {
+        issuanceMapKey = key;
+        issuanceMapPromise = fetch(`/api/translate-issuance?office=${encodeURIComponent(office)}&id=${encodeURIComponent(productId)}`)
+            .then(r => (r.ok ? r.json() : null))
+            .then(d => (d && d.sections && typeof d.sections === 'object' ? d.sections : null))
+            .catch(() => null);
+    }
+    return issuanceMapPromise;
+}
+
 async function fetchAITranslation(text, section, office, issuanceTime) {
     const key = `${office}|${section}|${issuanceTime || ''}|${text}`;
     if (aiCache.has(key)) return aiCache.get(key);
@@ -573,14 +604,7 @@ async function fetchAITranslation(text, section, office, issuanceTime) {
     });
     if (!res.ok) throw new Error('Translation failed');
     const data = await res.json();
-    let safe = stripAIArtifacts(data.translation)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    let html = safe
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .split(/\n\s*\n+/)
-        .filter(b => b.trim())
-        .map(b => `<p>${b.trim().replace(/\n/g, ' ')}</p>`)
-        .join('');
+    const html = formatTranslationHTML(data.translation);
     if (aiCache.size >= AI_CACHE_MAX) {
         aiCache.delete(aiCache.keys().next().value);
     }
@@ -708,7 +732,20 @@ function render(sections, productContext = {}) {
         const plainCol = el.querySelector('.plain-col');
 
         try {
-            const html = await fetchAITranslation(s.text, s.key, currentOffice, productContext.issuanceTime);
+            // Prefer the issuance-wide translation (one CDN-cached GET covers
+            // every section); fall back to the per-section POST if this key is
+            // missing from the map or the GET failed entirely.
+            let html = null;
+            if (productContext.productId) {
+                const map = await getIssuanceTranslations(currentOffice, productContext.productId);
+                if (renderGen !== fetchGeneration) return;
+                if (map && typeof map[s.key] === 'string' && map[s.key]) {
+                    html = formatTranslationHTML(map[s.key]);
+                }
+            }
+            if (!html) {
+                html = await fetchAITranslation(s.text, s.key, currentOffice, productContext.issuanceTime);
+            }
             if (renderGen !== fetchGeneration) return;
 
             // Crossfade: lock height, fade out, swap content, fade in
@@ -1054,7 +1091,7 @@ async function renderAFD(prodData, office) {
 
     // Fetch live alerts for linking (non-blocking — render first, update after)
     currentAlerts = {};
-    render(orderedSections, { issuanceTime: prodData.issuanceTime });
+    render(orderedSections, { issuanceTime: prodData.issuanceTime, productId: prodData.id });
 
     // Then fetch alerts and re-render the alerts section with links
     fetchAlerts(office).then(alertMap => {
@@ -1162,6 +1199,17 @@ async function loadEdition(office, editionId) {
         timelineItems = items;
         const item = items.find(i => i.id === editionId);
         if (!item) {
+            // Aged out of NWS retention — a durable snapshot (if the server has
+            // one) can still reconstruct the edition, so old shares never rot.
+            const snap = await fetch(`/api/translate-issuance?office=${encodeURIComponent(office)}&id=${encodeURIComponent(editionId)}`)
+                .then(r => (r.ok ? r.json() : null))
+                .catch(() => null);
+            if (snap && snap.productText) {
+                fetchGeneration++;
+                viewingHistorical = true;
+                renderAFD({ id: editionId, productText: snap.productText, issuanceTime: snap.issuanceTime }, office);
+                return;
+            }
             const url = new URL(window.location);
             url.searchParams.delete('edition');
             history.replaceState({}, '', url);
