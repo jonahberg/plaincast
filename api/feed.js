@@ -78,20 +78,20 @@ export default async function handler(req, res) {
         const feedTitle = `Plaincast — ${cityName} (${office}) Forecast`;
         const feedLink = `https://plaincast.live/?office=${office}`;
 
-        // Phase 1: fetch the products (sequentially, as before), kept positional
-        // so each issuance can diff against the one before it (newest first).
-        const fetched = [];
-        for (const item of items) {
+        // Phase 1: fetch the products in parallel (a cold cache was ~11
+        // sequential round-trips ≈ 4s+ TTFB), kept positional so each issuance
+        // can diff against the one before it (newest first).
+        const fetched = await Promise.all(items.map(async (item) => {
             try {
                 const prodUrl = productUrlFromItem(item);
-                if (!prodUrl || !item?.id) { fetched.push(null); continue; }
+                if (!prodUrl || !item?.id) return null;
                 const prodData = await fetchAFDProduct(prodUrl, { signal: AbortSignal.timeout(10000) });
                 const text = typeof prodData?.productText === 'string' ? prodData.productText : '';
                 const issued = new Date(prodData?.issuanceTime);
-                if (!text || Number.isNaN(issued.getTime())) { fetched.push(null); continue; }
-                fetched.push({ id: String(item.id), text, issued });
-            } catch (e) { fetched.push(null); /* skip failed items */ }
-        }
+                if (!text || Number.isNaN(issued.getTime())) return null;
+                return { id: String(item.id), text, issued };
+            } catch (e) { return null; /* skip failed items */ }
+        }));
 
         // Phase 2: compose the feed — delta-first descriptions, unique
         // per-edition permalinks (readers dedupe items that share a link).

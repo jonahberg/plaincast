@@ -21,13 +21,33 @@ let timelineItems = [];        // metadata for every retained issuance
 let timelineProducts = [];     // fetched product texts, newest-first
 let timelineRendered = 0;      // entries currently in the DOM
 
+// One NWS product-list fetch per render: fetchAFD, fetchHistoryList, and the
+// refresh poll all read the same URL — share it briefly instead of refetching.
+let afdListCache = { office: null, time: 0, graph: null };
+async function fetchAFDListShared(office, { force = false } = {}) {
+    if (!force && afdListCache.office === office && afdListCache.graph
+        && Date.now() - afdListCache.time < 60 * 1000) {
+        return afdListCache.graph;
+    }
+    const res = await fetch(`https://api.weather.gov/products/types/AFD/locations/${office}`, {
+        headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' },
+        signal: AbortSignal.timeout(10000)
+    });
+    if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+    const data = await res.json();
+    const graph = data['@graph'] || [];
+    afdListCache = { office, time: Date.now(), graph };
+    return graph;
+}
+
 // Fetch live alerts and return map of event name → alert URL
 async function fetchAlerts(office) {
     const state = OFFICE_STATES[office];
     if (!state) return {};
     try {
         const res = await fetch(`https://api.weather.gov/alerts/active?area=${state}`, {
-            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }
+            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' },
+            signal: AbortSignal.timeout(10000)
         });
         if (!res.ok) return {};
         const data = await res.json();
@@ -1005,18 +1025,15 @@ async function fetchAFD(office) {
     }
 
     try {
-        const listRes = await fetch(`https://api.weather.gov/products/types/AFD/locations/${office}`, {
-            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }
-        });
-        if (!listRes.ok) throw new Error(`API error: ${listRes.status} ${listRes.statusText}`);
+        const graph = await fetchAFDListShared(office);
         if (thisGen !== fetchGeneration) return; // stale request
-        const listData = await listRes.json();
-        const latest = listData['@graph']?.[0];
+        const latest = graph[0];
         if (!latest) throw new Error('No AFD found for this office');
 
         const prodUrl = latest['@id'] || `https://api.weather.gov/products/${latest.id}`;
         const prodRes = await fetch(prodUrl, {
-            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }
+            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' },
+            signal: AbortSignal.timeout(10000)
         });
         if (!prodRes.ok) throw new Error(`Product fetch error: ${prodRes.status}`);
         if (thisGen !== fetchGeneration) return; // stale request
@@ -1257,7 +1274,7 @@ async function loadEdition(office, editionId) {
             fetchAFD(office);
             return;
         }
-        const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' } });
+        const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }, signal: AbortSignal.timeout(10000) });
         if (!res.ok) throw new Error('Fetch failed');
         const prodData = await res.json();
         fetchGeneration++;
@@ -1417,12 +1434,8 @@ function startRefreshPolling() {
     refreshTimer = setInterval(async () => {
         if (document.hidden) return;
         try {
-            const res = await fetch(`https://api.weather.gov/products/types/AFD/locations/${currentOffice}`, {
-                headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }
-            });
-            if (!res.ok) return;
-            const data = await res.json();
-            const latest = data['@graph']?.[0];
+            const graph = await fetchAFDListShared(currentOffice, { force: true });
+            const latest = graph[0];
             if (latest && lastProductId && latest.id !== lastProductId) {
                 document.getElementById('refresh-banner').style.display = '';
             }
@@ -1644,12 +1657,8 @@ let historyList = [];
 
 async function fetchHistoryList(office, limit = 10) {
     try {
-        const res = await fetch(`https://api.weather.gov/products/types/AFD/locations/${office}`, {
-            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }
-        });
-        if (!res.ok) return [];
-        const data = await res.json();
-        return (data['@graph'] || []).slice(0, limit).map(item => ({
+        const graph = await fetchAFDListShared(office);
+        return graph.slice(0, limit).map(item => ({
             id: item.id,
             url: item['@id'] || `https://api.weather.gov/products/${item.id}`,
             time: new Date(item.issuanceTime)
@@ -1695,7 +1704,7 @@ function renderHistorySelector(items, currentId) {
         const item = items.find(i => i.id === sel.value);
         if (!item) return;
         try {
-            const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' } });
+            const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }, signal: AbortSignal.timeout(10000) });
             if (!res.ok) throw new Error('Fetch failed');
             const prodData = await res.json();
             // Viewing an older edition: invalidate any in-flight AI writes and skip
@@ -1741,7 +1750,7 @@ function renderHistorySelector(items, currentId) {
 async function fetchTimelineProducts(items) {
     const results = await Promise.all(items.map(async (item) => {
         try {
-            const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' } });
+            const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }, signal: AbortSignal.timeout(10000) });
             if (!res.ok) return null;
             const prod = await res.json();
             return typeof prod.productText === 'string'
@@ -1844,7 +1853,7 @@ async function openEditionFromTimeline(id) {
     const item = timelineItems.find(i => i.id === id);
     if (!item) return;
     try {
-        const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' } });
+        const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }, signal: AbortSignal.timeout(10000) });
         if (!res.ok) throw new Error('Fetch failed');
         const prodData = await res.json();
         const isHistorical = item.id !== timelineItems[0]?.id;

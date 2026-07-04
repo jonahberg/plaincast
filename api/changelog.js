@@ -8,6 +8,10 @@ import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 
 // currentProductId -> { changelog, since, updated, time }
 const cache = new Map();
+// office -> { payload, time }: skips the NWS list fetch on the hot no-id path.
+// 5 minutes is well inside the CDN's own s-maxage=3600 staleness window.
+const latestMemo = new Map();
+const LATEST_MEMO_TTL = 5 * 60 * 1000;
 const CACHE_TTL = 4 * 60 * 60 * 1000; // 4h (an AFD is stable until the next issuance)
 const CACHE_MAX = 300;
 
@@ -58,6 +62,14 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid id' });
     }
 
+    if (!pinnedId) {
+        const memo = latestMemo.get(office);
+        if (memo && Date.now() - memo.time < LATEST_MEMO_TTL) {
+            res.setHeader('Cache-Control', LATEST_CACHE);
+            return res.status(200).json({ ...memo.payload, cached: true });
+        }
+    }
+
     try {
         const list = await fetchAFDList(office, { signal: AbortSignal.timeout(8000) });
         let items;
@@ -100,6 +112,7 @@ export default async function handler(req, res) {
         if (changes.length === 0) {
             const payload = { changelog: null, since, updated };
             if (currentId) setCache(currentId, payload);
+            if (!pinnedId) latestMemo.set(office, { payload, time: Date.now() });
             res.setHeader('Cache-Control', cacheHeader);
             return res.status(200).json({ ...payload, cached: false });
         }
@@ -122,11 +135,14 @@ export default async function handler(req, res) {
 
         const payload = { changelog, since, updated };
         if (currentId) setCache(currentId, payload);
+        if (!pinnedId) latestMemo.set(office, { payload, time: Date.now() });
         res.setHeader('Cache-Control', cacheHeader);
         return res.status(200).json({ ...payload, cached: false });
     } catch (err) {
         console.error('Changelog error:', err);
-        // Soft-fail: the feature simply doesn't render rather than erroring the page.
+        // Soft-fail: the feature simply doesn't render rather than erroring the
+        // page — but let the CDN absorb failure storms for a minute.
+        res.setHeader('Cache-Control', 'public, s-maxage=60');
         return res.status(200).json({ changelog: null });
     }
 }

@@ -110,13 +110,13 @@ describe('GET /api/changelog', () => {
     it('caches by current issuance — second call does not re-run AI', async () => {
         const items = setScenario({ items: [{ id: `cache-${idCounter++}` }, { id: 'prev-x' }] });
         const first = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), first);
+        await handler(createReq({ query: { office: 'BOX' } }), first);
         expect(first.body.cached).toBe(false);
 
         mockGenerateText = async () => { throw new Error('should not be called'); };
         mockItems = items; // same current id
         const second = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), second);
+        await handler(createReq({ query: { office: 'BOX' } }), second);
         expect(second.statusCode).toBe(200);
         expect(second.body.cached).toBe(true);
         expect(second.body.changelog).toMatch(/cold front/i);
@@ -126,7 +126,7 @@ describe('GET /api/changelog', () => {
         setScenario();
         mockGenerateText = async () => ({ text: 'NONE', finishReason: 'stop' });
         const res = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), res);
+        await handler(createReq({ query: { office: 'MFL' } }), res);
         expect(res.statusCode).toBe(200);
         expect(res.body.changelog).toBeNull();
     });
@@ -135,7 +135,7 @@ describe('GET /api/changelog', () => {
         setScenario({ curr: CURR, prev: CURR });
         mockGenerateText = async () => { throw new Error('should not be called'); };
         const res = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), res);
+        await handler(createReq({ query: { office: 'SEW' } }), res);
         expect(res.statusCode).toBe(200);
         expect(res.body.changelog).toBeNull();
     });
@@ -143,7 +143,7 @@ describe('GET /api/changelog', () => {
     it('soft-fails to null (200) when NWS is unreachable', async () => {
         mockListThrows = true;
         const res = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), res);
+        await handler(createReq({ query: { office: 'PBZ' } }), res);
         expect(res.statusCode).toBe(200);
         expect(res.body.changelog).toBeNull();
     });
