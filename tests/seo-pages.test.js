@@ -35,6 +35,29 @@ describe('per-office SEO pages stay in sync with docs/index.html', () => {
     });
 });
 
+describe('per-office OG share cards', () => {
+    it('rendered office pages point og:image and twitter:image at the /api/og PNG card', () => {
+        const html = renderOfficePage(template, 'LOX', OFFICE_NAMES.LOX);
+        expect(html).toContain('<meta property="og:image" content="https://plaincast.live/api/og?office=LOX">');
+        expect(html).toContain('<meta property="og:image:type" content="image/png">');
+        expect(html).toContain('<meta name="twitter:image" content="https://plaincast.live/api/og?office=LOX">');
+        expect(html).toContain('<meta property="og:image:width" content="1200">');
+        expect(html).toContain('<meta property="og:image:height" content="630">');
+        expect(html).not.toContain('https://plaincast.live/og-image.png');
+    });
+
+    it('the og:image URL is office-specific', () => {
+        const okx = renderOfficePage(template, 'OKX', OFFICE_NAMES.OKX);
+        expect(okx).toContain('content="https://plaincast.live/api/og?office=OKX"');
+        expect(okx).not.toContain('office=LOX');
+    });
+
+    it('the homepage template keeps the static og-image.png', () => {
+        expect(template).toContain('<meta property="og:image" content="https://plaincast.live/og-image.png">');
+        expect(template).toContain('<meta name="twitter:image" content="https://plaincast.live/og-image.png">');
+    });
+});
+
 describe('footer office index (internal links to all /o/ pages)', () => {
     it('the template links every office exactly once, as City (CODE)', () => {
         const links = [...template.matchAll(/<li><a href="\/o\/([A-Z]{3})\/"[^>]*>([^<]+) \((\1)\)<\/a><\/li>/g)];

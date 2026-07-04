@@ -74,6 +74,14 @@ export function renderOfficePage(template, code, city) {
         `<link rel="canonical" href="https://plaincast.live/o/${code}/">`);
     html = html.replace('<meta property="og:url" content="https://plaincast.live">',
         `<meta property="og:url" content="https://plaincast.live/o/${code}/">`);
+    // per-office OG share card: links unfurl with the office's own forecast
+    // PNG (/api/og), not the generic homepage image. og:image:width/height
+    // (1200×630) carry over from the template; og:image:type is added here
+    // because the homepage keeps the static PNG without a type tag.
+    html = html.replace('<meta property="og:image" content="https://plaincast.live/og-image.png">',
+        `<meta property="og:image" content="https://plaincast.live/api/og?office=${code}">\n    <meta property="og:image:type" content="image/png">`);
+    html = html.replace('<meta name="twitter:image" content="https://plaincast.live/og-image.png">',
+        `<meta name="twitter:image" content="https://plaincast.live/api/og?office=${code}">`);
     // per-office RSS auto-discovery
     // split/join, not replace: the head discovery link AND the colophon
     // subscribe link both carry office=LOX in the template (replace() only

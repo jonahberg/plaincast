@@ -194,15 +194,23 @@ describe('sectionHealth', () => {
 // ─── /api/feed + /api/og handlers with real fixtures ────────────────
 let mockItems = [];
 let mockProducts = {};
+let mockListError = null;   // set to make fetchAFDList throw (og fallback tests)
+let productCalls = [];      // product urls fetched — verifies edition pinning
 mock.module('../api/_utils.js', () => ({
     fetchAlertById: async () => null,
-    fetchAFDList: async () => mockItems,
-    fetchAFDProduct: async (url) => mockProducts[url] || {},
+    fetchAFDList: async () => {
+        if (mockListError) throw mockListError;
+        return mockItems;
+    },
+    fetchAFDProduct: async (url) => {
+        productCalls.push(url);
+        return mockProducts[url] || {};
+    },
     productUrlFromItem: (item) => item?.id || null,
 }));
 
 const { default: feedHandler } = await import('../api/feed.js');
-const { default: ogHandler } = await import('../api/og.js');
+const { default: ogHandler, buildCardElement, buildDateline, clampTakeaway } = await import('../api/og.js');
 
 function createRes() {
     return {
@@ -220,6 +228,8 @@ const createReq = (o = {}) => ({ method: 'GET', query: {}, ...o });
 function setProduct(office, productText, id) {
     mockItems = [{ id }];
     mockProducts = { [id]: { productText, issuanceTime: '2026-07-03T23:49:00+00:00' } };
+    mockListError = null;
+    productCalls = [];
 }
 
 function itemDescriptions(rss) {
@@ -295,22 +305,108 @@ describe('GET /api/feed with Key Message format AFDs', () => {
     });
 });
 
-describe('GET /api/og with Key Message format AFDs', () => {
-    it('OKX: takeaway comes from KEY MESSAGES, not the generic tagline fallback', async () => {
+describe('GET /api/og (raster share cards)', () => {
+    const PNG_MAGIC = '89504e470d0a1a0a';
+
+    it('OKX: renders a real 1200×630 PNG with latest-edition caching', async () => {
         setProduct('OKX', OKX, 'og-okx-1');
         const res = createRes();
         await ogHandler(createReq({ query: { office: 'OKX' } }), res);
         expect(res.statusCode).toBe(200);
-        expect(res.headers['content-type']).toBe('image/svg+xml');
-        expect(res.body).toContain('Dangerous heat and humidity');
-        expect(res.body).not.toContain('FXUS');
+        expect(res.headers['content-type']).toBe('image/png');
+        expect(res.headers['cache-control']).toContain('s-maxage=3600');
+        expect(Buffer.isBuffer(res.body)).toBe(true);
+        expect(res.body.subarray(0, 8).toString('hex')).toBe(PNG_MAGIC);
+        expect(res.body.readUInt32BE(16)).toBe(1200); // IHDR width
+        expect(res.body.readUInt32BE(20)).toBe(630);  // IHDR height
     });
 
-    it('LOX: classic SYNOPSIS takeaway still works', async () => {
+    it('pinned edition: renders the id-named issuance (not the latest) and caches for a day', async () => {
+        setProduct('LOX', LOX, 'og-lox-old');
+        mockItems = [{ id: 'og-lox-new' }, { id: 'og-lox-old' }];
+        mockProducts['og-lox-new'] = { productText: OKX, issuanceTime: '2026-07-04T10:00:00+00:00' };
+        const res = createRes();
+        await ogHandler(createReq({ query: { office: 'LOX', id: 'og-lox-old' } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.headers['content-type']).toBe('image/png');
+        expect(res.headers['cache-control']).toContain('s-maxage=86400');
+        expect(productCalls).toEqual(['og-lox-old']); // the pinned edition was fetched
+    });
+
+    it('unknown edition id: 302 to the static fallback, never a 404', async () => {
         setProduct('LOX', LOX, 'og-lox-1');
         const res = createRes();
-        await ogHandler(createReq({ query: { office: 'LOX' } }), res);
-        expect(res.body).toContain('Onshore flow will continue');
-        expect(res.body).not.toContain('03/428');
+        await ogHandler(createReq({ query: { office: 'LOX', id: 'og-not-retained' } }), res);
+        expect(res.redirected).toEqual({ code: 302, url: '/og-image.png' });
+    });
+
+    it('invalid office: 302 to the static fallback with day-long caching', async () => {
+        const res = createRes();
+        await ogHandler(createReq({ query: { office: 'ZZZ' } }), res);
+        expect(res.redirected).toEqual({ code: 302, url: '/og-image.png' });
+        expect(res.headers['cache-control']).toContain('s-maxage=86400');
+    });
+
+    it('malformed edition id: 302 to the static fallback', async () => {
+        setProduct('LOX', LOX, 'og-lox-1');
+        for (const id of ['bad id!', 'a'.repeat(65), '../../etc']) {
+            const res = createRes();
+            await ogHandler(createReq({ query: { office: 'LOX', id } }), res);
+            expect(res.redirected).toEqual({ code: 302, url: '/og-image.png' });
+        }
+    });
+
+    it('NWS failure: 302 to the static fallback (unfurls must never 404)', async () => {
+        setProduct('OKX', OKX, 'og-okx-err');
+        mockListError = new Error('NWS API error: 503');
+        try {
+            const res = createRes();
+            await ogHandler(createReq({ query: { office: 'OKX' } }), res);
+            expect(res.redirected).toEqual({ code: 302, url: '/og-image.png' });
+        } finally {
+            mockListError = null;
+        }
+    });
+});
+
+describe('OG card element tree (pure builder — text content the PNG cannot expose)', () => {
+    it('carries the Dispatch identity: paper, ink, wordmark, city, dateline, takeaway, folio', () => {
+        const el = buildCardElement({
+            city: 'New York',
+            dateline: buildDateline('2026-07-03T23:49:00+00:00', 'OKX'),
+            takeaway: clampTakeaway(extractLede(OKX)),
+        });
+        const flat = JSON.stringify(el);
+        expect(flat).toContain('Plaincast');
+        expect(flat).toContain('New York');
+        expect(flat).toContain('AREA FORECAST DISCUSSION · FRI, JUL 3, 7:49 PM EDT');
+        expect(flat).toContain('Dangerous heat and humidity');
+        expect(flat).not.toContain('FXUS');
+        expect(flat).toContain('plaincast.live');
+        expect(flat).toContain('#f7f3ea'); // warm paper
+        expect(flat).toContain('#211d17'); // ink
+        expect(flat).toContain('#d8cdb6'); // hairline rule
+        expect(flat).not.toMatch(/gradient/i);
+    });
+
+    it('LOX classic SYNOPSIS takeaway flows through, clamped to 3 lines', () => {
+        const takeaway = clampTakeaway(extractLede(LOX));
+        expect(takeaway).toContain('Onshore flow will continue');
+        expect(takeaway).not.toContain('03/428');
+        const flat = JSON.stringify(buildCardElement({ city: 'Los Angeles', dateline: 'x', takeaway }));
+        expect(flat).toContain('"lineClamp":3');
+    });
+
+    it('buildDateline renders office-local time and degrades without an issuance time', () => {
+        expect(buildDateline('2026-07-03T23:49:00+00:00', 'LOX')).toBe('Area Forecast Discussion · Fri, Jul 3, 4:49 PM PDT');
+        expect(buildDateline(null, 'LOX')).toBe('Area Forecast Discussion');
+        expect(buildDateline('garbage', 'LOX')).toBe('Area Forecast Discussion');
+    });
+
+    it('clampTakeaway caps long ledes on a sentence boundary under 240 chars', () => {
+        const long = 'This sentence is repeated to build a very long lede. '.repeat(12);
+        const clamped = clampTakeaway(long);
+        expect(clamped.length).toBeLessThanOrEqual(240);
+        expect(clamped.endsWith('.')).toBe(true);
     });
 });

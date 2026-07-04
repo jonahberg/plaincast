@@ -4,6 +4,9 @@
   "functions": {
     "api/office-page.js": {
       "includeFiles": "docs/index.html"
+    },
+    "api/og.js": {
+      "includeFiles": "api/_og-fonts/**"
     }
   },
   "rewrites": [
