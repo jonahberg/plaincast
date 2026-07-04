@@ -6,7 +6,7 @@ docs/              Static frontend (served as outputDirectory)
   index.html       Markup (~360 loc)
   styles.css       All CSS
   js/app.js        Main app logic
-  js/glossary.js   240+ term glossary
+  js/glossary.js   230+ term glossary
   js/offices.js    68 NWS office data
   js/abbreviations.js  109 abbreviation patterns
   js/diff.js       Forecast diff engine

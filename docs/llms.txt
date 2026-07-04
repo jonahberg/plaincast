@@ -8,12 +8,15 @@ Plaincast is a free web application at https://plaincast.live that translates Na
 - Fetches the latest Area Forecast Discussion from the NWS API for any of 68 supported offices
 - Uses Claude (Haiku) to summarize each section into natural, readable prose
 - Displays the AI summary side-by-side with the original annotated forecast
-- Highlights 150+ meteorological jargon terms with hover/tap tooltip definitions
+- Highlights 230+ meteorological jargon terms with hover/tap tooltip definitions
 - Shows forecaster confidence level based on language analysis
 - Displays active weather alerts with full detail modals
-- Shareable URLs per office (e.g. https://plaincast.live/?office=OKX)
+- Dedicated page per office at https://plaincast.live/o/<CODE>/ (canonical form, e.g. https://plaincast.live/o/OKX/); the legacy query form https://plaincast.live/?office=OKX also works
+- Forecast Changelog view per office showing what changed between consecutive discussions: https://plaincast.live/o/<CODE>/?view=changelog (e.g. https://plaincast.live/o/OKX/?view=changelog)
 
 ## Supported NWS Offices (68, organized by region)
+
+Each office has a dedicated page at https://plaincast.live/o/<CODE>/ — substitute the 3-letter code below (e.g. https://plaincast.live/o/LOX/ for Los Angeles). All 68 are listed in https://plaincast.live/sitemap.xml.
 
 **Northeast:** New York (OKX), Boston (BOX), Philadelphia (PHI), Washington DC (LWX), Pittsburgh (PBZ), Buffalo (BUF), Raleigh (RAH), Charleston SC (CHS)
 

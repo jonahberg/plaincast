@@ -1,0 +1,100 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   PLAINCAST · Self-hosted fonts
+   Subset from the OFL-licensed variable fonts published at
+   github.com/google/fonts (see OFL-*.txt in this directory).
+
+   Subsets carry latin + typographic punctuation and preserve the real
+   OpenType features styles.css relies on:
+     · Source Serif 4  — smcp, c2sc, onum, lnum, tnum, zero (true small
+       caps + oldstyle figures; no more browser-synthesized small caps)
+     · JetBrains Mono  — zero (slashed zero), lining/tabular by default
+     · Fraunces        — variable opsz / SOFT / WONK axes kept live
+   Family names match styles.css exactly; it needs no changes.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Fraunces — display. wght 400–600, full opsz 9–144, SOFT 0–24, WONK 0–1 ── */
+@font-face {
+    font-family: 'Fraunces';
+    src: url('/fonts/fraunces-latin.woff2') format('woff2');
+    font-weight: 400 600;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+2022, U+2026, U+2032-2033, U+2192, U+2767;
+}
+
+/* Italic (masthead motto, pull-quote intro). wght 380–500, opsz 28–36, SOFT 0–30 */
+@font-face {
+    font-family: 'Fraunces';
+    src: url('/fonts/fraunces-italic-latin.woff2') format('woff2');
+    font-weight: 380 500;
+    font-style: italic;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+2022, U+2026, U+2032-2033, U+2192, U+2767;
+}
+
+/* ── Source Serif 4 — body. wght 400–700, opsz 10–36 (auto optical sizing) ── */
+@font-face {
+    font-family: 'Source Serif 4';
+    src: url('/fonts/source-serif-4-latin.woff2') format('woff2');
+    font-weight: 400 700;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+2022, U+2026, U+2032-2033, U+2192, U+2767;
+}
+
+/* Italic (editorial quotes) — pinned to 400; bold-italic synthesizes. */
+@font-face {
+    font-family: 'Source Serif 4';
+    src: url('/fonts/source-serif-4-italic-latin.woff2') format('woff2');
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+2022, U+2026, U+2032-2033, U+2192, U+2767;
+}
+
+/* ── DM Sans — labels/UI. wght 400–700, opsz 9–40 ── */
+@font-face {
+    font-family: 'DM Sans';
+    src: url('/fonts/dm-sans-latin.woff2') format('woff2');
+    font-weight: 400 700;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+2022, U+2026, U+2032-2033, U+2192, U+2767;
+}
+
+/* Italic (diff notes, form hints) — pinned to 400. */
+@font-face {
+    font-family: 'DM Sans';
+    src: url('/fonts/dm-sans-italic-latin.woff2') format('woff2');
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+2022, U+2026, U+2032-2033, U+2192, U+2767;
+}
+
+/* ── JetBrains Mono — AFD facsimile (below the fold; optional is fine) ── */
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: optional;
+    unicode-range: U+0000-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+2022, U+2026, U+2032-2033, U+2192, U+2767;
+}
+
+/* ── Metrics-tuned local fallback for the masthead ──────────────────────
+   styles.css declares --font-display: 'Fraunces', 'Times New Roman',
+   Georgia, serif. While fraunces-latin.woff2 loads, the browser shows
+   'Times New Roman' — this override re-proportions it to Fraunces'
+   masthead metrics (wght 600 / opsz 144) so the 5.4rem nameplate keeps
+   its line length and vertical rhythm through the swap instead of
+   jarringly reflowing. Computed with frequency-weighted average glyph
+   advances via fontTools. Falls through harmlessly where TNR is absent. */
+@font-face {
+    font-family: 'Times New Roman';
+    src: local('Times New Roman'), local('TimesNewRomanPSMT'), local('Georgia');
+    size-adjust: 96.47%;
+    ascent-override: 101.37%;
+    descent-override: 26.43%;
+    line-gap-override: 0%;
+}

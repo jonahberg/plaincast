@@ -1,0 +1,105 @@
+
+000
+FXUS61 KAKQ 032306
+AFDAKQ
+
+AREA FORECAST DISCUSSION
+National Weather Service Wakefield VA
+706 PM EDT Fri Jul 3 2026
+
+.WHAT HAS CHANGED...
+- There is a Slight Risk for severe weather for most of Virginia
+  on Saturday. A 30% wind risk has been added for much of the
+  northern half of the forecast area including the Richmond
+  metro over to portions of the MD Eastern Shore.
+
+&&
+
+.KEY MESSAGES...
+1) A prolonged and widespread heat wave will continue through the 
+holiday weekend before breaking down early next week. This has the 
+potential to be the most significant in both magnitude and duration 
+since July 2012 for most of the forecast area. 
+
+2) The risk for thunderstorms gradually increases over the next few 
+days. Any storm that develops could produce strong to severe wind 
+gusts, frequent lightning, and heavy rain.
+
+3) Temperatures gradually trend closer to normal by early next week, 
+with the potentially for unsettled weather.
+
+&&
+
+.DISCUSSION...
+As of 240 PM EDT Friday...
+
+KEY MESSAGE 1...A prolonged and widespread heat wave will continue 
+through the holiday weekend before breaking down early next week. 
+This has the potential to be the most significant in both magnitude 
+and duration since July 2012 for most of the forecast area. 
+
+This afternoon, an anonymously strong upper-level dome of high 
+pressure, with the current analysis placing the strength of the high 
+at ~596 dm, remains in control of the weather pattern. At the 
+surface, ~1021 mb high pressure is centered over the local area. 
+Temperatures this afternoon have already climbed well into the mid-
+upper 90s, with a few locations already approaching 100 F. 
+Temperatures will continue to climb over the few hours, with highs 
+expected to range from the upper 90s to the lower 100s. The heat, 
+combined with very humid conditions (dewpoints in the low to mid 
+70s, locally upper 70s to around 80) will allow for widespread heat 
+indices around or in excess of 110 F into the early evening hours. 
+Not much relief from the heat is expected tonight with low 
+temperatures only dropping into the upper 70s and urban areas will 
+likely see temperatures struggle to drop below 80 F. Heat indices 
+likely remain elevated to 100+ F through ~10 PM (especially in the 
+urban areas). 
+&&
+
+.AVIATION /00Z SATURDAY THROUGH WEDNESDAY/...
+As of 705 PM EDT Friday...
+ 
+VFR conditions will continue throughout the 00z/04 TAF period. 
+Current satellite images show mainly clear conditions across the
+TAF sites this evening and that should continue overnight into 
+Saturday morning, as a strong surface high pressure system
+remains established over the Mid-Atlantic and Southeastern US. 
+Winds are light out of the S-SW, with that pattern expected to
+continue into Saturday as the surface high slowly slides SE of
+the area. Haze continues at PHF and RIC with occasional MVFR 
+VSBY restrictions possible. 
+
+Outlook: Prevailing VFR conditions will continue through the 
+weekend. There is potential for isolated to scattered 
+showers/storms each afternoon and evening Saturday through early
+next week, which could lead to briefly degraded flight 
+conditions at any terminal that sees any of this convection.
+
+&&
+
+.EQUIPMENT...
+KAKQ radar is down due to mechanical issues without an 
+estimated time of return.
+
+&&
+
+.AKQ WATCHES/WARNINGS/ADVISORIES...
+MD...Extreme Heat Warning until 8 PM EDT Saturday for MDZ021>024.
+     Heat Advisory until 8 PM EDT Saturday for MDZ025.
+NC...Extreme Heat Warning until 8 PM EDT Saturday for NCZ012>017-
+     030>032.
+     Heat Advisory until 8 PM EDT Saturday for NCZ102.
+VA...Extreme Heat Warning until 8 PM EDT Saturday for VAZ048-
+     060>062-064>069-075>090-092-097>100-509>525-528>531.
+MARINE...None.
+
+&&
+
+$$
+
+DISCUSSION...AJB/SW
+AVIATION...AJB/ESS
+MARINE...AJB/AJZ
+CLIMATE...LKB
+EQUIPMENT...
+

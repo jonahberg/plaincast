@@ -12,6 +12,7 @@ let mockItems = [];
 let mockProducts = {};
 let mockListThrows = false;
 mock.module('../api/_utils.js', () => ({
+    fetchAlertById: async () => null,
     fetchAFDList: async () => { if (mockListThrows) throw new Error('NWS down'); return mockItems; },
     fetchAFDProduct: async (url) => mockProducts[url] || {},
     productUrlFromItem: (item) => item?.id || null,
@@ -91,7 +92,9 @@ describe('GET /api/changelog', () => {
         mockItems = [{ id: `solo-${idCounter++}` }];
         mockProducts = { [mockItems[0].id]: { productText: CURR, issuanceTime: 'x' } };
         const res = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), res);
+        // BUF: own office — the per-office latestMemo makes same-office no-id
+        // tests order-coupled otherwise.
+        await handler(createReq({ query: { office: 'BUF' } }), res);
         expect(res.statusCode).toBe(200);
         expect(res.body.changelog).toBeNull();
     });
@@ -109,13 +112,13 @@ describe('GET /api/changelog', () => {
     it('caches by current issuance — second call does not re-run AI', async () => {
         const items = setScenario({ items: [{ id: `cache-${idCounter++}` }, { id: 'prev-x' }] });
         const first = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), first);
+        await handler(createReq({ query: { office: 'BOX' } }), first);
         expect(first.body.cached).toBe(false);
 
         mockGenerateText = async () => { throw new Error('should not be called'); };
         mockItems = items; // same current id
         const second = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), second);
+        await handler(createReq({ query: { office: 'BOX' } }), second);
         expect(second.statusCode).toBe(200);
         expect(second.body.cached).toBe(true);
         expect(second.body.changelog).toMatch(/cold front/i);
@@ -125,7 +128,7 @@ describe('GET /api/changelog', () => {
         setScenario();
         mockGenerateText = async () => ({ text: 'NONE', finishReason: 'stop' });
         const res = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), res);
+        await handler(createReq({ query: { office: 'MFL' } }), res);
         expect(res.statusCode).toBe(200);
         expect(res.body.changelog).toBeNull();
     });
@@ -134,7 +137,7 @@ describe('GET /api/changelog', () => {
         setScenario({ curr: CURR, prev: CURR });
         mockGenerateText = async () => { throw new Error('should not be called'); };
         const res = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), res);
+        await handler(createReq({ query: { office: 'SEW' } }), res);
         expect(res.statusCode).toBe(200);
         expect(res.body.changelog).toBeNull();
     });
@@ -142,8 +145,75 @@ describe('GET /api/changelog', () => {
     it('soft-fails to null (200) when NWS is unreachable', async () => {
         mockListThrows = true;
         const res = createRes();
-        await handler(createReq({ query: { office: 'LOX' } }), res);
+        await handler(createReq({ query: { office: 'PBZ' } }), res);
         expect(res.statusCode).toBe(200);
         expect(res.body.changelog).toBeNull();
+    });
+});
+
+describe('GET /api/changelog?id= (pinned issuance for the timeline)', () => {
+    beforeEach(() => {
+        mockListThrows = false;
+        mockGenerateText = async () => ({
+            text: 'Snow chances faded from the Tuesday forecast.',
+            finishReason: 'stop',
+        });
+    });
+
+    it('diffs the pinned issuance against its predecessor, not the latest pair', async () => {
+        const mid = `mid-${idCounter++}`;
+        const old = `old-${idCounter++}`;
+        mockItems = [{ id: `new-${idCounter++}` }, { id: mid }, { id: old }];
+        mockProducts = {
+            [mockItems[0].id]: { productText: CURR, issuanceTime: '2026-03-25T00:25:00+00:00' },
+            [mid]: { productText: CURR, issuanceTime: '2026-03-24T18:25:00+00:00' },
+            [old]: { productText: PREV, issuanceTime: '2026-03-24T10:25:00+00:00' },
+        };
+        const res = createRes();
+        await handler(createReq({ query: { office: 'LOX', id: mid } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body.changelog).toMatch(/snow chances/i);
+        // since/updated must belong to the pinned pair
+        expect(res.body.since).toBe('2026-03-24T10:25:00+00:00');
+        expect(res.body.updated).toBe('2026-03-24T18:25:00+00:00');
+    });
+
+    it('serves non-latest pairs with a long CDN cache window', async () => {
+        const mid = `mid-${idCounter++}`;
+        mockItems = [{ id: `new-${idCounter++}` }, { id: mid }, { id: `old-${idCounter++}` }];
+        mockProducts = {
+            [mockItems[0].id]: { productText: CURR, issuanceTime: 'a' },
+            [mid]: { productText: CURR, issuanceTime: 'b' },
+            [mockItems[2].id]: { productText: PREV, issuanceTime: 'c' },
+        };
+        const res = createRes();
+        await handler(createReq({ query: { office: 'LOX', id: mid } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.headers['cache-control']).toContain('s-maxage=86400');
+    });
+
+    it('returns null for an unknown id without calling AI', async () => {
+        setScenario();
+        mockGenerateText = async () => { throw new Error('should not be called'); };
+        const res = createRes();
+        await handler(createReq({ query: { office: 'LOX', id: 'does-not-exist' } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body.changelog).toBeNull();
+    });
+
+    it('returns null for the oldest retained issuance (nothing to diff against)', async () => {
+        const items = setScenario();
+        mockGenerateText = async () => { throw new Error('should not be called'); };
+        const res = createRes();
+        await handler(createReq({ query: { office: 'LOX', id: items[1].id } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body.changelog).toBeNull();
+    });
+
+    it('rejects malformed ids', async () => {
+        setScenario();
+        const res = createRes();
+        await handler(createReq({ query: { office: 'LOX', id: '<script>alert(1)</script>' } }), res);
+        expect(res.statusCode).toBe(400);
     });
 });

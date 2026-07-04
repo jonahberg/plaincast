@@ -3,13 +3,42 @@ import { GLOSSARY, GLOSSARY_COMPILED } from './glossary.js';
 import { OFFICE_TIMEZONES, OFFICE_COORDS, OFFICE_STATES, OFFICE_SENDER, OFFICE_NAMES, SECTION_NAMES } from './offices.js';
 import { FULL_ABBREVIATIONS } from './abbreviations.js';
 import { computeDiff, renderDiffHTML } from './diff.js';
+import { confidenceScore, confidenceWord, buildTimelineEntries } from './timeline.js';
 
 let currentOffice = 'LOX';
 let fetchGeneration = 0; // race condition guard for rapid office switching
 let issueTimeDate = null; // for auto-updating "X ago"
 let issuePrefix = ''; // "Issued 4:02 AM PDT" — stable half of the issue-time line
 let viewingHistorical = false; // true while reading an archived edition (skip diff/changelog)
+let currentView = 'forecast';  // 'forecast' (the spread) | 'changelog' (the edition ledger)
 let currentTranslationObserver = null; // IntersectionObserver for lazy AI translation
+
+// Changelog-view state — declared up here because showChangelogView can run at
+// init (deep link) before module evaluation reaches the view code further down.
+const TIMELINE_BATCH = 8;      // pairs per page (batch+1 product fetches)
+const TIMELINE_LOOKBACK = 40;  // list metadata to page through (~1 week)
+let timelineItems = [];        // metadata for every retained issuance
+let timelineProducts = [];     // fetched product texts, newest-first
+let timelineRendered = 0;      // entries currently in the DOM
+
+// One NWS product-list fetch per render: fetchAFD, fetchHistoryList, and the
+// refresh poll all read the same URL — share it briefly instead of refetching.
+let afdListCache = { office: null, time: 0, graph: null };
+async function fetchAFDListShared(office, { force = false } = {}) {
+    if (!force && afdListCache.office === office && afdListCache.graph
+        && Date.now() - afdListCache.time < 60 * 1000) {
+        return afdListCache.graph;
+    }
+    const res = await fetch(`https://api.weather.gov/products/types/AFD/locations/${office}`, {
+        headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' },
+        signal: AbortSignal.timeout(10000)
+    });
+    if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+    const data = await res.json();
+    const graph = data['@graph'] || [];
+    afdListCache = { office, time: Date.now(), graph };
+    return graph;
+}
 
 // Fetch live alerts and return map of event name → alert URL
 async function fetchAlerts(office) {
@@ -17,7 +46,8 @@ async function fetchAlerts(office) {
     if (!state) return {};
     try {
         const res = await fetch(`https://api.weather.gov/alerts/active?area=${state}`, {
-            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }
+            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' },
+            signal: AbortSignal.timeout(10000)
         });
         if (!res.ok) return {};
         const data = await res.json();
@@ -29,6 +59,7 @@ async function fetchAlerts(office) {
             if (senderMatch && !(p.senderName || '').includes(senderMatch)) continue;
             const event = p.event;
             const alertData = {
+                id: p.id || f.id || '',
                 headline: p.headline || event,
                 description: p.description || '',
                 instruction: p.instruction || '',
@@ -43,11 +74,22 @@ async function fetchAlerts(office) {
                 alertMap[event].push(alertData);
             }
         }
+        // Severe posture: an active Warning of Severe/Extreme severity tightens
+        // the auto-refresh poll (forecasts move fast in exactly these hours).
+        const severeNow = Object.entries(alertMap).some(([event, list]) =>
+            /warning/i.test(event) && list.some(a => /severe|extreme/i.test(a.severity)));
+        // Office-guarded: a slow response for the PREVIOUS office must not set
+        // the posture for the current one.
+        if (office === currentOffice && severeNow !== severeAlertActive) {
+            severeAlertActive = severeNow;
+            startRefreshPolling();
+        }
         return alertMap;
     } catch(e) { console.debug('Alert fetch failed', e); return {}; }
 }
 
 let currentAlerts = {};
+let severeAlertActive = false; // an active Severe/Extreme Warning for this office
 
 // ─── Section parsing ───────────────────────────────────────────────
 function parseSections(text) {
@@ -358,78 +400,20 @@ function displayConfidence(fullText) {
     const container = document.getElementById('confidence-container');
     const bar = document.getElementById('confidence-bar');
     const text = document.getElementById('confidence-text');
-    const t = fullText.toLowerCase();
 
-    // Weighted phrases: multi-word explicit confidence language scores higher
-    // than single common words that appear in nearly every forecast
-    const uncertainPhrases = [
-        // Explicit confidence statements (weight 3)
-        { pattern: 'low confidence', weight: 3 },
-        { pattern: 'remain uncertain', weight: 3 },
-        { pattern: 'low predictability', weight: 3 },
-        { pattern: 'highly uncertain', weight: 3 },
-        // Strong uncertainty signals (weight 2)
-        { pattern: 'uncertainty', weight: 2 },
-        { pattern: 'uncertain', weight: 2 },
-        { pattern: 'unclear', weight: 2 },
-        { pattern: 'can\'t rule out', weight: 2 },
-        { pattern: 'cannot rule out', weight: 2 },
-        { pattern: 'wide range', weight: 2 },
-        { pattern: 'disagreement', weight: 2 },
-        { pattern: 'inconsistent', weight: 2 },
-        { pattern: 'diverge', weight: 2 },
-        { pattern: 'tricky', weight: 2 },
-        { pattern: 'questionable', weight: 2 },
-        { pattern: 'iffy', weight: 2 },
-        // Mild uncertainty (weight 1)
-        { pattern: 'slight chance', weight: 1 },
-        { pattern: 'challenging', weight: 1 },
-        { pattern: 'complicated', weight: 1 },
-        { pattern: 'depends on', weight: 1 },
-        { pattern: 'perhaps', weight: 1 },
-        { pattern: 'spread', weight: 1 },
-    ];
-    const certainPhrases = [
-        // Explicit confidence statements (weight 3)
-        { pattern: 'high confidence', weight: 3 },
-        { pattern: 'increasing confidence', weight: 3 },
-        { pattern: 'increasingly likely', weight: 3 },
-        { pattern: 'remains on track', weight: 3 },
-        { pattern: 'on track', weight: 2 },
-        // Strong certainty signals (weight 2)
-        { pattern: 'confident', weight: 2 },
-        { pattern: 'good agreement', weight: 2 },
-        { pattern: 'consensus', weight: 2 },
-        { pattern: 'consistent', weight: 2 },
-        { pattern: 'strong signal', weight: 2 },
-        { pattern: 'well-defined', weight: 2 },
-    ];
-
-    let uncertainScore = 0;
-    let certainScore = 0;
-    for (const { pattern, weight } of uncertainPhrases) {
-        const m = t.match(new RegExp(pattern, 'gi'));
-        if (m) uncertainScore += m.length * weight;
-    }
-    for (const { pattern, weight } of certainPhrases) {
-        const m = t.match(new RegExp(pattern, 'gi'));
-        if (m) certainScore += m.length * weight;
-    }
-
-    const total = uncertainScore + certainScore;
-    if (total === 0) { container.style.display = 'none'; return; }
-
-    // Score: 0 (all uncertain) to 100 (all certain)
-    const score = Math.round((certainScore / total) * 100);
+    // Phrase weighting lives in timeline.js (shared with the changelog ledger).
+    const score = confidenceScore(fullText);
+    if (score === null) { container.style.display = 'none'; return; }
+    const label = confidenceWord(score);
 
     // The bar fill is a graphical object (3:1 suffices), but the text label
     // needs 4.5:1 — so the label gets a theme-aware .conf-* class (styles.css)
     // instead of the saturated bar color, which failed contrast in one theme.
-    let label, barColor;
-    if (score >= 75) { label = 'High'; barColor = '#16a34a'; }
-    else if (score >= 50) { label = 'Moderate'; barColor = '#0F766E'; }
-    else if (score >= 30) { label = 'Mixed'; barColor = '#d97706'; }
-    else { label = 'Low'; barColor = '#dc2626'; }
+    let barColor;
+    if (label === 'High') barColor = '#16a34a';
+    else if (label === 'Moderate') barColor = '#0F766E';
+    else if (label === 'Mixed') barColor = '#d97706';
+    else barColor = '#dc2626';
 
     bar.style.width = `${score}%`;
     bar.style.background = barColor;
@@ -451,6 +435,8 @@ const ALERT_DATA = {};
 let alertIdx = 0;
 let lastModalFocus = null; // restore focus to the opener when a modal closes
 
+let alertModalGeneration = 0; // a slow explanation must not fill a newer modal
+
 function showAlertModal(data) {
     lastModalFocus = document.activeElement;
     const overlay = document.getElementById('alert-modal-overlay');
@@ -464,7 +450,35 @@ function showAlertModal(data) {
     document.getElementById('alert-modal-meta').textContent = meta.join(' · ');
     let body = data.description || '';
     if (data.instruction) body += '\n\n' + data.instruction;
-    document.getElementById('alert-modal-body').textContent = body;
+    const bodyEl = document.getElementById('alert-modal-body');
+    bodyEl.textContent = body;
+
+    // Plain-English lead: the alert's official text stays verbatim below; the
+    // explanation (server-fetched by alert id, so its input is unforgeable)
+    // arrives above it. Soft-fail: no explanation, no placeholder left behind.
+    const gen = ++alertModalGeneration;
+    document.getElementById('alert-modal-plain')?.remove();
+    if (data.id) {
+        const plain = document.createElement('div');
+        plain.id = 'alert-modal-plain';
+        plain.className = 'alert-modal-plain';
+        plain.innerHTML = '<div class="ai-loading-label"><span class="ai-loading"></span> Summarizing…</div>';
+        bodyEl.parentNode.insertBefore(plain, bodyEl);
+        fetch(`/api/explain-alert?id=${encodeURIComponent(data.id)}`)
+            .then(r => (r.ok ? r.json() : null))
+            .then(d => {
+                if (gen !== alertModalGeneration) return;
+                if (d && d.explanation) {
+                    plain.innerHTML = '<div class="alert-plain-label">In plain English · via <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a></div>'
+                        + formatTranslationHTML(d.explanation)
+                        + '<div class="alert-plain-label alert-plain-below">The official alert · verbatim</div>';
+                } else {
+                    plain.remove();
+                }
+            })
+            .catch(() => { if (gen === alertModalGeneration) plain.remove(); });
+    }
+
     overlay.classList.add('open');
     // Focus trap: move focus into modal
     document.getElementById('alert-modal-close').focus();
@@ -610,6 +624,37 @@ function formatAlerts(text, alertMap) {
 const aiCache = new Map();
 const AI_CACHE_MAX = 100;
 
+// Raw model output → display HTML (markdown bold + paragraphs), shared by the
+// per-issuance GET path and the per-section POST fallback.
+function formatTranslationHTML(raw) {
+    const safe = stripAIArtifacts(raw)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return safe
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .split(/\n\s*\n+/)
+        .filter(b => b.trim())
+        .map(b => `<p>${b.trim().replace(/\n/g, ' ')}</p>`)
+        .join('');
+}
+
+// Whole-issuance translation, one GET per (office, productId). The server
+// translates every section once and the CDN serves everyone after — see
+// api/translate-issuance.js. Resolves to a {sectionKey: rawText} map or null.
+let issuanceMapKey = '';
+let issuanceMapPromise = null;
+
+function getIssuanceTranslations(office, productId) {
+    const key = `${office}|${productId}`;
+    if (issuanceMapKey !== key) {
+        issuanceMapKey = key;
+        issuanceMapPromise = fetch(`/api/translate-issuance?office=${encodeURIComponent(office)}&id=${encodeURIComponent(productId)}`)
+            .then(r => (r.ok ? r.json() : null))
+            .then(d => (d && d.sections && typeof d.sections === 'object' ? d.sections : null))
+            .catch(() => null);
+    }
+    return issuanceMapPromise;
+}
+
 async function fetchAITranslation(text, section, office, issuanceTime) {
     const key = `${office}|${section}|${issuanceTime || ''}|${text}`;
     if (aiCache.has(key)) return aiCache.get(key);
@@ -621,19 +666,39 @@ async function fetchAITranslation(text, section, office, issuanceTime) {
     });
     if (!res.ok) throw new Error('Translation failed');
     const data = await res.json();
-    let safe = stripAIArtifacts(data.translation)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    let html = safe
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .split(/\n\s*\n+/)
-        .filter(b => b.trim())
-        .map(b => `<p>${b.trim().replace(/\n/g, ' ')}</p>`)
-        .join('');
+    const html = formatTranslationHTML(data.translation);
     if (aiCache.size >= AI_CACHE_MAX) {
         aiCache.delete(aiCache.keys().next().value);
     }
     aiCache.set(key, html);
     return html;
+}
+
+// ─── Scroll-spy: the printed running head ────────────────────────
+// styles.css has styled .section-nav a[aria-current="true"] (rubric underline
+// sweep) since the Dispatch redesign — this is the JS that was never wired.
+let sectionSpyObserver = null;
+function setupScrollSpy() {
+    if (sectionSpyObserver) { sectionSpyObserver.disconnect(); sectionSpyObserver = null; }
+    if (!('IntersectionObserver' in window)) return;
+    const navEl = document.getElementById('section-nav');
+    if (!navEl) return;
+    const links = new Map();
+    navEl.querySelectorAll('a[href^="#section-"]').forEach(a => {
+        links.set(a.getAttribute('href').slice(1), a);
+    });
+    if (!links.size) return;
+    sectionSpyObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            navEl.querySelectorAll('a[aria-current]').forEach(a => a.removeAttribute('aria-current'));
+            links.get(entry.target.id)?.setAttribute('aria-current', 'true');
+        }
+    }, { rootMargin: '-15% 0px -75% 0px' });
+    for (const id of links.keys()) {
+        const el = document.getElementById(id);
+        if (el) sectionSpyObserver.observe(el);
+    }
 }
 
 // ─── Smart section ordering ──────────────────────────────────────
@@ -723,7 +788,7 @@ function render(sections, productContext = {}) {
             </div>
             <div class="columns show-plain">
                 <div>
-                    <div class="col-label">In plain English · via <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a></div>
+                    <div class="col-label">In plain English</div>
                     <div class="plain-col">${plainHtml}</div>
                 </div>
                 <div>
@@ -756,7 +821,20 @@ function render(sections, productContext = {}) {
         const plainCol = el.querySelector('.plain-col');
 
         try {
-            const html = await fetchAITranslation(s.text, s.key, currentOffice, productContext.issuanceTime);
+            // Prefer the issuance-wide translation (one CDN-cached GET covers
+            // every section); fall back to the per-section POST if this key is
+            // missing from the map or the GET failed entirely.
+            let html = null;
+            if (productContext.productId) {
+                const map = await getIssuanceTranslations(currentOffice, productContext.productId);
+                if (renderGen !== fetchGeneration) return;
+                if (map && typeof map[s.key] === 'string' && map[s.key]) {
+                    html = formatTranslationHTML(map[s.key]);
+                }
+            }
+            if (!html) {
+                html = await fetchAITranslation(s.text, s.key, currentOffice, productContext.issuanceTime);
+            }
             if (renderGen !== fetchGeneration) return;
 
             // Crossfade: lock height, fade out, swap content, fade in
@@ -768,6 +846,10 @@ function render(sections, productContext = {}) {
                 if (renderGen !== fetchGeneration) return;
                 plainCol.innerHTML = html;
                 plainCol.style.opacity = '1';
+                // Credit Claude only once its translation is actually on screen —
+                // the regex gloss shown before (or instead, on AI failure) isn't its work.
+                const colLabel = el.querySelector('.col-label');
+                if (colLabel) colLabel.innerHTML = 'In plain English · via <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a>';
                 setTimeout(() => { plainCol.style.minHeight = ''; }, 250);
             }, 200);
         } catch (err) {
@@ -778,6 +860,8 @@ function render(sections, productContext = {}) {
             if (loadingLabel) loadingLabel.remove();
         }
     }
+
+    setupScrollSpy();
 
     // IntersectionObserver: translate sections as they scroll into view
     if ('IntersectionObserver' in window) {
@@ -966,24 +1050,32 @@ async function fetchAFD(office) {
             const { time, prodData } = JSON.parse(cached);
             if (Date.now() - time < 15 * 60 * 1000) {
                 if (thisGen === fetchGeneration) renderAFD(prodData, office);
+                // The cache may hide a fresh issuance (the ledger and editions
+                // dropdown would show a newer edition than the spread): check
+                // the list in the background and offer the refresh banner.
+                fetchAFDListShared(office).then(graph => {
+                    if (thisGen !== fetchGeneration) return;
+                    const latest = graph[0];
+                    if (latest && latest.id && latest.id !== prodData.id) {
+                        const banner = document.getElementById('refresh-banner');
+                        if (banner) banner.style.display = '';
+                    }
+                }).catch(() => {});
                 return;
             }
         } catch(e) { console.debug('Cache parse error, refetching', e); }
     }
 
     try {
-        const listRes = await fetch(`https://api.weather.gov/products/types/AFD/locations/${office}`, {
-            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }
-        });
-        if (!listRes.ok) throw new Error(`API error: ${listRes.status} ${listRes.statusText}`);
+        const graph = await fetchAFDListShared(office);
         if (thisGen !== fetchGeneration) return; // stale request
-        const listData = await listRes.json();
-        const latest = listData['@graph']?.[0];
+        const latest = graph[0];
         if (!latest) throw new Error('No AFD found for this office');
 
         const prodUrl = latest['@id'] || `https://api.weather.gov/products/${latest.id}`;
         const prodRes = await fetch(prodUrl, {
-            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }
+            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' },
+            signal: AbortSignal.timeout(10000)
         });
         if (!prodRes.ok) throw new Error(`Product fetch error: ${prodRes.status}`);
         if (thisGen !== fetchGeneration) return; // stale request
@@ -1098,7 +1190,7 @@ async function renderAFD(prodData, office) {
 
     // Fetch live alerts for linking (non-blocking — render first, update after)
     currentAlerts = {};
-    render(orderedSections, { issuanceTime: prodData.issuanceTime });
+    render(orderedSections, { issuanceTime: prodData.issuanceTime, productId: prodData.id });
 
     // Then fetch alerts and re-render the alerts section with links
     fetchAlerts(office).then(alertMap => {
@@ -1176,32 +1268,137 @@ function selectOffice(office, updateUrl) {
     officeSelect.value = office;
     applySky(office); // instant sky change while the new forecast loads
     if (updateUrl !== false) {
+        // Canonical URL form is the path (/o/LOT/), not ?office= — one URL per
+        // office keeps shares, SEO equity, and the baked pages in agreement,
+        // and never produces the contradictory /o/OKX/?office=LOT.
         const url = new URL(window.location);
-        url.searchParams.set('office', office);
+        url.pathname = `/o/${encodeURIComponent(office)}/`;
+        url.searchParams.delete('office');
+        url.searchParams.delete('edition'); // a new office always opens on its latest edition
         history.pushState({}, '', url);
+        renderedRoute = currentRoute();
     }
     try { localStorage.setItem('plaincast-office', office); } catch(e) { /* quota */ }
     updateTitle(office);
+    // The baked footer index highlights the page's office; keep it honest
+    // when navigation happens in-app.
+    document.querySelectorAll('.office-index-list a[aria-current]').forEach(a => a.removeAttribute('aria-current'));
+    document.querySelector(`.office-index-list a[href="/o/${office}/"]`)?.setAttribute('aria-current', 'page');
     // Update RSS auto-discovery link
     const rssLink = document.getElementById('rss-link');
     if (rssLink) rssLink.href = `/api/feed?office=${office}`;
-    fetchAFD(office);
+    document.getElementById('rss-colophon-link')?.setAttribute('href', `/api/feed?office=${office}`);
+    // Switching offices keeps you in whichever view you're reading
+    if (currentView === 'changelog') showChangelogView(office, false);
+    else fetchAFD(office);
 }
 
 officeSelect.addEventListener('change', () => selectOffice(officeSelect.value));
 
-// Handle browser back/forward
-window.addEventListener('popstate', () => {
+// Open a specific archived edition by product id (?edition= deep links).
+// Falls back to the latest forecast if the id has aged out of NWS retention.
+async function loadEdition(office, editionId) {
+    currentOffice = office;
+    const thisGen = ++fetchGeneration; // stale responses must never clobber a newer render
+    try {
+        const items = await fetchHistoryList(office, TIMELINE_LOOKBACK);
+        if (thisGen !== fetchGeneration) return;
+        timelineItems = items;
+        const item = items.find(i => i.id === editionId);
+        if (!item) {
+            // Aged out of NWS retention — a durable snapshot (if the server has
+            // one) can still reconstruct the edition, so old shares never rot.
+            const snap = await fetch(`/api/translate-issuance?office=${encodeURIComponent(office)}&id=${encodeURIComponent(editionId)}`)
+                .then(r => (r.ok ? r.json() : null))
+                .catch(() => null);
+            if (thisGen !== fetchGeneration) return;
+            if (snap && snap.productText) {
+                viewingHistorical = true;
+                renderAFD({ id: editionId, productText: snap.productText, issuanceTime: snap.issuanceTime }, office);
+                return;
+            }
+            const url = new URL(window.location);
+            url.searchParams.delete('edition');
+            history.replaceState({}, '', url);
+            fetchAFD(office);
+            return;
+        }
+        const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }, signal: AbortSignal.timeout(10000) });
+        if (!res.ok) throw new Error('Fetch failed');
+        const prodData = await res.json();
+        if (thisGen !== fetchGeneration) return;
+        viewingHistorical = item.id !== items[0]?.id;
+        renderAFD(prodData, office);
+    } catch (e) {
+        console.debug('Edition deep link failed', e);
+        if (thisGen === fetchGeneration) fetchAFD(office);
+    }
+}
+
+// Handle browser back/forward. Hash-only navigation (clicking a #section-…
+// anchor in the contents nav) also fires popstate — that must NOT re-render
+// the spread, so no-op when the meaningful route is unchanged.
+function currentRoute() {
     const params = new URLSearchParams(window.location.search);
-    const office = params.get('office')?.toUpperCase();
-    if (office && officeSelect.querySelector(`option[value="${office}"]`)) {
-        selectOffice(office, false);
+    const pathM = window.location.pathname.match(/\/o\/([A-Za-z]{3})\/?$/);
+    return {
+        office: params.get('office')?.toUpperCase() || pathM?.[1]?.toUpperCase() || null,
+        view: params.get('view') || null,
+        edition: params.get('edition') || null,
+    };
+}
+let renderedRoute = currentRoute();
+
+window.addEventListener('popstate', () => {
+    const route = currentRoute();
+    if (route.office === renderedRoute.office
+        && route.view === renderedRoute.view
+        && route.edition === renderedRoute.edition) {
+        return; // fragment-only navigation
+    }
+    renderedRoute = route;
+    const target = (route.office && officeSelect.querySelector(`option[value="${route.office}"]`)) ? route.office : currentOffice;
+    officeSelect.value = target;
+    if (route.view === 'changelog') {
+        showChangelogView(target, false);
+        return;
+    }
+    currentView = 'forecast';
+    document.body.classList.remove('view-changelog');
+    if (route.edition) {
+        updateTitle(target);
+        loadEdition(target, route.edition);
+    } else {
+        selectOffice(target, false);
     }
 });
 
-// Load initial office
+// Restore a #section-… anchor once, after the first async render lands —
+// static HTML can't scroll to content that doesn't exist yet.
+let initialHashHandled = false;
+afterRender.push(() => {
+    if (initialHashHandled) return;
+    initialHashHandled = true;
+    const h = window.location.hash;
+    if (h && /^#section-[\w-]+$/.test(h)) {
+        document.querySelector(h)?.scrollIntoView({ block: 'start' });
+    }
+});
+
+// Load initial office. Deep links may land on the changelog ledger or a
+// specific archived edition; both resolve before the default spread.
 updateTitle(initialOffice);
-fetchAFD(initialOffice);
+// The baked RSS links say office=LOX; a returning visitor's saved office may
+// differ, and the initial load goes through fetchAFD, not selectOffice.
+document.getElementById('rss-link')?.setAttribute('href', `/api/feed?office=${initialOffice}`);
+document.getElementById('rss-colophon-link')?.setAttribute('href', `/api/feed?office=${initialOffice}`);
+if (urlParams.get('view') === 'changelog') {
+    showChangelogView(initialOffice, false);
+} else if (urlParams.get('edition')) {
+    loadEdition(initialOffice, urlParams.get('edition'));
+} else {
+    fetchAFD(initialOffice);
+}
 
 // Geolocation: auto-detect after initial load (non-blocking)
 if (!urlOffice && !pathOffice && !savedOffice && navigator.geolocation) {
@@ -1243,6 +1440,11 @@ if ('serviceWorker' in navigator) {
             sun.style.display = isDark() ? 'none' : 'block';
             moon.style.display = isDark() ? 'block' : 'none';
         }
+        toggle.setAttribute('aria-pressed', String(isDark()));
+        // Keep the browser-chrome tint on the current paper color — the baked
+        // meta was a pre-redesign teal that matched nothing in the palette.
+        document.querySelector('meta[name="theme-color"]')
+            ?.setAttribute('content', isDark() ? '#100f0c' : '#f7f3ea');
     }
     updateIcon();
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -1296,20 +1498,22 @@ let refreshTimer = null;
 
 function startRefreshPolling() {
     if (refreshTimer) clearInterval(refreshTimer);
+    // Severe posture: 2-minute checks while a Severe/Extreme Warning is live
+    // (forecasters re-issue rapidly in those hours); a calm 10 otherwise.
+    const interval = severeAlertActive ? 2 * 60 * 1000 : 10 * 60 * 1000;
     refreshTimer = setInterval(async () => {
         if (document.hidden) return;
         try {
-            const res = await fetch(`https://api.weather.gov/products/types/AFD/locations/${currentOffice}`, {
-                headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }
-            });
-            if (!res.ok) return;
-            const data = await res.json();
-            const latest = data['@graph']?.[0];
+            const graph = await fetchAFDListShared(currentOffice, { force: true });
+            // Severe posture must also stand down on its own: re-check alerts
+            // so an expired Warning returns the poll to its calm cadence.
+            if (severeAlertActive) fetchAlerts(currentOffice).catch(() => {});
+            const latest = graph[0];
             if (latest && lastProductId && latest.id !== lastProductId) {
                 document.getElementById('refresh-banner').style.display = '';
             }
         } catch(e) { /* silent retry next cycle */ }
-    }, 10 * 60 * 1000);
+    }, interval);
 }
 
 // Track current product ID for refresh detection (via afterRender callback)
@@ -1362,7 +1566,12 @@ function renderChangelog(text, since) {
         const takeaway = document.getElementById('takeaway-container');
         if (takeaway) takeaway.insertAdjacentElement('afterend', el);
     }
-    el.innerHTML = `<span class="changelog-label">Since ${escapeHTML(sinceText(since))}</span> ${escapeHTML(text)}`;
+    el.innerHTML = `<span class="changelog-label">Since ${escapeHTML(sinceText(since))}</span> ${escapeHTML(text)}`
+        + ` <a class="changelog-view-link" href="/o/${encodeURIComponent(currentOffice)}/?view=changelog">See every revision →</a>`;
+    el.querySelector('.changelog-view-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        showChangelogView(currentOffice);
+    });
     el.style.display = '';
 }
 
@@ -1440,6 +1649,7 @@ document.getElementById('refresh-load')?.addEventListener('click', () => {
     document.getElementById('refresh-banner').style.display = 'none';
     // Clear cache so fetchAFD doesn't serve stale data
     sessionStorage.removeItem(`afd-${currentOffice}`);
+    if (currentView === 'changelog') leaveChangelogChrome();
     fetchAFD(currentOffice);
 });
 document.getElementById('refresh-dismiss')?.addEventListener('click', () => {
@@ -1504,7 +1714,10 @@ document.addEventListener('keydown', (e) => {
                 if (arr[i].offsetTop < scrollY - 50) { target = arr[i]; break; }
             }
         }
-        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (target) {
+            const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+        }
     } else if (e.key === '/') {
         e.preventDefault();
         document.getElementById('office-select')?.focus();
@@ -1513,20 +1726,20 @@ document.addEventListener('keydown', (e) => {
         openKbd();
     } else if (e.key === 'Escape') {
         closeKbd();
+        // WCAG 1.4.13: hover/focus tooltips must be dismissible without moving
+        // the pointer or focus.
+        document.querySelectorAll('.jargon.tip-open').forEach(el => el.classList.remove('tip-open'));
+        if (document.activeElement?.closest?.('.jargon')) document.activeElement.blur();
     }
 });
 
 // ─── Forecast history ───────────────────────────────────────────────
 let historyList = [];
 
-async function fetchHistoryList(office) {
+async function fetchHistoryList(office, limit = 10) {
     try {
-        const res = await fetch(`https://api.weather.gov/products/types/AFD/locations/${office}`, {
-            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }
-        });
-        if (!res.ok) return [];
-        const data = await res.json();
-        return (data['@graph'] || []).slice(0, 10).map(item => ({
+        const graph = await fetchAFDListShared(office);
+        return graph.slice(0, limit).map(item => ({
             id: item.id,
             url: item['@id'] || `https://api.weather.gov/products/${item.id}`,
             time: new Date(item.issuanceTime)
@@ -1559,12 +1772,22 @@ function renderHistorySelector(items, currentId) {
         opt.textContent = 'No previous forecasts';
         sel.appendChild(opt);
     } else {
+        // An edition older than this window (deep link near the retention
+        // horizon) must not masquerade as "Latest edition".
+        const inWindow = items.some(i => i.id === currentId);
+        if (!inWindow && viewingHistorical) {
+            const opt = document.createElement('option');
+            opt.disabled = true;
+            opt.selected = true;
+            opt.textContent = 'Archived edition';
+            sel.appendChild(opt);
+        }
         items.forEach((item, i) => {
             const opt = document.createElement('option');
             opt.value = item.id;
             const label = item.time.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', weekday: 'short', month: 'short', day: 'numeric', timeZone: tz, timeZoneName: 'short' });
             opt.textContent = i === 0 ? 'Latest edition' : `${label} (${timeAgo(item.time)})`;
-            if (item.id === currentId) opt.selected = true;
+            if (inWindow && item.id === currentId) opt.selected = true;
             sel.appendChild(opt);
         });
     }
@@ -1572,17 +1795,317 @@ function renderHistorySelector(items, currentId) {
         const item = items.find(i => i.id === sel.value);
         if (!item) return;
         try {
-            const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' } });
+            const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }, signal: AbortSignal.timeout(10000) });
             if (!res.ok) throw new Error('Fetch failed');
             const prodData = await res.json();
             // Viewing an older edition: invalidate any in-flight AI writes and skip
             // the diff/changelog. Selecting "Latest" (items[0]) re-enables them.
             fetchGeneration++;
             viewingHistorical = item.id !== items[0].id;
+            // Every edition is a permalink — the address bar always names what
+            // you're reading, so Share and copy-link just work.
+            const url = new URL(window.location);
+            if (viewingHistorical) url.searchParams.set('edition', item.id);
+            else url.searchParams.delete('edition');
+            history.pushState({}, '', url);
+        renderedRoute = currentRoute();
             renderAFD(prodData, currentOffice);
         } catch(e) { console.debug('History fetch failed', e); }
     });
     container.appendChild(sel);
+
+    // The ledger's front door lives beside the editions control in the colophon.
+    // (`line` is the #editions-line node declared at the top of this function.)
+    const existingLink = document.getElementById('colophon-changelog-link');
+    if (existingLink) {
+        existingLink.href = `/o/${encodeURIComponent(currentOffice)}/?view=changelog`;
+    }
+    if (line && !existingLink) {
+        const sep = document.createTextNode(' · ');
+        const a = document.createElement('a');
+        a.id = 'colophon-changelog-link';
+        a.href = `/o/${encodeURIComponent(currentOffice)}/?view=changelog`;
+        a.textContent = 'Changelog';
+        a.addEventListener('click', (e) => {
+            e.preventDefault();
+            showChangelogView(currentOffice);
+            window.scrollTo(0, 0);
+        });
+        line.appendChild(sep);
+        line.appendChild(a);
+    }
+}
+
+// ─── Changelog view — the edition ledger ────────────────────────────
+// Reverse-chronological record of every retained issuance: what each revision
+// changed, in the forecaster's own confidence language, with the full text
+// diff one fold away. Works for first-time visitors — nothing here depends on
+// sessionStorage having seen a previous edition. (State consts live at the top
+// of the file: deep links call showChangelogView during init.)
+
+async function fetchTimelineProducts(items) {
+    // POSITIONAL results — a failed fetch stays as null so pagination indices
+    // into timelineItems never drift (a dropped slot once produced a
+    // duplicated entry that "diffed" an issuance against itself).
+    return Promise.all(items.map(async (item) => {
+        try {
+            const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }, signal: AbortSignal.timeout(10000) });
+            if (!res.ok) return null;
+            const prod = await res.json();
+            return typeof prod.productText === 'string'
+                ? { id: item.id, time: item.time, text: prod.productText }
+                : null;
+        } catch (e) { return null; }
+    }));
+}
+
+function timelineDateline(time, tz) {
+    return {
+        date: time.toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: tz }),
+        clock: time.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' }),
+        edition: editionName(localHour(time, tz)),
+    };
+}
+
+function confidenceSentence(conf) {
+    if (!conf || !conf.word) return '';
+    if (conf.direction === 'rising') return `Confidence rising — now ${conf.word.toLowerCase()}.`;
+    if (conf.direction === 'falling') return `Confidence slipping — now ${conf.word.toLowerCase()}.`;
+    if (conf.direction === 'steady') return `Confidence ${conf.word.toLowerCase()}, holding steady.`;
+    return `Confidence ${conf.word.toLowerCase()}.`;
+}
+
+function timelineEntryHTML(entry, tz) {
+    const dl = timelineDateline(entry.time, tz);
+    const revised = entry.changedKeys.length
+        ? `Revised: ${entry.changedKeys.map(escapeHTML).join(', ')}.`
+        : 'No substantive revisions.';
+    const conf = confidenceSentence(entry.confidence);
+    const byline = entry.forecaster ? `<span class="timeline-byline">— ${escapeHTML(entry.forecaster)}</span>` : '';
+    const summary = entry.changedKeys.length
+        ? `<p class="timeline-summary pending" data-id="${escapeAttr(entry.id)}"><span class="ai-loading"></span></p>`
+        : `<p class="timeline-summary timeline-summary-quiet">The forecast carried forward unchanged.</p>`;
+    const diff = entry.changed.length ? `
+        <details class="timeline-diff">
+            <summary>Compare the text</summary>
+            ${entry.changed.map(d => `
+            <div class="timeline-diff-section">
+                <h3 class="timeline-diff-title">${escapeHTML(d.key)}</h3>
+                ${renderDiffHTML(d)}
+            </div>`).join('')}
+        </details>` : '';
+    return `
+    <article class="timeline-entry" data-entry-id="${escapeAttr(entry.id)}">
+        <h3 class="timeline-dateline">
+            <span class="timeline-date">${escapeHTML(dl.date)}</span>
+            <span class="timeline-sep" aria-hidden="true">·</span>
+            <span class="timeline-clock">${escapeHTML(dl.clock)}</span>
+            <span class="timeline-sep" aria-hidden="true">·</span>
+            <span class="timeline-edition">${escapeHTML(dl.edition)} Edition</span>
+        </h3>
+        ${summary}
+        <p class="timeline-meta">${revised} <span class="timeline-confidence">${conf}</span> ${byline}</p>
+        ${diff}
+        <p class="timeline-read"><a href="/o/${encodeURIComponent(currentOffice)}/?edition=${encodeURIComponent(entry.id)}" data-edition-id="${escapeAttr(entry.id)}">Read this edition</a></p>
+    </article>`;
+}
+
+async function fillTimelineSummary(office, el) {
+    const id = el.dataset.id;
+    if (!id) return;
+    delete el.dataset.id;
+    try {
+        const res = await fetch(`/api/changelog?office=${encodeURIComponent(office)}&id=${encodeURIComponent(id)}`);
+        if (!res.ok) throw new Error('changelog fetch failed');
+        const data = await res.json();
+        el.classList.remove('pending');
+        if (data && data.changelog) {
+            el.textContent = data.changelog;
+        } else if (data && data.transient) {
+            el.remove(); // a model/NWS failure is not a "nothing changed" verdict
+        } else {
+            el.textContent = 'Minor refinements — timing and wording, no headline change.';
+            el.classList.add('timeline-summary-quiet');
+        }
+    } catch (e) {
+        el.remove(); // the entry still carries the revised-sections line + diff
+    }
+}
+
+function observeTimelineSummaries(office, root) {
+    const els = Array.from(root.querySelectorAll('.timeline-summary[data-id]'));
+    if (!('IntersectionObserver' in window)) {
+        els.forEach(el => fillTimelineSummary(office, el));
+        return;
+    }
+    const io = new IntersectionObserver((entries) => {
+        for (const ent of entries) {
+            if (!ent.isIntersecting) continue;
+            io.unobserve(ent.target);
+            fillTimelineSummary(office, ent.target);
+        }
+    }, { rootMargin: '300px' });
+    els.forEach(el => io.observe(el));
+}
+
+// Open one edition as the full Dispatch spread (exits the ledger).
+async function openEditionFromTimeline(id) {
+    const item = timelineItems.find(i => i.id === id);
+    if (!item) return;
+    const thisGen = ++fetchGeneration; // capture BEFORE the fetch, not after
+    try {
+        const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' }, signal: AbortSignal.timeout(10000) });
+        if (!res.ok) throw new Error('Fetch failed');
+        const prodData = await res.json();
+        if (thisGen !== fetchGeneration) return; // user moved on mid-fetch
+        const isHistorical = item.id !== timelineItems[0]?.id;
+        // Permalink: archived editions carry ?edition= so the URL IS the artifact
+        leaveChangelogChrome(isHistorical ? item.id : null);
+        viewingHistorical = isHistorical;
+        renderAFD(prodData, currentOffice);
+        window.scrollTo(0, 0);
+        announce('Opened edition');
+    } catch (e) { console.debug('Edition open failed', e); }
+}
+
+function leaveChangelogChrome(editionId) {
+    currentView = 'forecast';
+    document.body.classList.remove('view-changelog');
+    updateTitle(currentOffice);
+    const url = new URL(window.location);
+    url.searchParams.delete('view');
+    if (editionId) url.searchParams.set('edition', editionId);
+    else url.searchParams.delete('edition');
+    history.pushState({}, '', url);
+    renderedRoute = currentRoute();
+}
+
+function appendTimelineEntries(entries, container, office) {
+    const tz = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
+    const holder = document.createElement('div');
+    holder.innerHTML = entries.map(e => timelineEntryHTML(e, tz)).join('');
+    const more = container.querySelector('.timeline-more');
+    while (holder.firstChild) {
+        container.insertBefore(holder.firstChild, more || null);
+    }
+    timelineRendered += entries.length;
+    observeTimelineSummaries(office, container);
+}
+
+async function loadEarlierEditions(container, office, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Setting the type…';
+    try {
+        // Need one product past the visible window to diff the last pair.
+        const nextItems = timelineItems.slice(timelineProducts.length, timelineProducts.length + TIMELINE_BATCH);
+        if (!nextItems.length) { btn.closest('.timeline-more')?.remove(); return; }
+        const fetched = await fetchTimelineProducts(nextItems);
+        // Focus safety: if the button (about to be moved/removed) holds focus,
+        // park focus on the container before mutating.
+        const overlapFrom = timelineProducts.length - 1; // last already-fetched product heads the new pairs
+        timelineProducts = timelineProducts.concat(fetched);
+        const entries = buildTimelineEntries(timelineProducts.slice(overlapFrom), { parseSections, computeDiff });
+        appendTimelineEntries(entries, container, office);
+        if (timelineProducts.length >= timelineItems.length) {
+            const more = btn.closest('.timeline-more');
+            if (more && more.contains(document.activeElement)) {
+                container.querySelector('.timeline-entry:last-of-type a')?.focus();
+            }
+            more?.remove();
+        } else {
+            btn.disabled = false;
+            btn.textContent = 'Earlier editions';
+        }
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Earlier editions';
+    }
+}
+
+async function showChangelogView(office, updateUrl) {
+    currentOffice = office;
+    currentView = 'changelog';
+    viewingHistorical = false;
+    document.body.classList.add('view-changelog');
+    applySky(office);
+    renderLedger(office);
+    const name = OFFICE_NAMES[office] || office;
+    const cityEl = document.getElementById('dateline-city');
+    if (cityEl) cityEl.textContent = name;
+    const dlDate = document.getElementById('dateline-date');
+    if (dlDate) dlDate.textContent = 'Forecast Changelog';
+    const dlEd = document.getElementById('dateline-edition');
+    if (dlEd) dlEd.textContent = 'Every Revision';
+    document.title = `Forecast Changelog · ${name} · Plaincast`;
+    if (updateUrl !== false) {
+        const url = new URL(window.location);
+        url.searchParams.set('view', 'changelog');
+        history.pushState({}, '', url);
+        renderedRoute = currentRoute();
+    }
+
+    const thisGen = ++fetchGeneration;
+    const sectionsEl = document.getElementById('sections');
+    sectionsEl.innerHTML = `
+    <div class="skeleton" aria-hidden="true">
+        <div class="skeleton-line" style="width: 40%"></div>
+        <div class="skeleton-line" style="width: 90%"></div>
+        <div class="skeleton-line" style="width: 75%"></div>
+    </div>`;
+
+    try {
+        timelineItems = await fetchHistoryList(office, TIMELINE_LOOKBACK);
+        if (thisGen !== fetchGeneration) return;
+        timelineProducts = await fetchTimelineProducts(timelineItems.slice(0, TIMELINE_BATCH + 1));
+        if (thisGen !== fetchGeneration) return;
+        const entries = buildTimelineEntries(timelineProducts, { parseSections, computeDiff });
+
+        const container = document.createElement('div');
+        container.className = 'timeline';
+        container.innerHTML = `
+        <header class="timeline-header">
+            <h2 class="timeline-kicker">The Changelog</h2>
+            <p class="timeline-standfirst">Every revision to the ${escapeHTML(name)} forecast, newest first —
+            what changed with each update, and whether the forecasters' confidence rose or fell.</p>
+            <p class="timeline-back"><a href="/o/${encodeURIComponent(office)}/" id="timeline-back-link">← Back to the forecast</a></p>
+        </header>`;
+
+        if (entries.length === 0) {
+            container.insertAdjacentHTML('beforeend',
+                '<p class="timeline-empty">The archive is thin right now — check back after the next update.</p>');
+        }
+        if (timelineItems.length > timelineProducts.length) {
+            container.insertAdjacentHTML('beforeend',
+                '<p class="timeline-more"><button class="timeline-more-btn" type="button">Earlier editions</button></p>');
+        }
+        sectionsEl.innerHTML = '';
+        sectionsEl.appendChild(container);
+        timelineRendered = 0;
+        appendTimelineEntries(entries, container, office);
+
+        container.querySelector('.timeline-more-btn')?.addEventListener('click', (e) => {
+            loadEarlierEditions(container, office, e.currentTarget);
+        });
+        container.addEventListener('click', (e) => {
+            const editionLink = e.target.closest('a[data-edition-id]');
+            if (editionLink) {
+                e.preventDefault();
+                openEditionFromTimeline(editionLink.dataset.editionId);
+                return;
+            }
+            if (e.target.closest('#timeline-back-link')) {
+                e.preventDefault();
+                leaveChangelogChrome();
+                fetchAFD(office);
+            }
+        });
+        announce(`Forecast changelog for ${name}`);
+    } catch (e) {
+        console.error('Changelog view failed:', e && (e.stack || e.message || e));
+        track('changelog-view-fail', { office });
+        if (thisGen !== fetchGeneration) return;
+        sectionsEl.innerHTML = '<div class="loading">Could not load the changelog. <button onclick="location.reload()" class="retry-btn">Try again</button></div>';
+    }
 }
 
 // ─── PWA install prompt ──────────────────────────────────────────

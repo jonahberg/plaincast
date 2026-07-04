@@ -1,0 +1,130 @@
+
+000
+FXUS66 KLOX 032341
+AFDLOX
+
+Area Forecast Discussion
+National Weather Service Los Angeles/Oxnard CA 
+441 PM PDT Fri Jul 3 2026
+
+.SYNOPSIS...03/428 PM.
+
+Onshore flow will continue to bring low clouds to the coasts
+and coastal valleys each night through morning period. Weaker 
+onshore flow will mean decreasing clouds in the valleys and 
+gradually warming temperatures. Expect a return to near normal 
+temperatures by early next week, with potential for above normal
+temperatures by mid-week.
+
+&&
+
+.SHORT TERM (TDY-MON)...03/146 PM.
+
+Generally quiet weather will continue across the local area
+through the short term periods with gradual warming expected each
+afternoon through the Holiday weekend. As expected, the influence
+of the marine layer continues to wane across inland locations as 
+onshore flow weakens, although night through morning clouds will
+continue to impact coastal locations each day. Temperatures early
+this afternoon have ranged from the upper 60s near the coast to 
+mid 80s across inland locations.
+
+For the next several days, expect heights aloft to continue to 
+rise as the trough of low pressure that has helped promote cooler 
+than normal temperatures and a deep marine layer that past few 
+days shift east, resulting in valley temperatures climbing into 
+the mid 80s by Sunday afternoon with mid 90s across far inland 
+locations. Gusty afternoon into evening winds are also expected 
+across the Antelope valley each day, but should remain below 
+advisory levels through the short term period.
+
+.LONG TERM (TUE-FRI)...03/146 PM.
+
+High pressure aloft across the four corners area early next week
+will shift west through mid-week, helping to contribute to 
+additional warming...with 500 mb heights peaking around 594 dam
+Wednesday afternoon. A weak trough of low pressure passing by to 
+the north Wednesday evening will knock down upper level heights to
+end the week, before high pressure builds back across the 
+southwest next weekend. 
+
+Overall, this is a dry weather pattern for the local area with 
+above normal temperatures expected through at least the end of
+next week with weak onshore flow limiting the influence of the
+marine layer to mainly coastal locations. At this point, 
+temperatures will likely peak several degrees above normal on 
+Wednesday, and remain above normal for the foreseeable future with
+CPC outlooks continuing to heavily favor above normal temperatures
+through at least week 2. This will result in a minor (valley) to 
+moderate (far inland) heat risk across the local area. Finally, an
+increased pressure gradient Tuesday through Thursday will result 
+in a return to modest sundowner winds mid-week.
+
+&&
+
+.AVIATION...03/2339Z.
+
+At 2230Z at KLAX, there was no marine layer. There was a surface 
+based inversion was 1700 feet deep. The top of the inversion was 
+3400 feet with a temperature of 22 C.
+
+High confidence in 00Z TAFs at KWJF and KPMD.
+
+For remaining airfields, moderate to high confidence that ceilings 
+tonight into Sat morning should vary between 004 and 012. There is
+a 20%-30% chance of LIFR cigs at KSMX between 11Z-14Z Sat 
+morning. Timing of low clouds could be off +/- an hour or two.
+
+KLAX...High confidence in 00Z TAF. VFR conds can be expected thru
+about 04/11Z and again aft about 04/18Z. Low to mdt confidence on
+low cloud return timing aft 04/11Z. No significant easterly wind 
+component is expected.
+
+KBUR...High confidence in 00Z TAF. VFR conds can be expected thru
+about 04/09Z and again aft about 04/16Z. Mdt confidence in low 
+cloud return timing around 04/09Z with cigs 004-007.
+
+&&
+
+.MARINE...03/1248 PM.
+
+For the Outer Waters, moderate to high confidence in current 
+forecast. Through Saturday, high confidence in winds and seas 
+remaining below Small Craft Advisory (SCA) levels. For Sunday 
+through Thursday, there is a 50-80% chance of SCA level winds. 
+Seas will begin gradually increasing Sunday and will approach 
+advisory levels mid-week. 
+
+For the Inner Water north of Point Sal, moderate to high 
+confidence in current forecast. Through Sunday, winds and seas 
+are expected to remain below SCA levels. There is a 30% chance 
+of SCA level winds on Monday and a 60% chance Tuesday & Wednesday.
+
+For the Inner Waters south of Point Conception, moderate to high
+confidence in current forecast. Through Tuesday, high confidence 
+in winds and seas remaining below SCA levels for most of the 
+southern Inner Waters. The only exception will be the western half
+of the Santa Barbara Channel where there is a 40-60% chance of 
+SCA level Sunday through Wednesday, mainly in the late afternoon 
+and evening hours.
+
+&&
+
+.LOX WATCHES/WARNINGS/ADVISORIES...
+CA...NONE.
+PZ...NONE.
+
+&&
+
+$$
+
+PUBLIC...Rossi
+AVIATION...SF
+MARINE...DB/SF
+SYNOPSIS...Ciliberti
+
+weather.gov/losangeles
+
+Experimental Graphical Hazardous Weather Outlook at:
+https://www.weather.gov/erh/ghwo?wfo=lox
+

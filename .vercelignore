@@ -1,0 +1,8 @@
+# Baked per-office pages stay committed (repo history + tests/seo-pages.test.js)
+# but must NOT deploy as static files: vercel.json rewrites run AFTER the
+# filesystem check (verified against @vercel/routing-utils), so a deployed
+# static /o/<CODE>/index.html would shadow the /o/:code rewrite and
+# api/office-page.js would never run. The function regenerates the identical
+# baked page in-memory (renderOfficePage + docs/index.html via includeFiles)
+# as its fail-safe fallback, so /o/<CODE>/ never serves less than today.
+docs/o

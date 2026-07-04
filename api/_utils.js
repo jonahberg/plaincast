@@ -28,3 +28,16 @@ export async function fetchAFDProduct(prodUrl, { signal } = {}) {
 export function productUrlFromItem(item) {
     return item?.['@id'] || (item?.id ? `https://api.weather.gov/products/${item.id}` : null);
 }
+
+// Fetch one alert by its URN id. Returns the properties object or null when
+// the alert doesn't exist (expired/cancelled ids 404 at NWS).
+export async function fetchAlertById(id, { signal } = {}) {
+    const res = await fetch(`https://api.weather.gov/alerts/${encodeURIComponent(id)}`, {
+        headers: { 'User-Agent': NWS_USER_AGENT },
+        signal
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`NWS API error: ${res.status}`);
+    const data = await res.json();
+    return data?.properties || null;
+}

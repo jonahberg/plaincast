@@ -706,8 +706,121 @@ kbd {
     .kbd-hint { display: none; }
 }
 
+/* ──────────────────  CHANGELOG VIEW — the edition ledger  ────────────────── */
+/* Reverse-chron record of revisions, set like a paper's corrections column:
+   hairline-ruled entries, small-caps datelines, the AI line as a serif deck. */
+body.view-changelog #takeaway-container { display: none !important; }
+body.view-changelog #changelog-line { display: none !important; }
+/* The contents nav indexes spread sections that don't exist in the ledger —
+   a sticky band of dead links (or an empty double-ruled strip on deep links). */
+body.view-changelog .section-nav { display: none !important; }
+
+.changelog-view-link {
+    font-family: var(--font-ui); font-size: 0.78rem; font-weight: 500;
+    color: var(--accent); text-decoration: none; white-space: nowrap;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.changelog-view-link:hover { border-bottom-color: var(--accent); }
+
+.timeline { max-width: var(--measure); margin: 0 auto; padding: 0 0 2rem; }
+.timeline-header { margin: 0.4rem 0 2.2rem; text-align: center; }
+.timeline-kicker {
+    font-family: var(--font-ui); font-size: 0.72rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.2em; color: var(--rubric);
+    margin: 0 0 0.7rem;
+}
+.timeline-standfirst {
+    font-family: var(--font-body); font-size: 1.02rem; line-height: 1.65;
+    color: var(--text-secondary); margin: 0 auto; max-width: 46ch;
+}
+.timeline-back { margin-top: 1rem; }
+.timeline-back a, .timeline-read a {
+    font-family: var(--font-ui); font-size: 0.78rem; font-weight: 500;
+    color: var(--accent); text-decoration: none;
+}
+.timeline-back a:hover, .timeline-read a:hover { text-decoration: underline; }
+
+.timeline-entry { border-top: 1px solid var(--rule); padding: 1.5rem 0 1.6rem; }
+.timeline-entry:last-of-type { border-bottom: 1px solid var(--rule); }
+.timeline-dateline {
+    margin: 0;
+    font-family: var(--font-ui); font-size: 0.78rem; font-weight: 500;
+    font-variant-caps: all-small-caps; letter-spacing: 0.06em;
+    color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 0.45rem;
+    align-items: baseline;
+}
+.timeline-sep { color: var(--rule-strong); }
+.timeline-edition { color: var(--rubric); }
+.timeline-summary {
+    font-family: var(--font-body); font-size: 1.12rem; line-height: 1.6;
+    margin: 0.65rem 0 0.4rem; color: var(--text);
+}
+.timeline-summary.pending { min-height: 1.6em; }
+.timeline-summary-quiet { color: var(--text-muted); font-style: italic; font-size: 1rem; }
+.timeline-meta {
+    font-family: var(--font-body); font-size: 0.9rem; line-height: 1.6;
+    color: var(--text-secondary); margin: 0 0 0.35rem;
+    font-variant-numeric: oldstyle-nums;
+}
+.timeline-confidence { font-style: italic; }
+.timeline-byline { color: var(--text-muted); }
+.timeline-diff { margin: 0.55rem 0 0.2rem; }
+.timeline-diff summary {
+    font-family: var(--font-ui); font-size: 0.75rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--rubric);
+    cursor: pointer; list-style: none; display: inline-flex; align-items: baseline; gap: 0.4rem;
+}
+.timeline-diff summary::-webkit-details-marker { display: none; }
+.timeline-diff summary::before { content: '❧'; color: var(--rubric); font-size: 0.85rem; }
+.timeline-diff[open] summary { margin-bottom: 0.6rem; }
+.timeline-diff summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.timeline-diff-section { margin: 0.7rem 0 1rem; }
+.timeline-diff-title {
+    font-family: var(--font-ui); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.04em; margin: 0 0 0.3rem; color: var(--text-secondary);
+}
+.timeline-read { margin: 0.5rem 0 0; }
+.timeline-empty {
+    font-family: var(--font-body); font-style: italic; color: var(--text-muted);
+    text-align: center; padding: 2rem 0;
+}
+.timeline-more { text-align: center; padding: 1.4rem 0 0.4rem; }
+.timeline-more-btn {
+    font-family: var(--font-ui); font-size: 0.8rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    background: transparent; color: var(--accent);
+    border: 1px solid var(--control-line); border-radius: 2px;
+    padding: 0.55rem 1.3rem; cursor: pointer;
+    min-height: 44px; /* comfortable tap target, consistent with the utility bar */
+}
+.timeline-more-btn:hover { border-color: var(--accent); }
+.timeline-more-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* Alert modal — plain-English lead above the verbatim official text */
+.alert-modal-plain {
+    font-family: var(--font-body); font-size: 1rem; line-height: 1.65;
+    padding-bottom: 0.9rem; margin-bottom: 0.9rem;
+    border-bottom: 1px solid var(--rule);
+}
+.alert-modal-plain p { margin: 0 0 0.6rem; }
+.alert-plain-label {
+    font-family: var(--font-ui); font-size: 0.7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+.alert-plain-label a { color: inherit; }
+.alert-plain-below { margin: 0.9rem 0 0; }
+
 /* ─────────────────────────────  PRINT  ───────────────────────────── */
 @media print {
+    /* Fine-press page setup: generous margins, no widowed lines, sections
+       keep their headings attached. */
+    @page { margin: 18mm 15mm; }
+    p, .plain-col, .timeline-summary { widows: 3; orphans: 3; }
+    .section-title, .timeline-dateline, h2, h3 { break-after: avoid-page; }
+    .forecast-section, .timeline-entry { break-inside: avoid-page; }
+    .masthead, .ledger { break-after: avoid-page; }
+    .timeline-diff, .timeline-read, .timeline-more, .changelog-view-link { display: none !important; }
     .atmosphere, .utility-bar, .section-nav, .ai-toggle, .theme-toggle, .share-btn, .kbd-hint,
     .banner, .explainer, .alert-modal-overlay, #kbd-overlay, .diff-toggle, .colophon-editions,
     .annotated-col, .columns > div:last-child, .col-label, .ai-loading-label {
@@ -717,4 +830,48 @@ kbd {
     body, .sheet { background: #fff !important; color: #1a1a1a !important; box-shadow: none !important; border: none !important; }
     .columns { grid-template-columns: 1fr !important; }
     .sheet { max-width: none; margin: 0; }
+}
+
+/* ─────────────────  OFFICE INDEX + SSR BASELINE  ─────────────────── */
+/* Appended 2026-07-03 (SSR office pages + internal links workstream). */
+/* Footer link grid to all 68 per-office editions — editorial index:   */
+/* DM Sans small-caps label, hairline rule, tight multi-column list.   */
+.office-index { padding: 1.6rem clamp(1.1rem, 4vw, 2.6rem) 2.4rem; }
+.office-index-rule { height: 1px; background: var(--rule); margin-bottom: 1.1rem; }
+.office-index-label {
+    font-family: var(--font-ui); font-size: 0.7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted);
+    margin: 0 0 0.85rem;
+}
+.office-index-list {
+    list-style: none; margin: 0; padding: 0;
+    columns: 4 10rem; column-gap: 1.8rem;
+}
+.office-index-list li { break-inside: avoid; padding: 0.14rem 0; }
+.office-index-list a {
+    font-family: var(--font-ui); font-size: 0.74rem; letter-spacing: 0.02em;
+    color: var(--text-muted); text-decoration: none;
+    font-variant-numeric: oldstyle-nums;
+}
+.office-index-list a:hover { color: var(--accent); text-decoration: underline; }
+.office-index-list a[aria-current="page"] { color: var(--accent); }
+
+/* Server-rendered forecast baseline (api/office-page.js): crawlable   */
+/* prose that app.js replaces wholesale on load. Reuses the            */
+/* .forecast-section/.section-title treatment; only the SSR-specific   */
+/* bits need styling here.                                             */
+.forecast-section.ssr p {
+    max-width: 70ch; margin: 0 0 1em;
+    font-size: 1.0625rem; line-height: 1.75;
+}
+.ssr-meta, .ssr-changelog, .ssr-note {
+    font-family: var(--font-ui); font-size: var(--step--1, 0.85rem);
+    color: var(--text-muted); max-width: 70ch;
+}
+.ssr-meta { margin: 0 0 0.4rem; }
+.ssr-changelog { margin: 0 0 1.2rem; }
+.ssr-note { margin: 2rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--rule); }
+
+@media print {
+    .office-index { display: none !important; }
 }

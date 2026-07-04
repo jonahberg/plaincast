@@ -1,0 +1,102 @@
+
+000
+FXUS61 KOKX 032349
+AFDOKX
+
+Area Forecast Discussion
+National Weather Service New York NY
+749 PM EDT Fri Jul 3 2026
+
+.WHAT HAS CHANGED...
+A severe thunderstorm watch is in effect for the Lower Hudson
+Valley, NE NJ, NYC, and Nassau on LI this evening.
+
+&&
+
+.KEY MESSAGES...
+1) Dangerous heat and humidity continues through Independence
+Day. 
+
+2) A severe thunderstorm watch is in effect for western portions of
+the area this evening. Across the entire area, isolated to 
+scattered thunderstorms are possible each day through Sunday. 
+Highest chances are over the weekend. Any storm has the 
+potential to produce damaging wind gusts, particularly this 
+evening and Saturday. Flash flooding is possible, but limited 
+today through Sunday. Additional flooding impacts would be 
+possible Monday into Tuesday.
+
+&&
+
+.DISCUSSION...
+.KEY MESSAGE 1... 
+Dangerous heat will continue this afternoon through Saturday. 
+This level of heat can be deadly for those without adequate 
+cooling and hydration. Impacts to transportation infrastructure 
+(rail, bridge, road/tarmac), electrical (high demand) and water 
+systems (open hydrants reducing water pressure) have been noted 
+with previous heat events of this severity and duration. On 
+average, heat kills more people than any other weather related 
+hazard.
+
+No major changes to the heat forecast with the warning in place 
+through Independence Day. With the high humidity in place, all areas 
+are forecast to hit heat index values of 105 to 115 this afternoon. 
+Those numbers drop some on Saturday into roughly the 100-105 range 
+inland, which technically meets only heat advisory criteria, but 
+will keep the warning going since this is part of the larger ongoing 
+heat event, and also to address the cumulative effects of multiple 
+days of heat. Heat indices for coastal areas are still expected to 
+reach 105-110.
+
+It still appears that there will still be at least some relief on 
+Sunday with high temps 85-90 and heat index values from the mid 80s 
+to lower 90s - short of advisory criteria. Further cooling still 
+anticipated for Monday with heat indices safely below advisory 
+criteria.
+&&
+
+.AVIATION /00Z SATURDAY THROUGH WEDNESDAY/...
+A cluster of strong to severe thunderstorms will move through 
+the NYC terminals through 01Z. A few severe thunderstorms are 
+possible with winds in excess of 60kt. Elsewhere, chances are 
+low for either a shower and thunderstorm this evening.
+
+&&
+
+.MARINE...
+Winds and seas are expected to remain below SCA levels through
+the middle of next week. However, there is a chance of tstm 
+development thru the period which could result in hazardous 
+conditions at times, particularly late day/evening Fri and Sat.
+Also, a few gusts may get close to 25 kt in E flow from Mon
+afternoon into Tue, especially on the ocean, with ocean seas up
+to 4 ft. 
+
+Rip Currents...
+
+Lighter winds with a more westerly component and lower swells
+will drop the risk to moderate today and low for Saturday.
+
+&&
+
+.OKX WATCHES/WARNINGS/ADVISORIES...
+CT...Extreme Heat Warning until 9 PM EDT Saturday for CTZ005>012.
+     Air Quality Alert until 11 PM EDT this evening for CTZ009>012.
+NY...Extreme Heat Warning until 9 PM EDT Saturday for NYZ067>075-
+     078>081-176>179.
+     Air Quality Alert until 11 PM EDT this evening for NYZ069>075-
+     078>081-176>179.
+NJ...Extreme Heat Warning until 9 PM EDT Saturday for NJZ002-004-
+     006-103>108.
+     Air Quality Alert until 11 PM EDT Sunday for NJZ002-004-006-
+     103>108.
+MARINE...None.
+
+&&
+
+$$
+
+DISCUSSION...JC
+AVIATION...DW
+MARINE...JC

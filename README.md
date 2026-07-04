@@ -8,22 +8,33 @@
 
 ## What Is This?
 
-Area Forecast Discussions (AFDs) are the real forecasts - written 3-4 times daily by National Weather Service meteorologists who actually read the models and interpret what they mean for your area. They're far deeper than any weather app, but they're written in dense meteorological shorthand that's nearly unreadable for normal people.
+The National Weather Service writes a daily weather column for your city. Plaincast typesets and translates it.
 
-Plaincast uses Anthropic's Claude to summarize them into plain English, displayed side by side with the annotated original.
+Area Forecast Discussions (AFDs) are the real forecasts - written 3-4 times daily by NWS meteorologists who actually read the models and interpret what they mean for your area. They're far deeper than any weather app, but they're written in dense meteorological shorthand that's nearly unreadable for normal people.
+
+Plaincast sets each edition like a fine print publication: plain-English translation beside the original facsimile, a jargon glossary, an almanac ledger, and a **forecast changelog** - every revision as a delta, because the interesting question is rarely "what's the forecast" and usually "what changed.
 
 ---
 
 ## Features
 
 ### 🤖 AI-Powered Summaries
-Every forecast section is summarized by Claude (Haiku) into natural, readable prose. Not just abbreviation expansion - actual explanation of *why* weather is happening, what the models show, and what it means for you. Falls back to regex translation if the API is unavailable.
+Every forecast section is summarized by Claude (Haiku) into natural, readable prose. Not just abbreviation expansion - actual explanation of *why* weather is happening, what the models show, and what it means for you. Translations are computed once per issuance and served from the CDN, so AI cost is bounded by (offices × issuances), not traffic. Falls back to regex translation if the model is unavailable - the page works, and makes sense, before and without AI.
 
 ### 📖 Side-by-Side Layout
-AI summary on the left, original AFD with jargon annotations on the right. Every highlighted term in the original has a hover tooltip (or tap on mobile) explaining what it means. 240+ term glossary covering synoptic meteorology, aviation, marine, pressure levels, model names, and airport codes, plus 109 abbreviation expansion patterns.
+AI summary on the left, original AFD with jargon annotations on the right. Every highlighted term in the original has a hover tooltip (or tap on mobile) explaining what it means. 230+ term glossary covering synoptic meteorology, aviation, marine, pressure levels, model names, and airport codes, plus 109 abbreviation expansion patterns.
 
 ### ⚡ Key Takeaway
 Bold 1-2 sentence summary at the top extracting what matters most from the Synopsis. Skip the details when you just need the headline.
+
+### 📓 Forecast Changelog
+Every retained issuance as a reverse-chronological ledger (`?view=changelog`): what each revision changed, a one-line AI summary of the delta, whether the forecasters' confidence rose or fell (read from their own language), and the full paragraph diff one fold away. Weather nerds share deltas - this makes the delta the artifact.
+
+### 🔗 Edition Permalinks
+Every issuance has a durable URL (`/o/LOX/?edition=<id>`). The history selector, the changelog ledger, RSS items, and the Share button all mint the same canonical form. With Vercel Blob provisioned, snapshots let permalinks outlive NWS's ~7-day product retention.
+
+### 🚨 Alerts, Explained
+Watches and warnings render as a color-coded list; the detail modal now leads with a calm plain-English explanation (server-side translation of the official text - what's happening, where, until when, what to do) above the verbatim alert. During an active Severe/Extreme Warning the page checks for new editions every 2 minutes instead of 10.
 
 ### 📊 Forecaster Confidence
 Visual indicator analyzing the AFD's language for certainty vs. uncertainty signals. Words like "high confidence" and "consistent" push it up; "uncertain", "tricky", and "wide range" push it down.
@@ -50,7 +61,7 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 │    ├─ index.html        (markup only, ~350 loc) │
 │    ├─ styles.css        (all CSS)               │
 │    ├─ js/app.js         (main app logic)        │
-│    ├─ js/glossary.js    (240+ term glossary)    │
+│    ├─ js/glossary.js    (230+ term glossary)    │
 │    ├─ js/offices.js     (68 office data)        │
 │    ├─ js/abbreviations.js (shared NWS abbrevs)  │
 │    ├─ js/diff.js        (forecast diff engine)  │
@@ -64,10 +75,15 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 │    └─ /stations/{id}/observations/latest        │
 │                                                 │
 │  Vercel Serverless                              │
-│    ├─ /api/translate  (AI Gateway → Claude)     │
-│    ├─ /api/feed       (RSS per office)          │
-│    ├─ /api/og         (dynamic OG images)       │
-│    └─ /api/conditions (current weather + avg)   │
+│    ├─ /api/translate-issuance (whole edition,   │
+│    │      translated once, CDN-cached)          │
+│    ├─ /api/translate    (per-section fallback)  │
+│    ├─ /api/changelog    (what changed, per id)  │
+│    ├─ /api/explain-alert (alert in plain terms) │
+│    ├─ /api/office-page  (SSR office pages)      │
+│    ├─ /api/feed         (delta RSS per office)  │
+│    ├─ /api/og           (share cards)           │
+│    └─ /api/conditions   (current weather + avg) │
 │                                                 │
 │  No framework. No build step. ES modules.       │
 └─────────────────────────────────────────────────┘
@@ -82,7 +98,7 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 - **NWS API** - Pulls directly from `api.weather.gov` (no API key needed)
 - **AI summaries** - Claude Haiku via Vercel AI Gateway with OIDC auth
 - **Forecast diff** - Paragraph-level comparison showing what changed between AFD versions
-- **Custom typography** - Fraunces display, Source Serif 4 body, DM Sans UI, JetBrains Mono for raw AFD
+- **Custom typography** - Fraunces display, Source Serif 4 body, DM Sans UI, JetBrains Mono for raw AFD; self-hosted subsetted woff2 (~393KB total, real small caps and oldstyle figures)
 - **Light/dark mode** - Editorial design with warm cream backgrounds, dark mode with warm near-blacks
 - **Mobile responsive** - Side-by-side stacks to vertical on screens under 768px
 - **Accessible** - ARIA roles on modals and tooltips, focus trapping, keyboard navigation, severity icons

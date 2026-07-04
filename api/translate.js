@@ -2,18 +2,21 @@
 // Uses AI Gateway for model routing, failover, and cost tracking
 
 import { generateText } from 'ai';
-import { OFFICE_TIMEZONES } from '../docs/js/offices.js';
+import { OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 
-// Translation cache: keyed on hash(text + section + office), 4-hour TTL
-// Fluid Compute shares instances across concurrent requests, so this persists
+// Translation cache: keyed on hash(text + canonical section + office), 4-hour TTL
+// Fluid Compute shares instances across concurrent requests, so this persists.
+// The key deliberately EXCLUDES client-supplied issuanceTime and uses a bucketed
+// section label: any client-varied key component is a cache-bust lever where each
+// variant of otherwise-identical text forces a fresh billable AI call.
 const translationCache = new Map();
 const CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours (NWS issues AFDs ~3-4x daily)
 const CACHE_MAX = 500; // max entries to prevent unbounded growth
 
-function cacheKey(text, section, office, issuanceTime) {
+function cacheKey(text, sectionKey, office) {
     let hash = 0;
-    const str = `${text}|${section}|${office}|${issuanceTime || ''}`;
+    const str = `${text}|${sectionKey}|${office}`;
     for (let i = 0; i < str.length; i++) {
         hash = ((hash << 5) - hash) + str.charCodeAt(i);
         hash |= 0;
@@ -21,8 +24,29 @@ function cacheKey(text, section, office, issuanceTime) {
     return hash.toString(36);
 }
 
-function getCachedTranslation(text, section, office, issuanceTime) {
-    const key = cacheKey(text, section, office, issuanceTime);
+// Bucket a free-text section label into a bounded set of canonical keys for
+// caching. The raw label still feeds the prompt (legitimate context); this only
+// bounds how many cache entries one text can occupy.
+const DISPLAY_SECTIONS = new Map(
+    Object.values(SECTION_NAMES).map(v => [v.toUpperCase(), v])
+);
+export function canonicalSectionKey(label) {
+    if (typeof label !== 'string' || !label.trim()) return 'OTHER';
+    let u = label.toUpperCase()
+        .replace(/\s*\([^)]*\)\s*$/, '')   // trailing (TDY-TUE) qualifiers
+        .replace(/\s*\/[^/]*\/\s*$/, '')   // trailing /THROUGH TONIGHT/ qualifiers
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (DISPLAY_SECTIONS.has(u)) return DISPLAY_SECTIONS.get(u);
+    if (SECTION_NAMES[u]) return SECTION_NAMES[u];
+    for (const [k, v] of Object.entries(SECTION_NAMES)) {
+        if (u.startsWith(k)) return v;
+    }
+    return 'OTHER';
+}
+
+function getCachedTranslation(text, sectionKey, office) {
+    const key = cacheKey(text, sectionKey, office);
     const entry = translationCache.get(key);
     if (!entry) return null;
     if (Date.now() - entry.time > CACHE_TTL) {
@@ -35,13 +59,13 @@ function getCachedTranslation(text, section, office, issuanceTime) {
     return entry.translation;
 }
 
-function setCachedTranslation(text, section, office, issuanceTime, translation) {
+function setCachedTranslation(text, sectionKey, office, translation) {
     // Evict oldest entries if at capacity
     if (translationCache.size >= CACHE_MAX) {
         const oldest = translationCache.keys().next().value;
         translationCache.delete(oldest);
     }
-    const key = cacheKey(text, section, office, issuanceTime);
+    const key = cacheKey(text, sectionKey, office);
     translationCache.set(key, { translation, time: Date.now() });
 }
 
@@ -63,14 +87,52 @@ function checkRateLimit(ip) {
     return true;
 }
 
+// Degraded mode (NWS unreachable, so text can't be verified against an AFD):
+// fail open so a real outage doesn't kill translation, but clamp every knob —
+// this is the only path that will translate unverified text.
+const degradedRateLimitMap = new Map();
+const DEGRADED_RATE_LIMIT_MAX = 5; // per IP per minute (normal mode: 30)
+// Instance-wide budget for degraded mode: during an NWS outage the endpoint
+// translates UNVERIFIED text, so cap the whole instance, not just each IP —
+// rotating IPs must not turn an outage into an open LLM proxy.
+let degradedGlobal = { windowStart: 0, count: 0 };
+const DEGRADED_GLOBAL_MAX = 30; // unverified translations per minute per instance
+
+function checkDegradedGlobalBudget() {
+    const now = Date.now();
+    if (now - degradedGlobal.windowStart > RATE_LIMIT_WINDOW) {
+        degradedGlobal = { windowStart: now, count: 0 };
+    }
+    if (degradedGlobal.count >= DEGRADED_GLOBAL_MAX) return false;
+    degradedGlobal.count += 1;
+    return true;
+}
+const DEGRADED_TEXT_MAX = 6000;    // chars (normal mode: 10000)
+const DEGRADED_MAX_TOKENS = 512;   // output tokens (normal mode: 1024)
+
+function checkDegradedRateLimit(ip) {
+    const now = Date.now();
+    const entry = degradedRateLimitMap.get(ip);
+    if (!entry) {
+        degradedRateLimitMap.set(ip, { timestamps: [now] });
+        return true;
+    }
+    entry.timestamps = entry.timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
+    if (entry.timestamps.length >= DEGRADED_RATE_LIMIT_MAX) return false;
+    entry.timestamps.push(now);
+    return true;
+}
+
 // Periodically clean up stale rate limit entries without pinning the event loop
 const rateLimitCleanupTimer = setInterval(() => {
     const now = Date.now();
-    for (const [ip, entry] of rateLimitMap) {
-        entry.timestamps = entry.timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
-        if (entry.timestamps.length === 0) rateLimitMap.delete(ip);
+    for (const map of [rateLimitMap, degradedRateLimitMap]) {
+        for (const [ip, entry] of map) {
+            entry.timestamps = entry.timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
+            if (entry.timestamps.length === 0) map.delete(ip);
+        }
+        if (map.size > 10_000) map.clear();
     }
-    if (rateLimitMap.size > 10_000) rateLimitMap.clear();
 }, 5 * 60 * 1000);
 rateLimitCleanupTimer.unref?.();
 
@@ -78,14 +140,14 @@ rateLimitCleanupTimer.unref?.();
 // Only translate text that actually appears in the office's recent AFD, so the
 // public endpoint can't be used to translate arbitrary (billable) text.
 // An AFD is identical for everyone for hours, so this is cached per office.
-const afdTextCache = new Map(); // office -> { texts: string[], time }
+const afdTextCache = new Map(); // office -> { products: [{norm, issuanceTime}], time }
 const AFD_TEXT_TTL = 10 * 60 * 1000; // 10 min
 
 function normalizeForMatch(s) {
     return String(s).toLowerCase().replace(/\$\$|&&/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-// True when `text` is a contiguous chunk of one of the recent AFD products.
+// True when `text` is a contiguous chunk of the normalized product text.
 // parseSections() output is always a contiguous slice of productText (headers,
 // $$/&& markers and the forecaster tail are removed), so this does not reject
 // legitimate section text. The head+tail fallback tolerates rare edge trims.
@@ -98,9 +160,18 @@ export function textMatchesAFD(text, normalizedProductTexts) {
     );
 }
 
-async function getOfficeAFDTexts(office) {
+// The matched product (not just a boolean) — its issuanceTime is the trusted,
+// server-derived calendar context for the prompt.
+export function findMatchingAFD(text, products) {
+    for (const prod of products) {
+        if (textMatchesAFD(text, [prod.norm])) return prod;
+    }
+    return null;
+}
+
+async function getOfficeAFDProducts(office) {
     const entry = afdTextCache.get(office);
-    if (entry && Date.now() - entry.time < AFD_TEXT_TTL) return entry.texts;
+    if (entry && Date.now() - entry.time < AFD_TEXT_TTL) return entry.products;
     // Cover the last few issuances so history-browsing still verifies.
     const items = (await fetchAFDList(office, { signal: AbortSignal.timeout(8000) })).slice(0, 4);
     const settled = await Promise.all(items.map(async (item) => {
@@ -108,12 +179,16 @@ async function getOfficeAFDTexts(office) {
             const url = productUrlFromItem(item);
             if (!url) return null;
             const prod = await fetchAFDProduct(url, { signal: AbortSignal.timeout(8000) });
-            return typeof prod?.productText === 'string' ? normalizeForMatch(prod.productText) : null;
+            if (typeof prod?.productText !== 'string') return null;
+            return {
+                norm: normalizeForMatch(prod.productText),
+                issuanceTime: typeof prod.issuanceTime === 'string' ? prod.issuanceTime : null,
+            };
         } catch { return null; }
     }));
-    const texts = settled.filter(Boolean);
-    if (texts.length) afdTextCache.set(office, { texts, time: Date.now() });
-    return texts;
+    const products = settled.filter(Boolean);
+    if (products.length) afdTextCache.set(office, { products, time: Date.now() });
+    return products;
 }
 
 function ordinal(day) {
@@ -252,27 +327,45 @@ export default async function handler(req, res) {
     }
 
     // Check translation cache first
-    const cached = getCachedTranslation(text, sectionLabel, officeCode, issuanceTime);
+    const sectionKey = canonicalSectionKey(sectionLabel);
+    const cached = getCachedTranslation(text, sectionKey, officeCode);
     if (cached) {
         return res.status(200).json({ translation: cached, cached: true });
     }
 
     // Anti-abuse: only translate text that appears in this office's recent AFD.
-    // Fail open if NWS is unreachable so a real outage doesn't kill translation.
-    let afdTexts = [];
-    try { afdTexts = await getOfficeAFDTexts(officeCode); } catch { afdTexts = []; }
-    if (afdTexts.length && !textMatchesAFD(text, afdTexts)) {
-        return res.status(403).json({ error: 'Text does not match a current forecast' });
+    // Fail open if NWS is unreachable so a real outage doesn't kill translation,
+    // but clamp rate/size/output in that unverified (degraded) mode.
+    let afdProducts = [];
+    try { afdProducts = await getOfficeAFDProducts(officeCode); } catch { afdProducts = []; }
+    const degraded = afdProducts.length === 0;
+    let matchedProduct = null;
+    if (!degraded) {
+        matchedProduct = findMatchingAFD(text, afdProducts);
+        if (!matchedProduct) {
+            return res.status(403).json({ error: 'Text does not match a current forecast' });
+        }
+    } else {
+        console.warn(`[translate] degraded mode (AFD source unavailable): office=${officeCode}`);
+        if (!checkDegradedRateLimit(clientIp) || !checkDegradedGlobalBudget()) {
+            return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+        }
+        if (text.length > DEGRADED_TEXT_MAX) {
+            return res.status(400).json({ error: 'Text too long' });
+        }
     }
 
-    const systemPrompt = buildSystemPrompt({ section: sectionLabel, office: officeCode, issuanceTime });
+    // Calendar context: trust the matched product's issuance time over the
+    // client's claim; the client value is only a hint when NWS is unreachable.
+    const promptIssuanceTime = matchedProduct?.issuanceTime || issuanceTime;
+    const systemPrompt = buildSystemPrompt({ section: sectionLabel, office: officeCode, issuanceTime: promptIssuanceTime });
 
     try {
         const result = await generateText({
             model: 'anthropic/claude-haiku-4.5',
             system: systemPrompt,
             prompt: text,
-            maxOutputTokens: 1024,
+            maxOutputTokens: degraded ? DEGRADED_MAX_TOKENS : 1024,
             abortSignal: AbortSignal.timeout(15000),
         });
 
@@ -289,7 +382,7 @@ export default async function handler(req, res) {
         }
 
         // Cache successful translation for future requests
-        setCachedTranslation(text, sectionLabel, officeCode, issuanceTime, translation);
+        setCachedTranslation(text, sectionKey, officeCode, translation);
 
         return res.status(200).json({ translation, cached: false });
     } catch (err) {
