@@ -20,7 +20,7 @@ Plaincast uses Anthropic's Claude to summarize them into plain English, displaye
 Every forecast section is summarized by Claude (Haiku) into natural, readable prose. Not just abbreviation expansion - actual explanation of *why* weather is happening, what the models show, and what it means for you. Falls back to regex translation if the API is unavailable.
 
 ### 📖 Side-by-Side Layout
-AI summary on the left, original AFD with jargon annotations on the right. Every highlighted term in the original has a hover tooltip (or tap on mobile) explaining what it means. 240+ term glossary covering synoptic meteorology, aviation, marine, pressure levels, model names, and airport codes, plus 109 abbreviation expansion patterns.
+AI summary on the left, original AFD with jargon annotations on the right. Every highlighted term in the original has a hover tooltip (or tap on mobile) explaining what it means. 230+ term glossary covering synoptic meteorology, aviation, marine, pressure levels, model names, and airport codes, plus 109 abbreviation expansion patterns.
 
 ### ⚡ Key Takeaway
 Bold 1-2 sentence summary at the top extracting what matters most from the Synopsis. Skip the details when you just need the headline.
@@ -50,7 +50,7 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 │    ├─ index.html        (markup only, ~350 loc) │
 │    ├─ styles.css        (all CSS)               │
 │    ├─ js/app.js         (main app logic)        │
-│    ├─ js/glossary.js    (240+ term glossary)    │
+│    ├─ js/glossary.js    (230+ term glossary)    │
 │    ├─ js/offices.js     (68 office data)        │
 │    ├─ js/abbreviations.js (shared NWS abbrevs)  │
 │    ├─ js/diff.js        (forecast diff engine)  │

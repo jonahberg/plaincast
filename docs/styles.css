@@ -791,6 +791,21 @@ body.view-changelog #changelog-line { display: none !important; }
 .timeline-more-btn:hover { border-color: var(--accent); }
 .timeline-more-btn:disabled { opacity: 0.6; cursor: default; }
 
+/* Alert modal — plain-English lead above the verbatim official text */
+.alert-modal-plain {
+    font-family: var(--font-body); font-size: 1rem; line-height: 1.65;
+    padding-bottom: 0.9rem; margin-bottom: 0.9rem;
+    border-bottom: 1px solid var(--rule);
+}
+.alert-modal-plain p { margin: 0 0 0.6rem; }
+.alert-plain-label {
+    font-family: var(--font-ui); font-size: 0.7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+.alert-plain-label a { color: inherit; }
+.alert-plain-below { margin: 0.9rem 0 0; }
+
 /* ─────────────────────────────  PRINT  ───────────────────────────── */
 @media print {
     .atmosphere, .utility-bar, .section-nav, .ai-toggle, .theme-toggle, .share-btn, .kbd-hint,
@@ -802,4 +817,48 @@ body.view-changelog #changelog-line { display: none !important; }
     body, .sheet { background: #fff !important; color: #1a1a1a !important; box-shadow: none !important; border: none !important; }
     .columns { grid-template-columns: 1fr !important; }
     .sheet { max-width: none; margin: 0; }
+}
+
+/* ─────────────────  OFFICE INDEX + SSR BASELINE  ─────────────────── */
+/* Appended 2026-07-03 (SSR office pages + internal links workstream). */
+/* Footer link grid to all 68 per-office editions — editorial index:   */
+/* DM Sans small-caps label, hairline rule, tight multi-column list.   */
+.office-index { padding: 1.6rem 0 2.4rem; }
+.office-index-rule { height: 1px; background: var(--rule); margin-bottom: 1.1rem; }
+.office-index-label {
+    font-family: var(--font-ui); font-size: 0.7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted);
+    margin: 0 0 0.85rem;
+}
+.office-index-list {
+    list-style: none; margin: 0; padding: 0;
+    columns: 4 10rem; column-gap: 1.8rem;
+}
+.office-index-list li { break-inside: avoid; padding: 0.14rem 0; }
+.office-index-list a {
+    font-family: var(--font-ui); font-size: 0.74rem; letter-spacing: 0.02em;
+    color: var(--text-muted); text-decoration: none;
+    font-variant-numeric: oldstyle-nums;
+}
+.office-index-list a:hover { color: var(--accent); text-decoration: underline; }
+.office-index-list a[aria-current="page"] { color: var(--accent); }
+
+/* Server-rendered forecast baseline (api/office-page.js): crawlable   */
+/* prose that app.js replaces wholesale on load. Reuses the            */
+/* .forecast-section/.section-title treatment; only the SSR-specific   */
+/* bits need styling here.                                             */
+.forecast-section.ssr p {
+    max-width: 70ch; margin: 0 0 1em;
+    font-size: 1.0625rem; line-height: 1.75;
+}
+.ssr-meta, .ssr-changelog, .ssr-note {
+    font-family: var(--font-ui); font-size: var(--step--1, 0.85rem);
+    color: var(--text-muted); max-width: 70ch;
+}
+.ssr-meta { margin: 0 0 0.4rem; }
+.ssr-changelog { margin: 0 0 1.2rem; }
+.ssr-note { margin: 2rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--rule); }
+
+@media print {
+    .office-index { display: none !important; }
 }

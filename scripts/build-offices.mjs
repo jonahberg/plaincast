@@ -25,6 +25,43 @@ export function officeDescription(city, code) {
     return `The latest National Weather Service Area Forecast Discussion for ${city} (${code}), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.`;
 }
 
+// Office-specific structured data: WebPage (with BreadcrumbList home→office)
+// about a Place. The generic WebApplication/FAQ/HowTo JSON-LD stays shared;
+// this block is what makes each /o/<CODE>/ page's structured data unique.
+export function officeJsonLd(code, city) {
+    const url = `https://plaincast.live/o/${code}/`;
+    const data = {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        '@id': url,
+        'url': url,
+        'name': officeTitle(city),
+        'description': officeDescription(city, code),
+        'inLanguage': 'en-US',
+        'isPartOf': {
+            '@type': 'WebSite',
+            'name': 'Plaincast',
+            'url': 'https://plaincast.live'
+        },
+        'about': {
+            '@type': 'Place',
+            'name': city,
+            'description': `Forecast area of the National Weather Service ${city} office (${code})`
+        },
+        'breadcrumb': {
+            '@type': 'BreadcrumbList',
+            'itemListElement': [
+                { '@type': 'ListItem', 'position': 1, 'name': 'Plaincast', 'item': 'https://plaincast.live/' },
+                { '@type': 'ListItem', 'position': 2, 'name': `${city} (${code})`, 'item': url }
+            ]
+        },
+        'significantLink': `https://plaincast.live/o/${code}/?view=changelog`
+    };
+    // `<` escaped so the JSON can never terminate the <script> element early.
+    const json = JSON.stringify(data, null, 4).replace(/</g, '\\u003c');
+    return `<script type="application/ld+json">\n    ${json.split('\n').join('\n    ')}\n    </script>`;
+}
+
 export function renderOfficePage(template, code, city) {
     const title = escHtml(officeTitle(city));
     const desc = escHtml(officeDescription(city, code));
@@ -43,6 +80,10 @@ export function renderOfficePage(template, code, city) {
     html = html.replace('href="manifest.json"', 'href="/manifest.json"');
     html = html.replace('href="styles.css"', 'href="/styles.css"');
     html = html.replace('src="js/app.js"', 'src="/js/app.js"');
+    // office-specific structured data (WebPage + Place + BreadcrumbList)
+    html = html.replace('</head>', `${officeJsonLd(code, city)}\n</head>`);
+    // mark this office's own entry in the footer office index
+    html = html.replace(`<a href="/o/${code}/">`, `<a href="/o/${code}/" aria-current="page">`);
     return html;
 }
 

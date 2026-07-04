@@ -10,7 +10,23 @@
 // The header regexes mirror the proven client-side parseSections logic
 // (docs/js/app.js / tests/helpers.js), hardened in June 2026 for
 // slash-delimited headers like ".AVIATION /14Z TAFS/...". Kept self-contained
-// here so serverless functions do not depend on frontend modules.
+// here so serverless functions do not depend on frontend modules — the one
+// exception is the shared abbreviation table (docs/js/abbreviations.js, pure
+// data, already a server dependency via api/feed.js).
+
+import { BASIC_ABBREVIATIONS } from '../docs/js/abbreviations.js';
+
+// ─── regexTranslate ─────────────────────────────────────────────────
+// Deterministic, no-AI plain-English pass: expands NWS abbreviations and
+// normalizes "..." separators. Shared by api/office-page.js (server-rendered
+// office pages); api/feed.js keeps its own identical copy.
+export function regexTranslate(text) {
+    let t = String(text ?? '');
+    t = t.replace(/\.{3,}/g, '. ');
+    t = t.replace(/[ \t]{2,}/g, ' ');
+    for (const [pat, rep] of BASIC_ABBREVIATIONS) t = t.replace(pat, rep);
+    return t.trim();
+}
 
 // Office-prefixed headers, e.g. ".LOX WATCHES/WARNINGS/ADVISORIES..."
 // (also matches ".KEY MESSAGES..." with "KEY" as the pseudo-prefix — the

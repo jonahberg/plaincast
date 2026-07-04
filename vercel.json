@@ -1,8 +1,15 @@
 {
   "buildCommand": null,
   "outputDirectory": "docs",
+  "functions": {
+    "api/office-page.js": {
+      "includeFiles": "docs/index.html"
+    }
+  },
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/:path*" }
+    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/o/:code", "destination": "/api/office-page?code=:code" },
+    { "source": "/o/:code/", "destination": "/api/office-page?code=:code" }
   ],
   "headers": [
     {
