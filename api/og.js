@@ -1,6 +1,10 @@
 // Vercel serverless function: dynamic OG image per office
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
+import { extractLede, sectionHealth } from './_afd-sections.js';
+
+// Offices already warned about unparseable AFDs (format drift), once per instance.
+const warnedOffices = new Set();
 
 export default async function handler(req, res) {
     const office = (req.query.office || '').toUpperCase();
@@ -20,10 +24,15 @@ export default async function handler(req, res) {
         if (prodUrl) {
             const prodData = await fetchAFDProduct(prodUrl, { signal: AbortSignal.timeout(5000) });
             const text = typeof prodData?.productText === 'string' ? prodData.productText : '';
-            // Extract synopsis first sentences
-            const synMatch = text.match(/\.SYNOPSIS[^.]*\.{2,3}\s*([\s\S]*?)(?=\n\.[A-Z]|\n\$\$)/);
-            if (synMatch) {
-                let syn = synMatch[1].replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
+            // Extract the lede (SYNOPSIS or Key Message format sections)
+            const health = sectionHealth(text);
+            if (health.sectionCount === 0 && !warnedOffices.has(office)) {
+                warnedOffices.add(office);
+                console.warn(`[og] AFD format drift: ${office} parsed 0 sections (format=${health.format})`);
+            }
+            const lede = extractLede(text);
+            if (lede) {
+                let syn = lede.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
                 // Take first 2 sentences
                 const sentences = syn.match(/[^.!?]+[.!?]+/g);
                 if (sentences) syn = sentences.slice(0, 2).join(' ').trim();

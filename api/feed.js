@@ -4,8 +4,12 @@
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { BASIC_ABBREVIATIONS } from '../docs/js/abbreviations.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
+import { extractLede, sectionHealth, stripWmoHeader } from './_afd-sections.js';
 
 const VALID_OFFICES = new Set(Object.keys(OFFICE_NAMES));
+
+// Offices already warned about unparseable AFDs (format drift), once per instance.
+const warnedOffices = new Set();
 
 // Regex translation using shared abbreviation patterns
 function regexTranslate(text) {
@@ -44,9 +48,14 @@ export default async function handler(req, res) {
                 const text = typeof prodData?.productText === 'string' ? prodData.productText : '';
                 const issued = new Date(prodData?.issuanceTime);
                 if (!text || Number.isNaN(issued.getTime()) || !item?.id) continue;
-                // Extract synopsis for description
-                const synMatch = text.match(/\.SYNOPSIS[^.]*\.{2,3}\s*([\s\S]*?)(?=\n\.[A-Z]|\n\$\$)/);
-                const synopsis = synMatch ? regexTranslate(synMatch[1]) : regexTranslate(text.substring(0, 500));
+                // Extract the lede (SYNOPSIS or Key Message format sections) for description
+                const health = sectionHealth(text);
+                if (health.sectionCount === 0 && !warnedOffices.has(office)) {
+                    warnedOffices.add(office);
+                    console.warn(`[feed] AFD format drift: ${office} parsed 0 sections (format=${health.format})`);
+                }
+                const lede = extractLede(text);
+                const synopsis = regexTranslate(lede || stripWmoHeader(text).substring(0, 500));
                 const pubDate = issued.toUTCString();
 
                 rssItems += `    <item>
