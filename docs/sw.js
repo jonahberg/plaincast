@@ -1,5 +1,5 @@
 // Plaincast Service Worker — offline-capable weather forecasts
-const CACHE_NAME = 'plaincast-v4';
+const CACHE_NAME = 'plaincast-v5';
 const APP_SHELL = [
     '/',
     '/og-image.png',
@@ -9,6 +9,7 @@ const APP_SHELL = [
     '/js/offices.js',
     '/js/abbreviations.js',
     '/js/diff.js',
+    '/js/timeline.js',
     '/manifest.json',
 ];
 

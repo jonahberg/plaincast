@@ -13,6 +13,14 @@ let viewingHistorical = false; // true while reading an archived edition (skip d
 let currentView = 'forecast';  // 'forecast' (the spread) | 'changelog' (the edition ledger)
 let currentTranslationObserver = null; // IntersectionObserver for lazy AI translation
 
+// Changelog-view state — declared up here because showChangelogView can run at
+// init (deep link) before module evaluation reaches the view code further down.
+const TIMELINE_BATCH = 8;      // pairs per page (batch+1 product fetches)
+const TIMELINE_LOOKBACK = 40;  // list metadata to page through (~1 week)
+let timelineItems = [];        // metadata for every retained issuance
+let timelineProducts = [];     // fetched product texts, newest-first
+let timelineRendered = 0;      // entries currently in the DOM
+
 // Fetch live alerts and return map of event name → alert URL
 async function fetchAlerts(office) {
     const state = OFFICE_STATES[office];
@@ -1124,8 +1132,13 @@ function selectOffice(office, updateUrl) {
     officeSelect.value = office;
     applySky(office); // instant sky change while the new forecast loads
     if (updateUrl !== false) {
+        // Canonical URL form is the path (/o/LOT/), not ?office= — one URL per
+        // office keeps shares, SEO equity, and the baked pages in agreement,
+        // and never produces the contradictory /o/OKX/?office=LOT.
         const url = new URL(window.location);
-        url.searchParams.set('office', office);
+        url.pathname = `/o/${encodeURIComponent(office)}/`;
+        url.searchParams.delete('office');
+        url.searchParams.delete('edition'); // a new office always opens on its latest edition
         history.pushState({}, '', url);
     }
     try { localStorage.setItem('plaincast-office', office); } catch(e) { /* quota */ }
@@ -1140,25 +1153,74 @@ function selectOffice(office, updateUrl) {
 
 officeSelect.addEventListener('change', () => selectOffice(officeSelect.value));
 
+// Open a specific archived edition by product id (?edition= deep links).
+// Falls back to the latest forecast if the id has aged out of NWS retention.
+async function loadEdition(office, editionId) {
+    currentOffice = office;
+    try {
+        const items = await fetchHistoryList(office, TIMELINE_LOOKBACK);
+        timelineItems = items;
+        const item = items.find(i => i.id === editionId);
+        if (!item) {
+            const url = new URL(window.location);
+            url.searchParams.delete('edition');
+            history.replaceState({}, '', url);
+            fetchAFD(office);
+            return;
+        }
+        const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' } });
+        if (!res.ok) throw new Error('Fetch failed');
+        const prodData = await res.json();
+        fetchGeneration++;
+        viewingHistorical = item.id !== items[0]?.id;
+        renderAFD(prodData, office);
+    } catch (e) {
+        console.debug('Edition deep link failed', e);
+        fetchAFD(office);
+    }
+}
+
 // Handle browser back/forward
 window.addEventListener('popstate', () => {
     const params = new URLSearchParams(window.location.search);
-    const office = params.get('office')?.toUpperCase();
+    const pathM = window.location.pathname.match(/\/o\/([A-Za-z]{3})\/?$/);
+    const office = params.get('office')?.toUpperCase() || pathM?.[1]?.toUpperCase();
     const target = (office && officeSelect.querySelector(`option[value="${office}"]`)) ? office : currentOffice;
+    officeSelect.value = target;
     if (params.get('view') === 'changelog') {
-        officeSelect.value = target;
         showChangelogView(target, false);
+        return;
+    }
+    currentView = 'forecast';
+    document.body.classList.remove('view-changelog');
+    const edition = params.get('edition');
+    if (edition) {
+        updateTitle(target);
+        loadEdition(target, edition);
     } else {
-        currentView = 'forecast';
-        document.body.classList.remove('view-changelog');
         selectOffice(target, false);
     }
 });
 
-// Load initial office (deep links may land straight on the changelog ledger)
+// Restore a #section-… anchor once, after the first async render lands —
+// static HTML can't scroll to content that doesn't exist yet.
+let initialHashHandled = false;
+afterRender.push(() => {
+    if (initialHashHandled) return;
+    initialHashHandled = true;
+    const h = window.location.hash;
+    if (h && /^#section-[\w-]+$/.test(h)) {
+        document.querySelector(h)?.scrollIntoView({ block: 'start' });
+    }
+});
+
+// Load initial office. Deep links may land on the changelog ledger or a
+// specific archived edition; both resolve before the default spread.
 updateTitle(initialOffice);
 if (urlParams.get('view') === 'changelog') {
     showChangelogView(initialOffice, false);
+} else if (urlParams.get('edition')) {
+    loadEdition(initialOffice, urlParams.get('edition'));
 } else {
     fetchAFD(initialOffice);
 }
@@ -1323,7 +1385,7 @@ function renderChangelog(text, since) {
         if (takeaway) takeaway.insertAdjacentElement('afterend', el);
     }
     el.innerHTML = `<span class="changelog-label">Since ${escapeHTML(sinceText(since))}</span> ${escapeHTML(text)}`
-        + ` <a class="changelog-view-link" href="?office=${encodeURIComponent(currentOffice)}&view=changelog">See every revision →</a>`;
+        + ` <a class="changelog-view-link" href="/o/${encodeURIComponent(currentOffice)}/?view=changelog">See every revision →</a>`;
     el.querySelector('.changelog-view-link')?.addEventListener('click', (e) => {
         e.preventDefault();
         showChangelogView(currentOffice);
@@ -1544,6 +1606,12 @@ function renderHistorySelector(items, currentId) {
             // the diff/changelog. Selecting "Latest" (items[0]) re-enables them.
             fetchGeneration++;
             viewingHistorical = item.id !== items[0].id;
+            // Every edition is a permalink — the address bar always names what
+            // you're reading, so Share and copy-link just work.
+            const url = new URL(window.location);
+            if (viewingHistorical) url.searchParams.set('edition', item.id);
+            else url.searchParams.delete('edition');
+            history.pushState({}, '', url);
             renderAFD(prodData, currentOffice);
         } catch(e) { console.debug('History fetch failed', e); }
     });
@@ -1555,7 +1623,7 @@ function renderHistorySelector(items, currentId) {
         const sep = document.createTextNode(' · ');
         const a = document.createElement('a');
         a.id = 'colophon-changelog-link';
-        a.href = `?office=${encodeURIComponent(currentOffice)}&view=changelog`;
+        a.href = `/o/${encodeURIComponent(currentOffice)}/?view=changelog`;
         a.textContent = 'Changelog';
         a.addEventListener('click', (e) => {
             e.preventDefault();
@@ -1571,12 +1639,8 @@ function renderHistorySelector(items, currentId) {
 // Reverse-chronological record of every retained issuance: what each revision
 // changed, in the forecaster's own confidence language, with the full text
 // diff one fold away. Works for first-time visitors — nothing here depends on
-// sessionStorage having seen a previous edition.
-const TIMELINE_BATCH = 8;      // pairs per page (batch+1 product fetches)
-const TIMELINE_LOOKBACK = 40;  // list metadata to page through (~1 week)
-let timelineItems = [];        // metadata for every retained issuance
-let timelineProducts = [];     // fetched product texts, newest-first
-let timelineRendered = 0;      // entries currently in the DOM
+// sessionStorage having seen a previous edition. (State consts live at the top
+// of the file: deep links call showChangelogView during init.)
 
 async function fetchTimelineProducts(items) {
     const results = await Promise.all(items.map(async (item) => {
@@ -1639,7 +1703,7 @@ function timelineEntryHTML(entry, tz) {
         ${summary}
         <p class="timeline-meta">${revised} <span class="timeline-confidence">${conf}</span> ${byline}</p>
         ${diff}
-        <p class="timeline-read"><a href="?office=${encodeURIComponent(currentOffice)}" data-edition-id="${escapeHTML(entry.id)}">Read this edition</a></p>
+        <p class="timeline-read"><a href="/o/${encodeURIComponent(currentOffice)}/?edition=${encodeURIComponent(entry.id)}" data-edition-id="${escapeHTML(entry.id)}">Read this edition</a></p>
     </article>`;
 }
 
@@ -1687,20 +1751,24 @@ async function openEditionFromTimeline(id) {
         const res = await fetch(item.url, { headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' } });
         if (!res.ok) throw new Error('Fetch failed');
         const prodData = await res.json();
-        leaveChangelogChrome();
+        const isHistorical = item.id !== timelineItems[0]?.id;
+        // Permalink: archived editions carry ?edition= so the URL IS the artifact
+        leaveChangelogChrome(isHistorical ? item.id : null);
         fetchGeneration++;
-        viewingHistorical = item.id !== timelineItems[0]?.id;
+        viewingHistorical = isHistorical;
         renderAFD(prodData, currentOffice);
         window.scrollTo(0, 0);
     } catch (e) { console.debug('Edition open failed', e); }
 }
 
-function leaveChangelogChrome() {
+function leaveChangelogChrome(editionId) {
     currentView = 'forecast';
     document.body.classList.remove('view-changelog');
     updateTitle(currentOffice);
     const url = new URL(window.location);
     url.searchParams.delete('view');
+    if (editionId) url.searchParams.set('edition', editionId);
+    else url.searchParams.delete('edition');
     history.pushState({}, '', url);
 }
 
@@ -1784,7 +1852,7 @@ async function showChangelogView(office, updateUrl) {
             <div class="timeline-kicker">The Changelog</div>
             <p class="timeline-standfirst">Every revision to the ${escapeHTML(name)} forecast, newest first —
             what changed with each update, and whether the forecasters' confidence rose or fell.</p>
-            <p class="timeline-back"><a href="?office=${encodeURIComponent(office)}" id="timeline-back-link">← Back to the forecast</a></p>
+            <p class="timeline-back"><a href="/o/${encodeURIComponent(office)}/" id="timeline-back-link">← Back to the forecast</a></p>
         </header>`;
 
         if (entries.length === 0) {
@@ -1818,6 +1886,8 @@ async function showChangelogView(office, updateUrl) {
         });
         announce(`Forecast changelog for ${name}`);
     } catch (e) {
+        console.error('Changelog view failed:', e && (e.stack || e.message || e));
+        track('changelog-view-fail', { office });
         if (thisGen !== fetchGeneration) return;
         sectionsEl.innerHTML = '<div class="loading">Could not load the changelog. <button onclick="location.reload()" class="retry-btn">Try again</button></div>';
     }
