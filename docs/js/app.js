@@ -39,6 +39,7 @@ async function fetchAlerts(office) {
             if (senderMatch && !(p.senderName || '').includes(senderMatch)) continue;
             const event = p.event;
             const alertData = {
+                id: p.id || f.id || '',
                 headline: p.headline || event,
                 description: p.description || '',
                 instruction: p.instruction || '',
@@ -53,11 +54,20 @@ async function fetchAlerts(office) {
                 alertMap[event].push(alertData);
             }
         }
+        // Severe posture: an active Warning of Severe/Extreme severity tightens
+        // the auto-refresh poll (forecasts move fast in exactly these hours).
+        const severeNow = Object.entries(alertMap).some(([event, list]) =>
+            /warning/i.test(event) && list.some(a => /severe|extreme/i.test(a.severity)));
+        if (severeNow !== severeAlertActive) {
+            severeAlertActive = severeNow;
+            startRefreshPolling();
+        }
         return alertMap;
     } catch(e) { console.debug('Alert fetch failed', e); return {}; }
 }
 
 let currentAlerts = {};
+let severeAlertActive = false; // an active Severe/Extreme Warning for this office
 
 // ─── Section parsing ───────────────────────────────────────────────
 function parseSections(text) {
@@ -403,6 +413,8 @@ const ALERT_DATA = {};
 let alertIdx = 0;
 let lastModalFocus = null; // restore focus to the opener when a modal closes
 
+let alertModalGeneration = 0; // a slow explanation must not fill a newer modal
+
 function showAlertModal(data) {
     lastModalFocus = document.activeElement;
     const overlay = document.getElementById('alert-modal-overlay');
@@ -416,7 +428,35 @@ function showAlertModal(data) {
     document.getElementById('alert-modal-meta').textContent = meta.join(' · ');
     let body = data.description || '';
     if (data.instruction) body += '\n\n' + data.instruction;
-    document.getElementById('alert-modal-body').textContent = body;
+    const bodyEl = document.getElementById('alert-modal-body');
+    bodyEl.textContent = body;
+
+    // Plain-English lead: the alert's official text stays verbatim below; the
+    // explanation (server-fetched by alert id, so its input is unforgeable)
+    // arrives above it. Soft-fail: no explanation, no placeholder left behind.
+    const gen = ++alertModalGeneration;
+    document.getElementById('alert-modal-plain')?.remove();
+    if (data.id) {
+        const plain = document.createElement('div');
+        plain.id = 'alert-modal-plain';
+        plain.className = 'alert-modal-plain';
+        plain.innerHTML = '<div class="ai-loading-label"><span class="ai-loading"></span> Summarizing…</div>';
+        bodyEl.parentNode.insertBefore(plain, bodyEl);
+        fetch(`/api/explain-alert?id=${encodeURIComponent(data.id)}`)
+            .then(r => (r.ok ? r.json() : null))
+            .then(d => {
+                if (gen !== alertModalGeneration) return;
+                if (d && d.explanation) {
+                    plain.innerHTML = '<div class="alert-plain-label">In plain English · via <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a></div>'
+                        + formatTranslationHTML(d.explanation)
+                        + '<div class="alert-plain-label alert-plain-below">The official alert · verbatim</div>';
+                } else {
+                    plain.remove();
+                }
+            })
+            .catch(() => { if (gen === alertModalGeneration) plain.remove(); });
+    }
+
     overlay.classList.add('open');
     // Focus trap: move focus into modal
     document.getElementById('alert-modal-close').focus();
@@ -1266,6 +1306,10 @@ afterRender.push(() => {
 // Load initial office. Deep links may land on the changelog ledger or a
 // specific archived edition; both resolve before the default spread.
 updateTitle(initialOffice);
+// The baked RSS links say office=LOX; a returning visitor's saved office may
+// differ, and the initial load goes through fetchAFD, not selectOffice.
+document.getElementById('rss-link')?.setAttribute('href', `/api/feed?office=${initialOffice}`);
+document.getElementById('rss-colophon-link')?.setAttribute('href', `/api/feed?office=${initialOffice}`);
 if (urlParams.get('view') === 'changelog') {
     showChangelogView(initialOffice, false);
 } else if (urlParams.get('edition')) {
@@ -1367,6 +1411,9 @@ let refreshTimer = null;
 
 function startRefreshPolling() {
     if (refreshTimer) clearInterval(refreshTimer);
+    // Severe posture: 2-minute checks while a Severe/Extreme Warning is live
+    // (forecasters re-issue rapidly in those hours); a calm 10 otherwise.
+    const interval = severeAlertActive ? 2 * 60 * 1000 : 10 * 60 * 1000;
     refreshTimer = setInterval(async () => {
         if (document.hidden) return;
         try {
@@ -1380,7 +1427,7 @@ function startRefreshPolling() {
                 document.getElementById('refresh-banner').style.display = '';
             }
         } catch(e) { /* silent retry next cycle */ }
-    }, 10 * 60 * 1000);
+    }, interval);
 }
 
 // Track current product ID for refresh detection (via afterRender callback)

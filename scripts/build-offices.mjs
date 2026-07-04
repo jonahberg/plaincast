@@ -75,7 +75,10 @@ export function renderOfficePage(template, code, city) {
     html = html.replace('<meta property="og:url" content="https://plaincast.live">',
         `<meta property="og:url" content="https://plaincast.live/o/${code}/">`);
     // per-office RSS auto-discovery
-    html = html.replace('href="/api/feed?office=LOX"', `href="/api/feed?office=${code}"`);
+    // split/join, not replace: the head discovery link AND the colophon
+    // subscribe link both carry office=LOX in the template (replace() only
+    // rewrites the first occurrence).
+    html = html.split('href="/api/feed?office=LOX"').join(`href="/api/feed?office=${code}"`);
     // relative assets must resolve from /o/<CODE>/ → make them absolute
     html = html.replace('href="manifest.json"', 'href="/manifest.json"');
     html = html.replace('href="styles.css"', 'href="/styles.css"');

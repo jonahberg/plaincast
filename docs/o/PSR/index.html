@@ -58,7 +58,7 @@
         "@type": "WebApplication",
         "name": "Plaincast",
         "url": "https://plaincast.live",
-        "description": "NWS Area Forecast Discussions decoded into plain English with side-by-side translation, 110+ term jargon glossary, forecaster confidence indicators, and smart abbreviation expansion.",
+        "description": "NWS Area Forecast Discussions decoded into plain English with side-by-side translation, 230+ term jargon glossary, forecaster confidence indicators, and smart abbreviation expansion.",
         "applicationCategory": "WeatherApplication",
         "operatingSystem": "Any",
         "browserRequirements": "Requires JavaScript",
@@ -80,7 +80,7 @@
         "featureList": [
             "AI-powered plain English summaries via Claude",
             "Side-by-side translation with annotated original",
-            "110+ term meteorological jargon glossary",
+            "230+ term meteorological jargon glossary",
             "Forecaster confidence indicator",
             "Zulu to local time conversion (DST-aware)",
             "Active weather alerts with full detail view",
@@ -115,7 +115,7 @@
                 "name": "How does Plaincast translate NWS forecasts?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Plaincast uses Anthropic's Claude AI to summarize each forecast section into natural, readable prose. It also annotates the original text with a 110+ term jargon glossary, converts Zulu (UTC) times to local time zones, and highlights key information for quick scanning."
+                    "text": "Plaincast uses Anthropic's Claude AI to summarize each forecast section into natural, readable prose. It also annotates the original text with a 230+ term jargon glossary, converts Zulu (UTC) times to local time zones, and highlights key information for quick scanning."
                 }
             },
             {
@@ -165,7 +165,7 @@
             {
                 "@type": "HowToStep",
                 "name": "Check the original with annotations",
-                "text": "The right column shows the original forecast text with 110+ meteorological jargon terms highlighted. Hover or tap any highlighted term to see its definition."
+                "text": "The right column shows the original forecast text with 230+ meteorological jargon terms highlighted. Hover or tap any highlighted term to see its definition."
             },
             {
                 "@type": "HowToStep",
@@ -178,6 +178,45 @@
     <link rel="alternate" type="application/rss+xml" title="Plaincast RSS" id="rss-link" href="/api/feed?office=PSR">
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="/styles.css">
+<script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "@id": "https://plaincast.live/o/PSR/",
+        "url": "https://plaincast.live/o/PSR/",
+        "name": "Phoenix NWS Forecast in Plain English · Plaincast",
+        "description": "The latest National Weather Service Area Forecast Discussion for Phoenix (PSR), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.",
+        "inLanguage": "en-US",
+        "isPartOf": {
+            "@type": "WebSite",
+            "name": "Plaincast",
+            "url": "https://plaincast.live"
+        },
+        "about": {
+            "@type": "Place",
+            "name": "Phoenix",
+            "description": "Forecast area of the National Weather Service Phoenix office (PSR)"
+        },
+        "breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": 1,
+                    "name": "Plaincast",
+                    "item": "https://plaincast.live/"
+                },
+                {
+                    "@type": "ListItem",
+                    "position": 2,
+                    "name": "Phoenix (PSR)",
+                    "item": "https://plaincast.live/o/PSR/"
+                }
+            ]
+        },
+        "significantLink": "https://plaincast.live/o/PSR/?view=changelog"
+    }
+    </script>
 </head>
 <body>
 
@@ -377,12 +416,95 @@
         <p class="colophon-line colophon-links">
             <a href="" id="raw-link" target="_blank" rel="noopener noreferrer">Read the original discussion</a>
             <span class="dot" aria-hidden="true">·</span>
+            <a href="/api/feed?office=PSR" id="rss-colophon-link">Subscribe: RSS feed for this office</a>
+            <span class="dot" aria-hidden="true">·</span>
             <a href="https://github.com/notjbg/plaincast" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
             <span class="dot" aria-hidden="true">·</span>
             <span class="colophon-credit">Set by <a href="https://github.com/notjbg" target="_blank" rel="noopener noreferrer">Jonah Berg</a></span>
         </p>
     </div>
 </footer>
+
+<!-- Office index: internal links to every per-office edition. Lives in the
+     template so scripts/build-offices.mjs bakes it into all 68 /o/<CODE>/
+     pages as well as the homepage. Keep in sync with OFFICE_NAMES in
+     docs/js/offices.js (tests/seo-pages.test.js enforces the pairing). -->
+<nav class="office-index" aria-label="All Plaincast forecast offices">
+    <div class="wrap office-index-inner">
+        <div class="office-index-rule" role="presentation"></div>
+        <h2 class="office-index-label">The forecast, office by office</h2>
+        <ul class="office-index-list">
+            <li><a href="/o/OKX/">New York (OKX)</a></li>
+            <li><a href="/o/BOX/">Boston (BOX)</a></li>
+            <li><a href="/o/PHI/">Philadelphia (PHI)</a></li>
+            <li><a href="/o/LWX/">Washington DC (LWX)</a></li>
+            <li><a href="/o/PBZ/">Pittsburgh (PBZ)</a></li>
+            <li><a href="/o/BUF/">Buffalo (BUF)</a></li>
+            <li><a href="/o/RAH/">Raleigh (RAH)</a></li>
+            <li><a href="/o/CHS/">Charleston SC (CHS)</a></li>
+            <li><a href="/o/FFC/">Atlanta (FFC)</a></li>
+            <li><a href="/o/MFL/">Miami (MFL)</a></li>
+            <li><a href="/o/JAX/">Jacksonville (JAX)</a></li>
+            <li><a href="/o/TBW/">Tampa Bay (TBW)</a></li>
+            <li><a href="/o/BMX/">Birmingham (BMX)</a></li>
+            <li><a href="/o/OHX/">Nashville (OHX)</a></li>
+            <li><a href="/o/MRX/">Morristown (MRX)</a></li>
+            <li><a href="/o/JAN/">Jackson MS (JAN)</a></li>
+            <li><a href="/o/LOT/">Chicago (LOT)</a></li>
+            <li><a href="/o/DTX/">Detroit (DTX)</a></li>
+            <li><a href="/o/IND/">Indianapolis (IND)</a></li>
+            <li><a href="/o/CLE/">Cleveland (CLE)</a></li>
+            <li><a href="/o/ILN/">Cincinnati (ILN)</a></li>
+            <li><a href="/o/MKX/">Milwaukee (MKX)</a></li>
+            <li><a href="/o/GRR/">Grand Rapids (GRR)</a></li>
+            <li><a href="/o/LSX/">St. Louis (LSX)</a></li>
+            <li><a href="/o/EAX/">Kansas City (EAX)</a></li>
+            <li><a href="/o/DMX/">Des Moines (DMX)</a></li>
+            <li><a href="/o/MPX/">Minneapolis (MPX)</a></li>
+            <li><a href="/o/DLH/">Duluth (DLH)</a></li>
+            <li><a href="/o/FSD/">Sioux Falls (FSD)</a></li>
+            <li><a href="/o/BIS/">Bismarck (BIS)</a></li>
+            <li><a href="/o/OAX/">Omaha (OAX)</a></li>
+            <li><a href="/o/FGF/">Grand Forks (FGF)</a></li>
+            <li><a href="/o/FWD/">Dallas/Fort Worth (FWD)</a></li>
+            <li><a href="/o/HGX/">Houston (HGX)</a></li>
+            <li><a href="/o/EWX/">San Antonio (EWX)</a></li>
+            <li><a href="/o/OUN/">Oklahoma City (OUN)</a></li>
+            <li><a href="/o/TSA/">Tulsa (TSA)</a></li>
+            <li><a href="/o/LZK/">Little Rock (LZK)</a></li>
+            <li><a href="/o/LIX/">New Orleans (LIX)</a></li>
+            <li><a href="/o/SHV/">Shreveport (SHV)</a></li>
+            <li><a href="/o/LCH/">Lake Charles (LCH)</a></li>
+            <li><a href="/o/BOU/">Denver (BOU)</a></li>
+            <li><a href="/o/PUB/">Pueblo (PUB)</a></li>
+            <li><a href="/o/GJT/">Grand Junction (GJT)</a></li>
+            <li><a href="/o/SLC/">Salt Lake City (SLC)</a></li>
+            <li><a href="/o/BOI/">Boise (BOI)</a></li>
+            <li><a href="/o/BYZ/">Billings (BYZ)</a></li>
+            <li><a href="/o/MSO/">Missoula (MSO)</a></li>
+            <li><a href="/o/RIW/">Riverton (RIW)</a></li>
+            <li><a href="/o/PSR/" aria-current="page">Phoenix (PSR)</a></li>
+            <li><a href="/o/VEF/">Las Vegas (VEF)</a></li>
+            <li><a href="/o/TWC/">Tucson (TWC)</a></li>
+            <li><a href="/o/FGZ/">Flagstaff (FGZ)</a></li>
+            <li><a href="/o/ABQ/">Albuquerque (ABQ)</a></li>
+            <li><a href="/o/EPZ/">El Paso (EPZ)</a></li>
+            <li><a href="/o/LOX/">Los Angeles (LOX)</a></li>
+            <li><a href="/o/SGX/">San Diego (SGX)</a></li>
+            <li><a href="/o/MTR/">San Francisco (MTR)</a></li>
+            <li><a href="/o/STO/">Sacramento (STO)</a></li>
+            <li><a href="/o/HNX/">Central California (HNX)</a></li>
+            <li><a href="/o/EKA/">Eureka (EKA)</a></li>
+            <li><a href="/o/SEW/">Seattle (SEW)</a></li>
+            <li><a href="/o/PQR/">Portland (PQR)</a></li>
+            <li><a href="/o/MFR/">Medford (MFR)</a></li>
+            <li><a href="/o/OTX/">Spokane (OTX)</a></li>
+            <li><a href="/o/AFC/">Anchorage (AFC)</a></li>
+            <li><a href="/o/AFG/">Fairbanks (AFG)</a></li>
+            <li><a href="/o/HFO/">Honolulu (HFO)</a></li>
+        </ul>
+    </div>
+</nav>
 </div><!-- /.sheet -->
 
 <script type="module" src="/js/app.js"></script>
