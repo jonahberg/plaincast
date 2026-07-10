@@ -13,6 +13,8 @@ const DOCS = join(__dirname, '..', 'docs');
 // Exact strings from docs/index.html that vary per office.
 const TITLE_TEMPLATE = 'Plaincast - What the forecast actually says';
 const DESC_TEMPLATE = 'NWS meteorologists write the real forecasts 3-4x daily, but in dense shorthand. Plaincast uses AI to translate them into plain English anyone can read.';
+// Homepage og:image:alt / twitter:image:alt text; rewritten per office below.
+const ALT_TEMPLATE = 'The NWS forecast, decoded into plain English';
 
 export function escHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -23,6 +25,9 @@ export function officeTitle(city) {
 }
 export function officeDescription(city, code) {
     return `The latest National Weather Service Area Forecast Discussion for ${city} (${code}), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.`;
+}
+export function officeImageAlt(city) {
+    return `Latest NWS forecast for ${city}, decoded into plain English`;
 }
 
 // Office-specific structured data: WebPage (with BreadcrumbList home→office)
@@ -82,6 +87,9 @@ export function renderOfficePage(template, code, city) {
         `<meta property="og:image" content="https://plaincast.live/api/og?office=${code}">\n    <meta property="og:image:type" content="image/png">`);
     html = html.replace('<meta name="twitter:image" content="https://plaincast.live/og-image.png">',
         `<meta name="twitter:image" content="https://plaincast.live/api/og?office=${code}">`);
+    // per-office image alt text (shared by og:image:alt + twitter:image:alt →
+    // split/join rewrites both occurrences of the homepage template string)
+    html = html.split(`content="${ALT_TEMPLATE}"`).join(`content="${escHtml(officeImageAlt(city))}"`);
     // per-office RSS auto-discovery
     // split/join, not replace: the head discovery link AND the colophon
     // subscribe link both carry office=LOX in the template (replace() only
@@ -98,10 +106,12 @@ export function renderOfficePage(template, code, city) {
     return html;
 }
 
-export function renderSitemap(codes) {
-    const urls = ['  <url><loc>https://plaincast.live/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>'];
+// lastmod defaults to the generation date (YYYY-MM-DD). Google ignores
+// changefreq/priority but does read <lastmod>, so every URL carries one.
+export function renderSitemap(codes, lastmod = new Date().toISOString().slice(0, 10)) {
+    const urls = [`  <url><loc>https://plaincast.live/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`];
     for (const code of codes) {
-        urls.push(`  <url><loc>https://plaincast.live/o/${code}/</loc><changefreq>daily</changefreq><priority>0.8</priority></url>`);
+        urls.push(`  <url><loc>https://plaincast.live/o/${code}/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>`);
     }
     return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

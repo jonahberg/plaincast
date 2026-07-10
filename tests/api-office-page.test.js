@@ -22,9 +22,12 @@ mock.module('../api/_utils.js', () => ({
         return mockProducts[url];
     },
     productUrlFromItem: (item) => item?.id || null,
+    // mock.module replaces the whole module — stub every export so an
+    // unrelated caller of fetchAlertById can't hit undefined.
+    fetchAlertById: async () => null,
 }));
 
-const { default: handler, buildSsrHtml, pickSections, sectionParagraphs } = await import('../api/office-page.js');
+const { default: handler, buildSsrHtml, pickSections, sectionParagraphs, validEdition, pinEditionMeta } = await import('../api/office-page.js');
 const { renderOfficePage } = await import('../scripts/build-offices.mjs');
 const { extractSections } = await import('../api/_afd-sections.js');
 
@@ -163,6 +166,41 @@ describe('GET /api/office-page (SSR /o/<CODE>/ pages)', () => {
         expect(res.body).toContain('<link rel="canonical" href="https://plaincast.live/o/LOX/">');
     });
 
+    const EDITION = 'a1b2c3d4-5566-7788-99aa-bbccddeeff00';
+
+    it('pins the OG/twitter/og:url meta to a valid ?edition= permalink', async () => {
+        setScenario();
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX', edition: EDITION } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toContain(`<meta property="og:image" content="https://plaincast.live/api/og?office=LOX&amp;id=${EDITION}">`);
+        expect(res.body).toContain(`<meta name="twitter:image" content="https://plaincast.live/api/og?office=LOX&amp;id=${EDITION}">`);
+        expect(res.body).toContain(`<meta property="og:url" content="https://plaincast.live/o/LOX/?edition=${EDITION}">`);
+        // canonical stays deduped at /o/LOX/ (no ?edition=)
+        expect(res.body).toContain('<link rel="canonical" href="https://plaincast.live/o/LOX/">');
+        // no latent generic-latest og:image left over
+        expect(res.body).not.toContain('<meta property="og:image" content="https://plaincast.live/api/og?office=LOX">');
+    });
+
+    it('ignores a malformed edition param (keeps latest-edition meta, no HTML injection)', async () => {
+        setScenario();
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX', edition: '"><script>x' } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toContain('<meta property="og:image" content="https://plaincast.live/api/og?office=LOX">');
+        expect(res.body).not.toContain('&amp;id=');
+        expect(res.body).not.toContain('<script>x');
+    });
+
+    it('carries the pinned meta even on the baked fallback path (NWS down)', async () => {
+        mockListThrows = true;
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX', edition: EDITION } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toContain(`<meta property="og:image" content="https://plaincast.live/api/og?office=LOX&amp;id=${EDITION}">`);
+        expect(res.body).toContain(`<meta property="og:url" content="https://plaincast.live/o/LOX/?edition=${EDITION}">`);
+    });
+
     it('serves the EXACT unmodified baked page when NWS is unreachable', async () => {
         mockListThrows = true;
         const res = createRes();
@@ -215,5 +253,24 @@ describe('office-page helpers', () => {
         const html = buildSsrHtml('LOX', 'Los Angeles', text, '2026-07-03T11:40:00+00:00', '');
         expect(html).not.toContain('<script>alert');
         expect(html).toContain('&lt;script&gt;');
+    });
+
+    it('validEdition accepts UUID-ish ids and rejects everything else', () => {
+        expect(validEdition('a1b2c3d4-5566-7788-99aa-bbccddeeff00')).toBe('a1b2c3d4-5566-7788-99aa-bbccddeeff00');
+        expect(validEdition('AFDLOX.2026.07.03:1140')).toBe('AFDLOX.2026.07.03:1140');
+        expect(validEdition('')).toBeNull();
+        expect(validEdition(undefined)).toBeNull();
+        expect(validEdition('has space')).toBeNull();
+        expect(validEdition('"><script>')).toBeNull();
+        expect(validEdition('a/b')).toBeNull(); // slash not allowed
+        expect(validEdition('x'.repeat(65))).toBeNull(); // over 64 chars
+    });
+
+    it('pinEditionMeta rewrites both image tags + og:url, leaves canonical alone', () => {
+        const html = renderOfficePage(template, 'LOX', 'Los Angeles');
+        const pinned = pinEditionMeta(html, 'LOX', 'EDT-1');
+        expect(pinned).toContain('content="https://plaincast.live/api/og?office=LOX&amp;id=EDT-1"');
+        expect(pinned).toContain('<meta property="og:url" content="https://plaincast.live/o/LOX/?edition=EDT-1">');
+        expect(pinned).toContain('<link rel="canonical" href="https://plaincast.live/o/LOX/">');
     });
 });

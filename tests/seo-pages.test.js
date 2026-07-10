@@ -20,7 +20,20 @@ describe('per-office SEO pages stay in sync with docs/index.html', () => {
     });
 
     it('sitemap.xml matches the generator', () => {
-        expect(readFileSync(join(DOCS, 'sitemap.xml'), 'utf8')).toBe(renderSitemap(codes));
+        // <lastmod> is stamped with the generation date, so pin the comparison
+        // to the committed file's own date (else this drifts daily).
+        const committed = readFileSync(join(DOCS, 'sitemap.xml'), 'utf8');
+        const lastmod = committed.match(/<lastmod>(\d{4}-\d{2}-\d{2})<\/lastmod>/)?.[1];
+        expect(lastmod).toBeTruthy();
+        expect(committed).toBe(renderSitemap(codes, lastmod));
+    });
+
+    it('every sitemap URL carries a YYYY-MM-DD <lastmod>', () => {
+        const committed = readFileSync(join(DOCS, 'sitemap.xml'), 'utf8');
+        const locs = [...committed.matchAll(/<loc>/g)].length;
+        const stamps = [...committed.matchAll(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/g)].length;
+        expect(locs).toBe(codes.length + 1); // homepage + every office
+        expect(stamps).toBe(locs);
     });
 
     it('each page is self-canonical, de-genericized, and uses absolute asset paths', () => {
@@ -55,6 +68,19 @@ describe('per-office OG share cards', () => {
     it('the homepage template keeps the static og-image.png', () => {
         expect(template).toContain('<meta property="og:image" content="https://plaincast.live/og-image.png">');
         expect(template).toContain('<meta name="twitter:image" content="https://plaincast.live/og-image.png">');
+    });
+
+    it('the homepage template carries generic og/twitter image:alt', () => {
+        expect(template).toContain('<meta property="og:image:alt" content="The NWS forecast, decoded into plain English">');
+        expect(template).toContain('<meta name="twitter:image:alt" content="The NWS forecast, decoded into plain English">');
+    });
+
+    it('rendered office pages rewrite og/twitter image:alt to the office city', () => {
+        const html = renderOfficePage(template, 'LOX', OFFICE_NAMES.LOX);
+        expect(html).toContain('<meta property="og:image:alt" content="Latest NWS forecast for Los Angeles, decoded into plain English">');
+        expect(html).toContain('<meta name="twitter:image:alt" content="Latest NWS forecast for Los Angeles, decoded into plain English">');
+        // the generic homepage alt is gone
+        expect(html).not.toContain('content="The NWS forecast, decoded into plain English"');
     });
 });
 

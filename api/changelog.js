@@ -105,7 +105,30 @@ export default async function handler(req, res) {
         }
     }
 
-    try {
+    // In-flight dedup: N readers hitting the same cold (office, issuance) in the
+    // memo window must share ONE cold pass (list + product fetches + diff +
+    // generateText), not each fire a model call. The pinned path knows its id
+    // up front (that id IS the current of the diff pair); the latest path keys
+    // on office. The shared promise wraps the WHOLE cold path and is registered
+    // synchronously, so there is no await-window for a duplicate run to start.
+    const flightKey = pinnedId ? `${office}|${pinnedId}` : office;
+    const pending = inFlight.get(flightKey);
+    if (pending) {
+        try {
+            const r = await pending;
+            if (r.cacheHeader) res.setHeader('Cache-Control', r.cacheHeader);
+            return res.status(r.status).json({ ...r.body, cached: true });
+        } catch (err) {
+            // Mirror the cold-path soft-fail so a shared failure doesn't leak
+            // an error status to piggybacking readers.
+            res.setHeader('Cache-Control', 'public, s-maxage=60');
+            return res.status(200).json({ changelog: null, transient: true });
+        }
+    }
+
+    // Each branch returns a { status, cacheHeader, body } descriptor; the body
+    // carries its own `cached` flag where the original responses set one.
+    const work = (async () => {
         const list = await fetchAFDList(office, { signal: AbortSignal.timeout(8000) });
         let items;
         let cacheHeader = LATEST_CACHE;
@@ -113,8 +136,7 @@ export default async function handler(req, res) {
             const idx = list.findIndex(it => (it?.id || it?.['@id']) === pinnedId);
             if (idx === -1 || idx + 1 >= list.length) {
                 // Unknown or oldest-retained issuance: nothing to diff against.
-                res.setHeader('Cache-Control', 'public, s-maxage=3600');
-                return res.status(200).json({ changelog: null });
+                return { status: 200, cacheHeader: 'public, s-maxage=3600', body: { changelog: null } };
             }
             items = [list[idx], list[idx + 1]];
             if (idx > 0) cacheHeader = PINNED_CACHE;
@@ -122,15 +144,13 @@ export default async function handler(req, res) {
             items = list.slice(0, 2);
         }
         if (items.length < 2) {
-            res.setHeader('Cache-Control', 'public, s-maxage=600');
-            return res.status(200).json({ changelog: null });
+            return { status: 200, cacheHeader: 'public, s-maxage=600', body: { changelog: null } };
         }
 
         const currentId = items[0]?.id || items[0]?.['@id'] || null;
         const hit = currentId && cache.get(currentId);
         if (hit && Date.now() - hit.time < CACHE_TTL) {
-            res.setHeader('Cache-Control', cacheHeader);
-            return res.status(200).json({ changelog: hit.changelog, since: hit.since, updated: hit.updated, cached: true });
+            return { status: 200, cacheHeader, body: { changelog: hit.changelog, since: hit.since, updated: hit.updated, cached: true } };
         }
 
         const [currProd, prevProd] = await Promise.all([
@@ -141,15 +161,14 @@ export default async function handler(req, res) {
         const prevText = typeof prevProd?.productText === 'string' ? prevProd.productText : '';
         const since = prevProd?.issuanceTime || null;
         const updated = currProd?.issuanceTime || null;
-        if (!currText || !prevText) return res.status(200).json({ changelog: null });
+        if (!currText || !prevText) return { status: 200, cacheHeader: null, body: { changelog: null } };
 
         const changes = changedParagraphs(prevText, currText).slice(0, 6);
         if (changes.length === 0) {
             const payload = { changelog: null, since, updated };
             if (currentId) setCache(currentId, payload);
             if (!pinnedId) latestMemo.set(office, { payload, time: Date.now() });
-            res.setHeader('Cache-Control', cacheHeader);
-            return res.status(200).json({ ...payload, cached: false });
+            return { status: 200, cacheHeader, body: { ...payload, cached: false } };
         }
 
         const system = `You summarize what changed between two consecutive National Weather Service Area Forecast Discussions. Given the NEW or CHANGED passages from the latest update, write ONE warm, plain-English sentence (max ~30 words) describing what changed for a general reader: shifts in timing, rain or snow chances, temperatures, hazards, or forecaster confidence. No preamble, no markdown, no lists, no quotes. If the changes are purely administrative or trivial (minor wording, aviation/TAF codes only), respond with exactly: NONE`;
@@ -171,15 +190,25 @@ export default async function handler(req, res) {
         } else if (!changelog) {
             // Empty model output is a transient failure, not a verdict — do
             // not cache it anywhere or the ledger fabricates "minor refinements".
-            res.setHeader('Cache-Control', 'public, s-maxage=60');
-            return res.status(200).json({ changelog: null, since, updated, transient: true });
+            return { status: 200, cacheHeader: 'public, s-maxage=60', body: { changelog: null, since, updated, transient: true } };
         }
 
         const payload = { changelog, since, updated, ...(trivial ? { trivial } : {}) };
         if (currentId) setCache(currentId, payload);
         if (!pinnedId) latestMemo.set(office, { payload, time: Date.now() });
-        res.setHeader('Cache-Control', cacheHeader);
-        return res.status(200).json({ ...payload, cached: false });
+        return { status: 200, cacheHeader, body: { ...payload, cached: false } };
+    })();
+    inFlight.set(flightKey, work); // no await between creation and registration
+
+    try {
+        let r;
+        try {
+            r = await work;
+        } finally {
+            inFlight.delete(flightKey);
+        }
+        if (r.cacheHeader) res.setHeader('Cache-Control', r.cacheHeader);
+        return res.status(r.status).json(r.body);
     } catch (err) {
         console.error('Changelog error:', err);
         // Soft-fail: the feature simply doesn't render rather than erroring the

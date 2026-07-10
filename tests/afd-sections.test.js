@@ -108,6 +108,35 @@ describe('extractSections', () => {
         expect(extractSections('')).toEqual([]);
         expect(extractSections('no headers here, just prose')).toEqual([]);
     });
+
+    // ─── Broadened header regex (mixed-case + digit-bearing) ────────
+    // Verified against live products: the old [A-Z\s\/] capture class rejected
+    // mixed-case ".Previous Discussion..." (KOUN) and digit-bearing
+    // ".OUTLOOK FOR 18Z FRIDAY..." (KOKX), silently merging them into the
+    // preceding section. Both must now parse as their own sections.
+    it('parses a mixed-case ".Previous Discussion..." header as its own section (KOUN)', () => {
+        const product = `000\nFXUS64 KOUN 032349\nAFDOUN\n\n.SHORT TERM...\nStrong storms move through this evening.\n\n.Previous Discussion...\nIssued 12 hours ago. Stale content that must not merge into Short Term.\n\n&&\n\n$$\n`;
+        const sections = extractSections(product);
+        const keys = sections.map(s => s.key);
+        expect(keys).toContain('SHORT TERM');
+        expect(keys).toContain('Previous Discussion');
+        const shortTerm = sections.find(s => s.key === 'SHORT TERM');
+        expect(shortTerm.text).not.toContain('Stale content');
+        const prev = sections.find(s => s.key === 'Previous Discussion');
+        expect(prev.text).toContain('Stale content');
+    });
+
+    it('parses a digit-bearing ".OUTLOOK FOR 18Z FRIDAY..." header, not swallowed into AVIATION (KOKX)', () => {
+        const product = `000\nFXUS61 KOKX 032349\nAFDOKX\n\n.AVIATION /00Z SATURDAY THROUGH WEDNESDAY/...\nVFR conditions expected through the period.\n\n.OUTLOOK FOR 18Z FRIDAY THROUGH TUESDAY...\nElevated fire weather conditions possible.\n\n&&\n\n$$\n`;
+        const sections = extractSections(product);
+        const keys = sections.map(s => s.key);
+        expect(keys).toContain('AVIATION');
+        expect(keys).toContain('OUTLOOK FOR 18Z FRIDAY THROUGH TUESDAY');
+        const aviation = sections.find(s => s.key === 'AVIATION');
+        expect(aviation.text).toContain('VFR conditions');
+        expect(aviation.text).not.toContain('OUTLOOK');
+        expect(aviation.text).not.toContain('fire weather');
+    });
 });
 
 // ─── extractLede ────────────────────────────────────────────────────

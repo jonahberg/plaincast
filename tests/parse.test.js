@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { parseSections, extractTakeaway, stripAIArtifacts } from './helpers.js';
+import { parseSections, extractTakeaway, stripAIArtifacts, translateToPlainEnglish, normalizeZuluForTest } from './helpers.js';
 
 // ─── Realistic AFD fixture ──────────────────────────────────────────
 const STANDARD_AFD = `.SYNOPSIS...High pressure will maintain dry and warm conditions through midweek.
@@ -228,6 +228,105 @@ Heavy snow expected above 5000 ft.
 $$`;
         const { sections } = parseSections(afd);
         expect(sections.some(s => s.key === 'Messages')).toBe(true);
+    });
+});
+
+// ─── Broadened header regex: mixed-case + digit-bearing headers ─────
+// Verified against live NWS products: the old capture class [A-Z\s\/] rejected
+// mixed-case ".Previous Discussion..." (KOUN) and digit-bearing
+// ".OUTLOOK FOR 18Z FRIDAY..." (KOKX), silently merging them into the previous
+// section. Both must now parse as their own sections.
+describe('parseSections — broadened header regex', () => {
+    it('parses a mixed-case ".Previous Discussion..." header as its own section', () => {
+        const afd = `.SHORT TERM...
+Strong storms move through this evening.
+
+.Previous Discussion...
+Issued 12 hours ago. Stale content that must not merge into Short Term.
+
+$$`;
+        const { sections } = parseSections(afd);
+        const shortTerm = sections.find(s => s.key === 'Short Term');
+        expect(shortTerm.text).toContain('Strong storms');
+        expect(shortTerm.text).not.toContain('Stale content');
+        // Its own section (canonicalized to sentence case: "Previous discussion")
+        const prev = sections.find(s => /^Previous/i.test(s.key));
+        expect(prev).toBeTruthy();
+        expect(prev.text).toContain('Stale content');
+    });
+
+    it('parses a digit-bearing ".OUTLOOK FOR 18Z FRIDAY..." header, not swallowed into Aviation', () => {
+        const afd = `.AVIATION /00Z SATURDAY THROUGH WEDNESDAY/...
+VFR conditions expected through the period.
+
+.OUTLOOK FOR 18Z FRIDAY THROUGH TUESDAY...
+Elevated fire weather conditions possible.
+
+$$`;
+        const { sections } = parseSections(afd);
+        const aviation = sections.find(s => s.key === 'Aviation');
+        expect(aviation.text).toContain('VFR conditions');
+        expect(aviation.text).not.toContain('OUTLOOK');
+        expect(aviation.text).not.toContain('fire weather');
+        const outlook = sections.find(s => /^Outlook/i.test(s.key));
+        expect(outlook).toBeTruthy();
+        expect(outlook.text).toContain('Elevated fire weather');
+    });
+
+    it('still keeps inline ".KEY MESSAGE N..." pseudo-headers inside the body', () => {
+        const afd = `.DISCUSSION...
+.KEY MESSAGE 1...
+Dangerous heat continues this afternoon.
+
+$$`;
+        const { sections } = parseSections(afd);
+        // No spurious "Message 1" section — the number-suffixed pseudo-header stays inline
+        expect(sections.some(s => /message\s*1/i.test(s.key))).toBe(false);
+        const disc = sections.find(s => s.key === 'Discussion');
+        expect(disc.text).toContain('KEY MESSAGE 1');
+        expect(disc.text).toContain('Dangerous heat');
+    });
+});
+
+// ─── translateToPlainEnglish: strip ".KEY MESSAGE N..." label noise ──
+describe('translateToPlainEnglish — KEY MESSAGE label stripping', () => {
+    it('strips ".KEY MESSAGE 1..." leaving the message prose', () => {
+        const out = translateToPlainEnglish('.KEY MESSAGE 1...Heat and humidity continue through Saturday.');
+        expect(out).not.toContain('KEY MESSAGE');
+        expect(out).not.toContain('MESSAGE 1');
+        expect(out).toContain('Heat and humidity continue');
+    });
+
+    it('strips "KEY MESSAGE N" without a leading dot too', () => {
+        const out = translateToPlainEnglish('KEY MESSAGE 2... Storms likely late tonight.');
+        expect(out).not.toContain('KEY MESSAGE');
+        expect(out).toContain('Storms likely');
+    });
+
+    it('does NOT eat "key message N" in prose lacking the trailing "." delimiter', () => {
+        const out = translateToPlainEnglish('We repeated the key message 3 times this afternoon.');
+        expect(out).toContain('key message 3 times');
+    });
+});
+
+// ─── Zulu time regex: lowercase 'z' tolerance (FIX 5) ───────────────
+// Live SEW aviation text uses lowercase suffixes ("05-09z", "20z-22z"); the
+// conversion regex must match them. normalizeZuluForTest mirrors app.js's regex
+// with a fixed UTC offset so the assertion is timezone-deterministic.
+describe('Zulu time conversion — case-insensitive', () => {
+    it('converts lowercase "05z" identically to uppercase "05Z"', () => {
+        const lower = normalizeZuluForTest('TAF valid 05z');
+        const upper = normalizeZuluForTest('TAF valid 05Z');
+        expect(lower).toBe(upper);
+        expect(lower).not.toContain('05z');
+        expect(lower).toContain('10 PM'); // 05Z − 7h = 22:00 local
+    });
+
+    it('converts a lowercase Zulu range "05z-09z"', () => {
+        const out = normalizeZuluForTest('Improving to VFR 05z-09z');
+        expect(out).not.toMatch(/\d{2}z/);
+        expect(out).toContain('10 PM'); // 05Z
+        expect(out).toContain('2 AM');  // 09Z
     });
 });
 

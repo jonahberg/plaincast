@@ -26,22 +26,10 @@
     <link rel="stylesheet" href="/fonts/fonts.css">
     <script defer src="/_vercel/insights/script.js"></script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
-    <script>
-      // Apply theme + time-of-day phase before paint to prevent flash
-      (function() {
-        var stored = localStorage.getItem('theme');
-        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (stored === 'dark' || (!stored && prefersDark)) {
-          document.documentElement.classList.add('dark');
-        }
-        // Best-effort initial sky phase from the *viewer's* clock; corrected to the
-        // office timezone once the forecast loads. Avoids a flash of the wrong sky.
-        var h = new Date().getHours();
-        var phase = h < 5 ? 'night' : h < 7 ? 'dawn' : h < 10 ? 'morning'
-                  : h < 16 ? 'midday' : h < 18 ? 'golden' : h < 20 ? 'dusk' : 'night';
-        document.documentElement.setAttribute('data-phase', phase);
-      })();
-    </script>
+    <!-- Pre-paint theme + sky-phase (blocking, no defer/module): must run
+         before first paint. Extracted to a file so the CSP needs no
+         script-src 'unsafe-inline'. -->
+    <script src="/js/theme-init.js"></script>
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
@@ -52,12 +40,14 @@
     <meta property="og:image" content="https://plaincast.live/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="The NWS forecast, decoded into plain English">
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Plaincast - What the forecast actually says">
     <meta name="twitter:description" content="NWS meteorologists write the real forecasts 3-4x daily, but in dense shorthand. Plaincast uses AI to translate them into plain English anyone can read.">
     <meta name="twitter:image" content="https://plaincast.live/og-image.png">
+    <meta name="twitter:image:alt" content="The NWS forecast, decoded into plain English">
 
     <!-- Structured Data -->
     <script type="application/ld+json">

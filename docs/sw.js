@@ -1,9 +1,15 @@
 // Plaincast Service Worker — offline-capable weather forecasts
-const CACHE_NAME = 'plaincast-v6';
+const CACHE_NAME = 'plaincast-v7';
+// Runtime /api/* responses live in their own cache, trimmed FIFO — every
+// office/edition URL is a distinct key, so folding them into the app-shell
+// cache would grow it without bound.
+const RUNTIME_CACHE = 'plaincast-runtime-v7';
+const RUNTIME_MAX = 60;
 const APP_SHELL = [
     '/',
     '/og-image.png',
     '/styles.css',
+    '/js/theme-init.js',
     '/js/app.js',
     '/js/glossary.js',
     '/js/offices.js',
@@ -12,6 +18,19 @@ const APP_SHELL = [
     '/js/timeline.js',
     '/manifest.json',
 ];
+
+// Put into a named cache, evicting oldest entries past `max` (FIFO —
+// Cache.keys() preserves insertion order).
+async function putWithLimit(cacheName, request, response, max) {
+    const cache = await caches.open(cacheName);
+    await cache.put(request, response);
+    if (max) {
+        const keys = await cache.keys();
+        if (keys.length > max) {
+            await Promise.all(keys.slice(0, keys.length - max).map(k => cache.delete(k)));
+        }
+    }
+}
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
@@ -24,7 +43,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then(keys =>
-            Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+            Promise.all(keys.filter(k => k !== CACHE_NAME && k !== RUNTIME_CACHE).map(k => caches.delete(k)))
         ).then(() => self.clients.claim())
     );
 });
@@ -45,7 +64,10 @@ self.addEventListener('fetch', (event) => {
         || url.pathname.startsWith('/fonts/') || /^\/o\/[A-Za-z]{3}\/?$/.test(url.pathname)) {
         event.respondWith(
             caches.match(event.request).then(cached => {
-                const fetchPromise = fetch(event.request).then(response => {
+                // `cache: 'reload'` bypasses the browser HTTP cache so the
+                // background revalidation actually re-fetches from network —
+                // otherwise a returning user runs stale app.js after a deploy.
+                const fetchPromise = fetch(event.request, { cache: 'reload' }).then(response => {
                     if (response.ok) {
                         const clone = response.clone();
                         caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
@@ -64,13 +86,15 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Network-first for API data (NWS, translate)
+    // Network-first for API data (NWS, translate). Cached in the bounded
+    // runtime cache (FIFO, RUNTIME_MAX entries) so distinct office/edition
+    // URLs can't accumulate forever.
     if (url.hostname === 'api.weather.gov' || url.pathname.startsWith('/api/')) {
         event.respondWith(
             fetch(event.request).then(response => {
                 if (response.ok) {
                     const clone = response.clone();
-                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+                    putWithLimit(RUNTIME_CACHE, event.request, clone, RUNTIME_MAX);
                 }
                 return response;
             }).catch(() => caches.match(event.request))

@@ -54,6 +54,21 @@ const SYSTEM = `You translate National Weather Service alerts into calm, plain E
 - Bold the single most important action with **markdown bold**; no headers, lists, or quotes
 - Do not add information that is not in the alert`;
 
+// Translate a structured error (or a raw fetch/model failure) into the exact
+// HTTP responses the endpoint has always produced. Shared by the fresh path
+// and the piggybacking-awaiter path so both react to a shared failure identically.
+function sendError(res, e) {
+    if (e?.statusCode) {
+        if (e.cacheHeader) res.setHeader('Cache-Control', e.cacheHeader);
+        return res.status(e.statusCode).json({ error: e.publicMessage, ...(e.reason ? { reason: e.reason } : {}) });
+    }
+    if (e?.name === 'AbortError' || e?.name === 'TimeoutError') {
+        return res.status(504).json({ error: 'Explanation timed out' });
+    }
+    console.error('Explain-alert error:', e);
+    return res.status(500).json({ error: 'Internal error' });
+}
+
 export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
@@ -75,7 +90,11 @@ export default async function handler(req, res) {
     }
 
     // Dedup concurrent misses: everyone opening the same Warning's modal in
-    // the same minute shares one model call.
+    // the same minute shares one model call. The server fetch and prompt build
+    // live INSIDE the shared promise, which is registered synchronously right
+    // after this get-miss — so concurrent requests arriving in the fetch window
+    // can't each start their own fetch+model run, and no later .set() can
+    // clobber an earlier in-flight promise.
     const pending = inFlight.get(id);
     if (pending) {
         try {
@@ -83,15 +102,14 @@ export default async function handler(req, res) {
             res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=3600');
             return res.status(200).json({ explanation, cached: true });
         } catch (e) {
-            return res.status(e?.statusCode || 502).json({ error: e?.publicMessage || 'Explanation unavailable' });
+            return sendError(res, e);
         }
     }
 
-    try {
+    const work = (async () => {
         const alert = await fetchAlertById(id, { signal: AbortSignal.timeout(8000) });
         if (!alert) {
-            res.setHeader('Cache-Control', 'public, s-maxage=600');
-            return res.status(404).json({ error: 'Alert not found' });
+            throw Object.assign(new Error('not found'), { statusCode: 404, publicMessage: 'Alert not found', cacheHeader: 'public, s-maxage=600' });
         }
 
         const parts = [
@@ -104,46 +122,35 @@ export default async function handler(req, res) {
         ].filter(Boolean);
         const prompt = parts.join('\n\n').slice(0, 12000);
         if (prompt.length < 40) {
-            return res.status(502).json({ error: 'Alert has no explainable text' });
+            throw Object.assign(new Error('no text'), { statusCode: 502, publicMessage: 'Alert has no explainable text' });
         }
 
-        const work = (async () => {
-            const result = await generateText({
-                model: 'anthropic/claude-haiku-4.5',
-                system: SYSTEM,
-                prompt,
-                maxOutputTokens: 400,
-                abortSignal: AbortSignal.timeout(15000),
-            });
-            if (result.finishReason === 'content-filter') {
-                throw Object.assign(new Error('filtered'), { statusCode: 503, publicMessage: 'Explanation skipped' });
-            }
-            const text = (result.text || '').trim();
-            if (!text) throw Object.assign(new Error('empty'), { statusCode: 502, publicMessage: 'Empty explanation' });
-            return text;
-        })();
-        inFlight.set(id, work);
-
-        let explanation;
-        try {
-            explanation = await work;
-        } catch (e) {
-            if (e?.statusCode) {
-                return res.status(e.statusCode).json({ error: e.publicMessage, ...(e.statusCode === 503 ? { reason: 'content-filter' } : {}) });
-            }
-            throw e;
-        } finally {
-            inFlight.delete(id);
+        const result = await generateText({
+            model: 'anthropic/claude-haiku-4.5',
+            system: SYSTEM,
+            prompt,
+            maxOutputTokens: 400,
+            abortSignal: AbortSignal.timeout(15000),
+        });
+        if (result.finishReason === 'content-filter') {
+            throw Object.assign(new Error('filtered'), { statusCode: 503, publicMessage: 'Explanation skipped', reason: 'content-filter' });
         }
+        const text = (result.text || '').trim();
+        if (!text) throw Object.assign(new Error('empty'), { statusCode: 502, publicMessage: 'Empty explanation' });
+        return text;
+    })();
+    inFlight.set(id, work); // no await between creation and registration
 
-        setCache(id, explanation);
-        res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=3600');
-        return res.status(200).json({ explanation, cached: false });
-    } catch (err) {
-        if (err.name === 'AbortError' || err.name === 'TimeoutError') {
-            return res.status(504).json({ error: 'Explanation timed out' });
-        }
-        console.error('Explain-alert error:', err);
-        return res.status(500).json({ error: 'Internal error' });
+    let explanation;
+    try {
+        explanation = await work;
+    } catch (e) {
+        return sendError(res, e);
+    } finally {
+        inFlight.delete(id);
     }
+
+    setCache(id, explanation);
+    res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=3600');
+    return res.status(200).json({ explanation, cached: false });
 }

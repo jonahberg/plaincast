@@ -102,9 +102,13 @@ function parseSections(text) {
 
     for (const line of lines) {
         // Check for section headers: .SYNOPSIS..., .SHORT TERM (TDY-TUE)..., .LOX WATCHES/WARNINGS/ADVISORIES...
+        // Case-insensitive + digit-tolerant so mixed-case (".Previous Discussion...")
+        // and digit-bearing (".OUTLOOK FOR 18Z FRIDAY...") headers become their own
+        // sections instead of being merged into the previous one. The negative
+        // lookahead keeps inline ".KEY MESSAGE 1..." pseudo-headers inside the body.
         // Try with office prefix first (3-letter like LOX, SGX)
-        const headerMatch = line.match(/^\.[A-Z]{3}\s+([A-Z\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/)
-            || line.match(/^\.([A-Z\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/);
+        const headerMatch = line.match(/^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i)
+            || line.match(/^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i);
         if (headerMatch) {
             if (currentKey) {
                 sections.push({ key: currentKey, text: currentLines.join('\n').trim() });
@@ -220,6 +224,12 @@ function translateToPlainEnglish(text) {
     // Remove embedded sub-section headers like ".SHORT TERM (TDY-TUE)..." that leak through
     t = t.replace(/\.(?:SHORT|LONG|NEAR)\s+TERM\s*\([^)]*\)\.\s*/gi, '');
 
+    // Remove embedded ".KEY MESSAGE N..." pseudo-headers (real OKX/AKQ, with or
+    // without the leading dot) so the regex column doesn't show "KEY MESSAGE 1"
+    // label noise (mirrors the "Message N" strip in stripAIArtifacts). Require the
+    // trailing "." delimiter so bare "key message 3" in prose is not consumed.
+    t = t.replace(/\.?\s*KEY\s+MESSAGE\s+\d+\s*\.{1,3}\s*/gi, '');
+
     // Remove NWS formatting artifacts
     t = t.replace(/\.{3,}/g, '. ');
     // Collapse runs of spaces (but preserve newlines for paragraph splitting)
@@ -230,8 +240,10 @@ function translateToPlainEnglish(text) {
         t = t.replace(pat, rep);
     }
 
-    // Convert Zulu time references: 18Z → local time (DST-aware)
-    t = t.replace(/\b(\d{2,4})Z\b/g, (_, h) => {
+    // Convert Zulu time references: 18Z → local time (DST-aware). Case-insensitive
+    // because live aviation text uses lowercase 'z' ("05-09z", "20z-22z"); the
+    // replacement reads only the captured digits, so 'z' vs 'Z' is immaterial.
+    t = t.replace(/\b(\d{2,4})Z\b/gi, (_, h) => {
         const utcHour = parseInt(h.length <= 2 ? h : h.substring(0, 2));
         const utcMin = h.length > 2 ? parseInt(h.substring(2)) : 0;
         // Create a UTC date for today to get proper DST offset
@@ -1194,6 +1206,7 @@ async function renderAFD(prodData, office) {
 
     // Then fetch alerts and re-render the alerts section with links
     fetchAlerts(office).then(alertMap => {
+        if (office !== currentOffice) return; // user switched offices mid-fetch — don't clobber
         currentAlerts = alertMap;
         // Re-render just the alerts section if we got links
         if (Object.keys(alertMap).length > 0) {
@@ -1320,6 +1333,7 @@ async function loadEdition(office, editionId) {
             const url = new URL(window.location);
             url.searchParams.delete('edition');
             history.replaceState({}, '', url);
+            renderedRoute = currentRoute();
             fetchAFD(office);
             return;
         }
@@ -2104,7 +2118,10 @@ async function showChangelogView(office, updateUrl) {
         console.error('Changelog view failed:', e && (e.stack || e.message || e));
         track('changelog-view-fail', { office });
         if (thisGen !== fetchGeneration) return;
-        sectionsEl.innerHTML = '<div class="loading">Could not load the changelog. <button onclick="location.reload()" class="retry-btn">Try again</button></div>';
+        // Wire the retry button programmatically — inline onclick is refused under
+        // the CSP (script-src 'self', no 'unsafe-inline'), so it would be a silent no-op.
+        sectionsEl.innerHTML = '<div class="loading">Could not load the changelog. <button id="changelog-retry" class="retry-btn">Try again</button></div>';
+        sectionsEl.querySelector('#changelog-retry')?.addEventListener('click', () => location.reload());
     }
 }
 

@@ -44,6 +44,32 @@ const NARRATIVE_KEYS = new Set([
 const MAX_SECTIONS = 4;
 const MAX_PARAS_PER_SECTION = 6;
 
+// RSS permalinks are /o/<CODE>/?edition=<id>. When a crawler unfurls one, the
+// share meta must point at that pinned issuance's OG card, not just the latest.
+// Same UUID-ish id contract as api/og.js (?id=) and api/translate-issuance.js;
+// validated strictly before it is echoed into HTML (never trust query input).
+const EDITION_RE = /^[\w.:-]+$/;
+const EDITION_MAX = 64;
+
+export function validEdition(raw) {
+    const e = String(raw || '');
+    return e && e.length <= EDITION_MAX && EDITION_RE.test(e) ? e : null;
+}
+
+// Rewrite the baked page's share meta to a pinned-edition OG card. The baked
+// page already carries per-office og:image=/api/og?office=<CODE> (twice: og +
+// twitter) and og:url=/o/<CODE>/. og:url gains the ?edition= permalink, but
+// canonical intentionally stays /o/<CODE>/ (SEO dedup).
+export function pinEditionMeta(html, code, edition) {
+    return html
+        .split(`content="https://plaincast.live/api/og?office=${code}"`)
+        .join(`content="https://plaincast.live/api/og?office=${code}&amp;id=${edition}"`)
+        .replace(
+            `<meta property="og:url" content="https://plaincast.live/o/${code}/">`,
+            `<meta property="og:url" content="https://plaincast.live/o/${code}/?edition=${edition}">`
+        );
+}
+
 // Lazy template load (never at module scope: a boot-time throw would take
 // down the baked fallback too). Tries the bundled layout first, then cwd.
 let templateCache = null;
@@ -209,6 +235,12 @@ export default async function handler(req, res) {
         res.setHeader('Location', `/?office=${code}`);
         return res.status(307).send('');
     }
+
+    // Pinned-edition permalink (from RSS): point the share meta at that
+    // issuance's OG card. Applied to `baked` so both the SSR and the fallback
+    // response paths carry it. Invalid/absent edition → latest-edition meta.
+    const edition = validEdition(req.query?.edition);
+    if (edition) baked = pinEditionMeta(baked, code, edition);
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     try {

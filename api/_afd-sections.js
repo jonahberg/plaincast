@@ -31,10 +31,18 @@ export function regexTranslate(text) {
 // Office-prefixed headers, e.g. ".LOX WATCHES/WARNINGS/ADVISORIES..."
 // (also matches ".KEY MESSAGES..." with "KEY" as the pseudo-prefix — the
 // resulting "MESSAGES" key is canonicalized below).
-const OFFICE_HEADER_RE = /^\.[A-Z]{3}\s+([A-Z\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/;
+//
+// Case-insensitive and digit-tolerant so mixed-case headers (".Previous
+// Discussion..." — real KOUN) and digit-bearing headers (".OUTLOOK FOR 18Z
+// FRIDAY THROUGH TUESDAY..." — real KOKX) become their own sections instead of
+// being silently swallowed into the preceding one. The negative lookahead keeps
+// ".KEY MESSAGE 1..." inline-numbered pseudo-headers (real OKX, inside
+// DISCUSSION) from being mistaken for real section headers now that digits are
+// allowed in the capture class.
+const OFFICE_HEADER_RE = /^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i;
 // Plain headers, e.g. ".SYNOPSIS...", ".SHORT TERM /THROUGH TONIGHT/...",
 // ".NEAR TERM (rest of tonight)...", ".WHAT HAS CHANGED..."
-const PLAIN_HEADER_RE = /^\.([A-Z\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/;
+const PLAIN_HEADER_RE = /^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i;
 
 // Canonicalize keys mangled by the office-prefix branch.
 const KEY_ALIASES = {
