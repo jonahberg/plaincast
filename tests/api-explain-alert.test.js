@@ -1,15 +1,20 @@
 import { describe, it, expect, mock, beforeEach } from 'bun:test';
 
+let generateCalls = 0;
 let mockGenerateText = async () => ({ text: 'Stay indoors until the storm passes.', finishReason: 'stop' });
-mock.module('ai', () => ({ generateText: (...args) => mockGenerateText(...args) }));
+mock.module('ai', () => ({ generateText: (...args) => { generateCalls += 1; return mockGenerateText(...args); } }));
 
 let mockAlert = null;
 let mockAlertThrows = false;
+let fetchAlertCalls = 0;
+let mockFetchDelay = 0; // ms: widen the fetch window so overlap is deterministic
 mock.module('../api/_utils.js', () => ({
     fetchAFDList: async () => [],
     fetchAFDProduct: async () => ({}),
     productUrlFromItem: () => null,
     fetchAlertById: async () => {
+        fetchAlertCalls += 1;
+        if (mockFetchDelay) await new Promise(r => setTimeout(r, mockFetchDelay));
         if (mockAlertThrows) throw new Error('NWS down');
         return mockAlert;
     },
@@ -54,6 +59,9 @@ describe('GET /api/explain-alert', () => {
     beforeEach(() => {
         mockAlert = { ...FULL_ALERT };
         mockAlertThrows = false;
+        mockFetchDelay = 0;
+        generateCalls = 0;
+        fetchAlertCalls = 0;
         mockGenerateText = async () => ({ text: 'A severe thunderstorm is over Newark. **Move to an interior room.**', finishReason: 'stop' });
     });
 
@@ -119,6 +127,56 @@ describe('GET /api/explain-alert', () => {
         res = createRes();
         await handler(createReq({ id: freshUrn() }), res);
         expect(res.statusCode).toBe(504);
+    });
+
+    it('dedups concurrent misses for the same id — one fetch, one model call', async () => {
+        // Slow fetch widens the window in which the old code (inFlight.set AFTER
+        // the fetch) let every concurrent request start its own fetch+model run.
+        mockFetchDelay = 20;
+        const id = freshUrn();
+        const results = await Promise.all(
+            Array.from({ length: 5 }, () => {
+                const res = createRes();
+                return handler(createReq({ id }), res).then(() => res);
+            }),
+        );
+        expect(fetchAlertCalls).toBe(1);
+        expect(generateCalls).toBe(1);
+        for (const res of results) {
+            expect(res.statusCode).toBe(200);
+            expect(res.body.explanation).toContain('Newark');
+        }
+        // exactly one of the 5 did the work; the rest piggybacked
+        expect(results.filter(r => r.body.cached === false).length).toBe(1);
+    });
+
+    it('does not share work across different ids', async () => {
+        mockFetchDelay = 20;
+        const a = freshUrn();
+        const b = freshUrn();
+        const [ra, rb] = await Promise.all([
+            (async () => { const res = createRes(); await handler(createReq({ id: a }), res); return res; })(),
+            (async () => { const res = createRes(); await handler(createReq({ id: b }), res); return res; })(),
+        ]);
+        expect(fetchAlertCalls).toBe(2);
+        expect(generateCalls).toBe(2);
+        expect(ra.statusCode).toBe(200);
+        expect(rb.statusCode).toBe(200);
+    });
+
+    it('shares a failure across piggybacking waiters (404 for all)', async () => {
+        mockFetchDelay = 20;
+        mockAlert = null; // fetch resolves to no alert -> 404 for the whole cohort
+        const id = freshUrn();
+        const results = await Promise.all(
+            Array.from({ length: 4 }, () => {
+                const res = createRes();
+                return handler(createReq({ id }), res).then(() => res);
+            }),
+        );
+        expect(fetchAlertCalls).toBe(1);
+        expect(generateCalls).toBe(0);
+        for (const res of results) expect(res.statusCode).toBe(404);
     });
 
     it('rate limits per IP', async () => {

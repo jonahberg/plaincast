@@ -34,9 +34,13 @@ export function parseSections(text) {
 
     for (const line of lines) {
         // Check for section headers: .SYNOPSIS..., .SHORT TERM (TDY-TUE)..., .LOX WATCHES/WARNINGS/ADVISORIES...
+        // Case-insensitive + digit-tolerant so mixed-case (".Previous Discussion...")
+        // and digit-bearing (".OUTLOOK FOR 18Z FRIDAY...") headers become their own
+        // sections instead of being merged into the previous one. The negative
+        // lookahead keeps inline ".KEY MESSAGE 1..." pseudo-headers inside the body.
         // Try with office prefix first (3-letter like LOX, SGX)
-        const headerMatch = line.match(/^\.[A-Z]{3}\s+([A-Z\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/)
-            || line.match(/^\.([A-Z\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/);
+        const headerMatch = line.match(/^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i)
+            || line.match(/^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i);
         if (headerMatch) {
             if (currentKey) {
                 sections.push({ key: currentKey, text: currentLines.join('\n').trim() });
@@ -156,6 +160,12 @@ export function translateToPlainEnglish(text) {
     // Remove embedded sub-section headers
     t = t.replace(/\.(?:SHORT|LONG|NEAR)\s+TERM\s*\([^)]*\)\.\s*/gi, '');
 
+    // Remove embedded ".KEY MESSAGE N..." pseudo-headers (real OKX/AKQ, with or
+    // without the leading dot) so the regex column doesn't show "KEY MESSAGE 1"
+    // label noise (mirrors the "Message N" strip in stripAIArtifacts). Require the
+    // trailing "." delimiter so bare "key message 3" in prose is not consumed.
+    t = t.replace(/\.?\s*KEY\s+MESSAGE\s+\d+\s*\.{1,3}\s*/gi, '');
+
     // Clean NWS formatting
     t = t.replace(/\.{3,}/g, '. ');
     t = t.replace(/[ \t]{2,}/g, ' ');
@@ -182,6 +192,25 @@ export function translateToPlainEnglish(text) {
     t = t.trim();
 
     return escapeHTML(t);
+}
+
+// ─── normalizeZuluForTest ───────────────────────────────────────────
+// Test-only mirror of app.js's Zulu-time normalization (~app.js:234). The real
+// app.js replacement is timezone/DOM-dependent (toLocaleString + currentOffice),
+// so translateToPlainEnglish above deliberately skips it. This mirror keeps the
+// exact regex — /\b(\d{2,4})Z\b/gi (FIX 5 added the `i`) — but uses a fixed UTC
+// offset so the assertion is deterministic across CI timezones. Its only job is
+// to prove the pattern matches lowercase 'z' from live aviation text.
+export function normalizeZuluForTest(text, offsetHours = -7) {
+    return text.replace(/\b(\d{2,4})Z\b/gi, (_, h) => {
+        const utcHour = parseInt(h.length <= 2 ? h : h.substring(0, 2));
+        const utcMin = h.length > 2 ? parseInt(h.substring(2)) : 0;
+        const local = ((utcHour + offsetHours) % 24 + 24) % 24;
+        const ampm = local >= 12 ? 'PM' : 'AM';
+        let h12 = local % 12;
+        if (h12 === 0) h12 = 12;
+        return utcMin > 0 ? `${h12}:${String(utcMin).padStart(2, '0')} ${ampm}` : `${h12} ${ampm}`;
+    });
 }
 
 // ─── computeConfidence ──────────────────────────────────────────────

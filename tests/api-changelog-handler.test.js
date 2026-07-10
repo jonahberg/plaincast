@@ -1,19 +1,28 @@
 import { describe, it, expect, mock, beforeEach } from 'bun:test';
 
+let generateCalls = 0;
 let mockGenerateText = async () => ({
     text: 'Rain chances rose for Thursday and the forecaster grew more confident about the weekend warmup.',
     finishReason: 'stop',
 });
-mock.module('ai', () => ({ generateText: (...args) => mockGenerateText(...args) }));
+mock.module('ai', () => ({ generateText: (...args) => { generateCalls += 1; return mockGenerateText(...args); } }));
 
 // items[0] = current, items[1] = previous. productUrlFromItem -> item.id,
 // fetchAFDProduct(url) -> the matching product.
 let mockItems = [];
 let mockProducts = {};
 let mockListThrows = false;
+let listCalls = 0;
+let mockListDelay = 0; // ms: widen the cold window so concurrent misses overlap
+let mockItemsByOffice = null; // office -> items, so distinct offices get distinct issuances
 mock.module('../api/_utils.js', () => ({
     fetchAlertById: async () => null,
-    fetchAFDList: async () => { if (mockListThrows) throw new Error('NWS down'); return mockItems; },
+    fetchAFDList: async (office) => {
+        listCalls += 1;
+        if (mockListDelay) await new Promise(r => setTimeout(r, mockListDelay));
+        if (mockListThrows) throw new Error('NWS down');
+        return (mockItemsByOffice && mockItemsByOffice[office]) || mockItems;
+    },
     fetchAFDProduct: async (url) => mockProducts[url] || {},
     productUrlFromItem: (item) => item?.id || null,
 }));
@@ -70,10 +79,61 @@ describe('changedParagraphs', () => {
 describe('GET /api/changelog', () => {
     beforeEach(() => {
         mockListThrows = false;
+        mockListDelay = 0;
+        mockItemsByOffice = null;
+        listCalls = 0;
+        generateCalls = 0;
         mockGenerateText = async () => ({
             text: 'A cold front Thursday brings showers and cooler air.',
             finishReason: 'stop',
         });
+    });
+
+    it('dedups concurrent latest-path misses for one office — one list fetch, one model call', async () => {
+        // Slow list fetch widens the cold window; before the fix the unused
+        // inFlight map let every concurrent miss run its own generateText.
+        setScenario({ items: [{ id: `conc-${idCounter++}` }, { id: 'prev-conc' }] });
+        mockListDelay = 20;
+        const office = 'OKX'; // an office no other test warms, so latestMemo is cold
+        const results = await Promise.all(
+            Array.from({ length: 5 }, () => {
+                const res = createRes();
+                return handler(createReq({ query: { office } }), res).then(() => res);
+            }),
+        );
+        expect(listCalls).toBe(1);
+        expect(generateCalls).toBe(1);
+        for (const res of results) {
+            expect(res.statusCode).toBe(200);
+            expect(res.body.changelog).toMatch(/cold front/i);
+        }
+        // exactly one request ran the cold path; the rest piggybacked
+        expect(results.filter(r => r.body.cached === false).length).toBe(1);
+    });
+
+    it('does not share the cold path across different offices', async () => {
+        // Distinct issuances per office so a shared currentId cache can't mask
+        // whether both offices independently ran the model.
+        const aCur = `otx-${idCounter++}`, aPrev = `otx-prev-${idCounter++}`;
+        const bCur = `mpx-${idCounter++}`, bPrev = `mpx-prev-${idCounter++}`;
+        mockItemsByOffice = {
+            OTX: [{ id: aCur }, { id: aPrev }],
+            MPX: [{ id: bCur }, { id: bPrev }],
+        };
+        mockProducts = {
+            [aCur]: { productText: CURR, issuanceTime: 'a1' }, [aPrev]: { productText: PREV, issuanceTime: 'a0' },
+            [bCur]: { productText: CURR, issuanceTime: 'b1' }, [bPrev]: { productText: PREV, issuanceTime: 'b0' },
+        };
+        mockListDelay = 20;
+        const [ra, rb] = await Promise.all([
+            (async () => { const res = createRes(); await handler(createReq({ query: { office: 'OTX' } }), res); return res; })(),
+            (async () => { const res = createRes(); await handler(createReq({ query: { office: 'MPX' } }), res); return res; })(),
+        ]);
+        // distinct office keys => neither dedups against the other
+        expect(listCalls).toBe(2);
+        expect(generateCalls).toBe(2);
+        expect(ra.statusCode).toBe(200);
+        expect(rb.statusCode).toBe(200);
     });
 
     it('returns 405 for non-GET', async () => {
