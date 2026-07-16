@@ -34,7 +34,7 @@ Every retained issuance as a reverse-chronological ledger (`?view=changelog`): w
 Every issuance has a durable URL (`/o/LOX/?edition=<id>`). The history selector, the changelog ledger, RSS items, and the Share button all mint the same canonical form. With Vercel Blob provisioned, snapshots let permalinks outlive NWS's ~7-day product retention.
 
 ### 🚨 Alerts, Explained
-Watches and warnings render as a color-coded list; the detail modal now leads with a calm plain-English explanation (server-side translation of the official text - what's happening, where, until when, what to do) above the verbatim alert. During an active Severe/Extreme Warning the page checks for new editions every 2 minutes instead of 10.
+Watches and warnings render as the **Hazard Ledger** - a severity-marked reference table, no emoji. Click any row and it expands inline with a calm plain-English explanation (server-side translation of the official text - what's happening, where, until when, what to do) above the verbatim alert. During severe posture the worst Severe/Extreme Warning is promoted to a Bulletin Slab headline above the ledger, and the page checks for new editions every 2 minutes instead of 10.
 
 ### 📊 Forecaster Confidence
 Visual indicator analyzing the AFD's language for certainty vs. uncertainty signals. Words like "high confidence" and "consistent" push it up; "uncertain", "tricky", and "wide range" push it down.
@@ -46,7 +46,7 @@ Days of the week, hazard terms, temperatures, rainfall amounts, and wind speeds 
 Synopsis, Discussion, Short Term, Long Term, Aviation, Marine, Beaches, Fire Weather, Key Messages, and Active Alerts all rendered as separate sections with pill-style jump navigation.
 
 ### ⚠️ Active Alerts
-Current watches, warnings, and advisories formatted as a clean, color-coded bullet list with severity icons. Click any alert to see the full NWS detail in a modal.
+Current watches, warnings, and advisories laid out as a hairline-ruled ledger with emoji-free severity marks (filled for warnings, hatched for watches, hollow outline for advisories, dashed for statements). Rows expand inline, and when enough alerts carry start/end times an optional "On the clock" timetable plots them against the hours ahead.
 
 ### 🏢 68 NWS Offices
 Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington DC, Pittsburgh, Buffalo, Raleigh, Charleston), Southeast (Atlanta, Miami, Jacksonville, Tampa Bay, Birmingham, Nashville, Morristown, Jackson), Midwest (Chicago, Detroit, Indianapolis, Cleveland, Cincinnati, Milwaukee, Grand Rapids, St. Louis, Kansas City, Des Moines), Northern Plains (Minneapolis, Duluth, Sioux Falls, Bismarck, Omaha, Grand Forks), South Central (Dallas/Fort Worth, Houston, San Antonio, Oklahoma City, Tulsa, Little Rock, New Orleans, Shreveport, Lake Charles), Rockies (Denver, Pueblo, Grand Junction, Salt Lake City, Boise, Billings, Missoula, Riverton), Southwest (Phoenix, Las Vegas, Tucson, Flagstaff, Albuquerque, El Paso), Pacific (Los Angeles, San Diego, San Francisco, Sacramento, Central CA, Eureka, Seattle, Portland, Medford, Spokane), and Alaska/Hawaii (Anchorage, Fairbanks, Honolulu).
@@ -101,7 +101,7 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 - **Custom typography** - Fraunces display, Source Serif 4 body, DM Sans UI, JetBrains Mono for raw AFD; self-hosted subsetted woff2 (~393KB total, real small caps and oldstyle figures)
 - **Light/dark mode** - Editorial design with warm cream backgrounds, dark mode with warm near-blacks
 - **Mobile responsive** - Side-by-side stacks to vertical on screens under 768px
-- **Accessible** - ARIA roles on modals and tooltips, focus trapping, keyboard navigation, severity icons
+- **Accessible** - ARIA roles on modals and tooltips, focus trapping, keyboard navigation, severity marks
 - **DST-aware** - Zulu time conversion uses IANA timezones per office
 - **SEO** - WebApplication + FAQPage schema, OG image, llms.txt, AI crawler friendly
 

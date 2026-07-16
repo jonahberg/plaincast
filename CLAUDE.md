@@ -17,7 +17,7 @@ api/               Vercel serverless functions
   feed.js          RSS per office
   og.js            Dynamic OG images
   conditions.js    Current weather + averages
-tests/             Bun test suite (74 tests)
+tests/             Bun test suite (351 tests)
 ```
 
 ## Commands
