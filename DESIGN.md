@@ -169,10 +169,12 @@ Reduce saturation 10-20% for accents. Use semi-transparent backgrounds for tinte
 - Label: DM Sans, 0.7rem, uppercase, letter-spaced, `color: var(--teal)`
 - Text: Source Serif 4, 1.1rem
 
-### Alert Items
-- Font: DM Sans, 0.82rem
-- 6px border-radius, 3px solid left border
-- Warning (red), Watch (amber), Advisory (teal), Info (blue), Statement (stone)
+### Alert Items — the Hazard Ledger
+- Alerts render as a hairline-ruled ledger (`.hz-ledger` of `.hz-row` rows), not boxed cards. No emoji.
+- **Severity marks** (`.hz-mark`, emoji-free, ~0.62em): filled square for a Warning, diagonal-hatched for a Watch, thin hollow outline for an Advisory, dashed outline for a Statement. Each kind (`hz-warn`/`hz-watch`/`hz-adv`/`hz-stmt`) sets a shared `--sev` ink that the mark, rules, and headings read.
+- Rows expand **inline** on click to a plain-English lead above the verbatim NWS text (this replaces the old alert detail modal).
+- **Bulletin Slab** (`.hz-slab`): during severe posture the worst Severe/Extreme Warning is promoted to a headline above the ledger, with its own plain-English lead.
+- **On the clock** (`.clock-col`, `.hz-clock-*` chart): an optional timetable view that plots timed alerts against the hours ahead, offered as a third view toggle once enough alerts carry start/end times.
 
 ### Select / Dropdown
 - DM Sans, 0.85rem, 1px border, 6px radius
