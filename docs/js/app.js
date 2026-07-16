@@ -60,10 +60,13 @@ async function fetchAlerts(office) {
             const event = p.event;
             const alertData = {
                 id: p.id || f.id || '',
+                event: event || '',
                 headline: p.headline || event,
                 description: p.description || '',
                 instruction: p.instruction || '',
                 severity: p.severity || '',
+                onset: p.onset || '',
+                ends: p.ends || '',        // event end — expires is only the message expiry
                 expires: p.expires || '',
                 areaDesc: p.areaDesc || ''
             };
@@ -441,89 +444,94 @@ function displayConfidence(fullText) {
     container.style.display = '';
 }
 
-// ─── Format Active Alerts as a clean list ───────────────────────────
-// Alert modal — data store keyed by index (avoids inline JSON / XSS)
+// ─── Active Alerts — the Hazard Ledger ──────────────────────────────
+// Alert store keyed by index so row markup carries only a data-alert-idx
+// (no inline JSON, no XSS). Click delegation looks alerts up here.
 const ALERT_DATA = {};
 let alertIdx = 0;
-let lastModalFocus = null; // restore focus to the opener when a modal closes
 
-let alertModalGeneration = 0; // a slow explanation must not fill a newer modal
-
-function showAlertModal(data) {
-    lastModalFocus = document.activeElement;
-    const overlay = document.getElementById('alert-modal-overlay');
-    document.getElementById('alert-modal-title').textContent = data.headline;
-    const meta = [];
-    if (data.severity) meta.push(data.severity);
-    if (data.areaDesc) meta.push(data.areaDesc);
-    if (data.expires) {
-        try { meta.push('Expires ' + new Date(data.expires).toLocaleString()); } catch(e) { console.debug('Date parse error', e); }
-    }
-    document.getElementById('alert-modal-meta').textContent = meta.join(' · ');
-    let body = data.description || '';
-    if (data.instruction) body += '\n\n' + data.instruction;
-    const bodyEl = document.getElementById('alert-modal-body');
-    bodyEl.textContent = body;
-
-    // Plain-English lead: the alert's official text stays verbatim below; the
-    // explanation (server-fetched by alert id, so its input is unforgeable)
-    // arrives above it. Soft-fail: no explanation, no placeholder left behind.
-    const gen = ++alertModalGeneration;
-    document.getElementById('alert-modal-plain')?.remove();
-    if (data.id) {
-        const plain = document.createElement('div');
-        plain.id = 'alert-modal-plain';
-        plain.className = 'alert-modal-plain';
-        plain.innerHTML = '<div class="ai-loading-label"><span class="ai-loading"></span> Summarizing…</div>';
-        bodyEl.parentNode.insertBefore(plain, bodyEl);
-        fetch(`/api/explain-alert?id=${encodeURIComponent(data.id)}`)
-            .then(r => (r.ok ? r.json() : null))
-            .then(d => {
-                if (gen !== alertModalGeneration) return;
-                if (d && d.explanation) {
-                    plain.innerHTML = '<div class="alert-plain-label">In plain English · via <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a></div>'
-                        + formatTranslationHTML(d.explanation)
-                        + '<div class="alert-plain-label alert-plain-below">The official alert · verbatim</div>';
-                } else {
-                    plain.remove();
-                }
-            })
-            .catch(() => { if (gen === alertModalGeneration) plain.remove(); });
-    }
-
-    overlay.classList.add('open');
-    // Focus trap: move focus into modal
-    document.getElementById('alert-modal-close').focus();
-}
-
-function closeAlertModal() {
-    document.getElementById('alert-modal-overlay').classList.remove('open');
-    if (lastModalFocus && lastModalFocus.focus) lastModalFocus.focus();
-    lastModalFocus = null;
-}
+// A slow /api/explain-alert response must not fill DOM from a stale render.
+// Bumped whenever the alerts section is re-rendered (office switch / live
+// re-render), so every in-flight expansion/slab fetch checks this token.
+let alertRenderGen = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
-    const overlay = document.getElementById('alert-modal-overlay');
-    if (!overlay) return;
-    document.getElementById('alert-modal-close').addEventListener('click', closeAlertModal);
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeAlertModal(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAlertModal(); });
-
-    // Focus trap within modal
-    overlay.addEventListener('keydown', (e) => {
-        if (e.key !== 'Tab') return;
-        const focusable = overlay.querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"])');
-        if (focusable.length === 0) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    // Inline expansion replaces the old alert modal: clicking a ledger row
+    // toggles its hz-body (one open per ledger — close siblings first), and
+    // the plain-English brief is built lazily on first open.
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.hz-btn');
+        if (!btn) return;
+        const row = btn.closest('.hz-row');
+        if (!row) return;
+        const ledger = row.parentElement;
+        const body = row.querySelector('.hz-body');
+        const wasOpen = row.classList.contains('open');
+        if (ledger) ledger.querySelectorAll('.hz-row.open').forEach(r => {
+            r.classList.remove('open');
+            r.querySelector('.hz-btn')?.setAttribute('aria-expanded', 'false');
+            const bd = r.querySelector('.hz-body');
+            if (bd) bd.hidden = true;
+        });
+        if (!wasOpen) {
+            row.classList.add('open');
+            btn.setAttribute('aria-expanded', 'true');
+            if (body) {
+                body.hidden = false;
+                if (!body.dataset.built) {
+                    body.dataset.built = '1';
+                    const data = ALERT_DATA[btn.dataset.alertIdx];
+                    if (data) buildAlertExpansion(body, data);
+                }
+            }
+        }
     });
 
-    // Event delegation for alert links (avoids inline onclick / XSS)
+    // Timetable ("On the clock") rows toggle one shared panel below the chart,
+    // reusing the same expansion builder as the ledger rows.
     document.addEventListener('click', (e) => {
-        const link = e.target.closest('[data-alert-idx]');
-        if (link) showAlertModal(ALERT_DATA[link.dataset.alertIdx]);
+        const row = e.target.closest('.hz-clock-row');
+        if (!row) return;
+        const col = row.closest('.clock-col');
+        if (!col) return;
+        const panel = col.querySelector('.hz-clock-panel');
+        const wasOpen = row.getAttribute('aria-expanded') === 'true';
+        col.querySelectorAll('.hz-clock-row[aria-expanded="true"]').forEach(r => r.setAttribute('aria-expanded', 'false'));
+        if (wasOpen || !panel) {
+            if (panel) { panel.hidden = true; panel.textContent = ''; }
+            return;
+        }
+        row.setAttribute('aria-expanded', 'true');
+        const kind = (row.className.match(/hz-(warn|watch|adv|stmt)/) || [])[1] || 'adv';
+        panel.className = 'hz-clock-panel hz-body hz-' + kind;
+        panel.hidden = false;
+        panel.textContent = '';
+        const data = ALERT_DATA[row.dataset.alertIdx];
+        if (data) buildAlertExpansion(panel, data);
+    });
+
+    // Escape closes an open ledger row / clock panel (the modal it replaced
+    // had this). The kbd overlay's own Escape handling takes precedence.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (document.querySelector('.alert-modal-overlay.open')) return;
+        const open = document.querySelector('.hz-row.open');
+        if (open) {
+            const btn = open.querySelector('.hz-btn');
+            open.classList.remove('open');
+            btn?.setAttribute('aria-expanded', 'false');
+            const bd = open.querySelector('.hz-body');
+            if (bd) bd.hidden = true;
+            btn?.focus();
+            return;
+        }
+        const openClock = document.querySelector('.hz-clock-row[aria-expanded="true"]');
+        if (openClock) {
+            openClock.setAttribute('aria-expanded', 'false');
+            const panel = openClock.closest('.clock-col')?.querySelector('.hz-clock-panel');
+            if (panel) { panel.hidden = true; panel.textContent = ''; }
+            openClock.focus();
+        }
     });
 
     // Jargon tooltip tap-to-toggle for mobile with bounds checking
@@ -555,7 +563,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Mobile view toggle (Summary / Original + Annotations)
+    // View toggle (In plain English / The original / On the clock). The third
+    // view is only present on the alerts section when the timetable is built.
     document.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-view]');
         if (!btn) return;
@@ -563,13 +572,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!section) return;
         const columns = section.querySelector('.columns');
         const view = btn.dataset.view;
+        // On desktop the clock button is the only one visible — clicking it
+        // again returns to the plain view instead of dead-ending in the chart.
+        if (view === 'clock' && btn.classList.contains('active')) {
+            const plainBtn = section.querySelector('[data-view="plain"]');
+            if (plainBtn) { plainBtn.click(); return; }
+        }
         // Update button states
         section.querySelectorAll('[data-view]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
         btn.classList.add('active');
         btn.setAttribute('aria-pressed', 'true');
         // Update column visibility
-        columns.classList.remove('show-plain', 'show-original');
-        columns.classList.add(view === 'plain' ? 'show-plain' : 'show-original');
+        columns.classList.remove('show-plain', 'show-original', 'show-clock');
+        columns.classList.add(view === 'plain' ? 'show-plain' : view === 'clock' ? 'show-clock' : 'show-original');
     });
 });
 
@@ -577,59 +592,270 @@ document.addEventListener('DOMContentLoaded', () => {
 // watches/warnings body from an empty "None." (or "AZ...None. CA...None.") one.
 const ALERT_PATTERN = /((?:High Wind (?:Watch|Warning)|Wind Advisory|Flood (?:Watch|Warning)|High Surf (?:Advisory|Warning)|Beach Hazards? Statement|Winter Storm (?:Watch|Warning)|Winter Weather Advisory|Small Craft Advisory|Gale Warning|Storm Warning|Red Flag Warning|Fire Weather Watch|Tornado (?:Watch|Warning)|Severe Thunderstorm (?:Watch|Warning)|Flash Flood (?:Watch|Warning)|Blizzard Warning|Ice Storm Warning|Freeze (?:Watch|Warning)|Frost Advisory|Dense Fog Advisory|Heat Advisory|Excessive Heat Warning|Extreme (?:Heat|Cold) Warning|Wind Chill (?:Watch|Warning|Advisory)|Tropical Storm (?:Watch|Warning)|Hurricane (?:Watch|Warning)|Rip Current Statement|Coastal Flood (?:Watch|Warning|Advisory|Statement))[^.]*\.?)/gi;
 
+// The event-name half of ALERT_PATTERN (no trailing sentence tail), used to
+// split a matched AFD sentence into "<event name> <the rest>" in degraded mode.
+const ALERT_EVENT_PATTERN = /(?:High Wind (?:Watch|Warning)|Wind Advisory|Flood (?:Watch|Warning)|High Surf (?:Advisory|Warning)|Beach Hazards? Statement|Winter Storm (?:Watch|Warning)|Winter Weather Advisory|Small Craft Advisory|Gale Warning|Storm Warning|Red Flag Warning|Fire Weather Watch|Tornado (?:Watch|Warning)|Severe Thunderstorm (?:Watch|Warning)|Flash Flood (?:Watch|Warning)|Blizzard Warning|Ice Storm Warning|Freeze (?:Watch|Warning)|Frost Advisory|Dense Fog Advisory|Heat Advisory|Excessive Heat Warning|Extreme (?:Heat|Cold) Warning|Wind Chill (?:Watch|Warning|Advisory)|Tropical Storm (?:Watch|Warning)|Hurricane (?:Watch|Warning)|Rip Current Statement|Coastal Flood (?:Watch|Warning|Advisory|Statement))/i;
+
 // True only when a watches/warnings section actually names an advisory.
 function hasRealAlerts(text) {
     if (!text) return false;
     return !!stripNWSArtifacts(text).match(ALERT_PATTERN);
 }
 
-function formatAlerts(text, alertMap) {
-    // Strip NWS artifacts and format as list items
-    let t = stripNWSArtifacts(text);
+// ─── Pure ledger helpers (extracted into the VM test region) ────────
+// Every function below is DOM-free so tests/alert-ledger.test.js can run them
+// in a VM. Anything NWS-sourced is escaped by the caller building markup.
 
+// Warning → warn, Watch → watch, Statement → stmt, everything else → advisory.
+function classifyAlertKind(eventName) {
+    const e = eventName || '';
+    if (/warning/i.test(e)) return 'warn';
+    if (/watch/i.test(e)) return 'watch';
+    if (/statement/i.test(e)) return 'stmt';
+    return 'adv';
+}
+
+// An ISO instant as a short local clock: 'THU 8:00 PM', or '8:00 PM' when it
+// falls on the same local day as `nowMs`. '' for a falsy/unparseable instant.
+function formatAlertTime(iso, tz, nowMs) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const zone = tz || 'America/Los_Angeles';
+    const dayOf = (ms) => new Intl.DateTimeFormat('en-US',
+        { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric' }).format(new Date(ms));
+    const time = new Intl.DateTimeFormat('en-US',
+        { timeZone: zone, hour: 'numeric', minute: '2-digit' }).format(d);
+    if (dayOf(d.getTime()) === dayOf(nowMs)) return time;
+    const wd = new Intl.DateTimeFormat('en-US', { timeZone: zone, weekday: 'short' }).format(d).toUpperCase();
+    return `${wd} ${time}`;
+}
+
+// The tabular "until" column. Future onset → 'start → end'; already in effect →
+// '→ end'; nothing to show (no ends and no expires) → ''.
+function formatUntilCell(alert, tz, nowMs) {
+    const end = formatAlertTime(alert.ends || alert.expires || '', tz, nowMs);
+    if (!end) return '';
+    const onsetMs = alert.onset ? new Date(alert.onset).getTime() : NaN;
+    if (!isNaN(onsetMs) && onsetMs > nowMs) {
+        return `${formatAlertTime(alert.onset, tz, nowMs)} → ${end}`;
+    }
+    return `→ ${end}`;
+}
+
+// A shortened area line: first zone, then '· N zones' when more than one, plus
+// an 'incl. downtown L.A.' flag for the marquee zone.
+function areaDigest(areaDesc) {
+    const raw = (areaDesc || '').trim();
+    if (!raw) return '';
+    const zones = raw.split(';').map(z => z.trim()).filter(Boolean);
+    if (!zones.length) return '';
+    let digest = zones[0];
+    if (zones.length > 1) digest += ` · ${zones.length} zones`;
+    if (/Downtown Los Angeles/i.test(raw)) digest += ', incl. downtown L.A.';
+    return digest;
+}
+
+// A long-form clock for prose: 'Thursday 8 PM' (weekday only when it isn't
+// today, ':00' dropped) — the slab headline reads as a sentence, not a cell.
+function formatAlertTimeProse(iso, tz, nowMs) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const zone = tz || 'America/Los_Angeles';
+    const dayOf = (ms) => new Intl.DateTimeFormat('en-US',
+        { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric' }).format(new Date(ms));
+    const time = new Intl.DateTimeFormat('en-US',
+        { timeZone: zone, hour: 'numeric', minute: '2-digit' }).format(d).replace(':00', '');
+    if (dayOf(d.getTime()) === dayOf(nowMs)) return time;
+    const wd = new Intl.DateTimeFormat('en-US', { timeZone: zone, weekday: 'long' }).format(d);
+    return `${wd} ${time}`;
+}
+
+// A display headline templated from the alert's WHAT-line figures (no AI spend).
+function slabHeadline(alert, tz, nowMs) {
+    const desc = alert.description || '';
+    const event = alert.event || 'Alert';
+    const end = formatAlertTimeProse(alert.ends || alert.expires || '', tz, nowMs);
+    const until = end ? ` until ${end}` : '';
+    if (/red flag/i.test(event)) return `Hot, dry, and gusty — critical fire weather${until}.`;
+    // Figure templates are gated on the event type: a Winter Storm Warning whose
+    // text mentions "gusts up to 40" must not get a wind headline.
+    let m;
+    if (/heat/i.test(event)) {
+        m = desc.match(/temperatures up to (\d{2,3})/i);
+        if (m) return `Dangerous heat to ${m[1]}°${until}.`;
+    }
+    if (/wind|thunderstorm|hurricane|tropical/i.test(event)) {
+        m = desc.match(/gusts (?:of |up to )?(\d{2,3})/i);
+        if (m) return `Gusts to ${m[1]} mph${until}.`;
+    }
+    return `${event} in effect${until}.`;
+}
+
+// Rank two severe warnings to pick the one that leads the Bulletin Slab:
+// Extreme severity beats Severe, then more zones, then the earliest to end.
+function pickWorstAlert(alerts) {
+    const rank = (s) => /extreme/i.test(s || '') ? 2 : /severe/i.test(s || '') ? 1 : 0;
+    const zones = (a) => (a.areaDesc || '').split(';').length;
+    const endMs = (a) => new Date(a.ends || a.expires || 0).getTime();
+    let best = null;
+    for (const a of (alerts || [])) {
+        if (!/warning/i.test(a.event || '') || !/severe|extreme/i.test(a.severity || '')) continue;
+        if (!best) { best = a; continue; }
+        const dr = rank(a.severity) - rank(best.severity);
+        if (dr > 0) { best = a; continue; }
+        if (dr < 0) continue;
+        const dz = zones(a) - zones(best);
+        if (dz > 0) { best = a; continue; }
+        if (dz < 0) continue;
+        if (endMs(a) < endMs(best)) best = a;
+    }
+    return best;
+}
+
+// Geometry for the timetable ("On the clock"): a window from 2h before now to
+// the latest end (clamped 12h–48h), 6-hour local ticks, and a clamped bar per
+// alert. Times use OFFICE_TIMEZONES[currentOffice].
+function clockGeometry(alerts, nowMs) {
+    const zone = OFFICE_TIMEZONES[currentOffice] || 'America/Los_Angeles';
+    const HOUR = 3600000;
+    const startMs = Math.floor((nowMs - 2 * HOUR) / HOUR) * HOUR;
+    let maxEnd = startMs;
+    for (const a of (alerts || [])) {
+        const e = new Date(a.ends || a.expires || 0).getTime();
+        if (!isNaN(e) && e > maxEnd) maxEnd = e;
+    }
+    const endMs = Math.min(startMs + 48 * HOUR, Math.max(startMs + 12 * HOUR, maxEnd));
+    const span = endMs - startMs || 1;
+    const pct = (ms) => Math.max(0, Math.min(100, ((ms - startMs) / span) * 100));
+    // Formatters are hoisted: Intl.DateTimeFormat construction is far costlier
+    // than .format(), and the tick loop below runs 12–48 iterations.
+    const hourFmt = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', hour12: false });
+    const weekdayFmt = new Intl.DateTimeFormat('en-US', { timeZone: zone, weekday: 'short' });
+    const localHour = (ms) => parseInt(hourFmt.format(new Date(ms)), 10) % 24;
+    const weekday = (ms) => weekdayFmt.format(new Date(ms)).toUpperCase();
+
+    const ticks = [];
+    let prevDay = null;
+    for (let ms = startMs; ms <= endMs + 1; ms += HOUR) {
+        const h = localHour(ms);
+        if (h % 6 !== 0) continue;
+        const label = h === 0 ? 'MID' : h === 6 ? '6 AM' : h === 12 ? 'NOON' : '6 PM';
+        const day = weekday(ms);
+        const tick = { pct: +pct(ms).toFixed(2), label };
+        if (prevDay !== null && day !== prevDay) tick.day = day;
+        ticks.push(tick);
+        prevDay = day;
+    }
+
+    const rows = (alerts || []).map((a) => {
+        const onsetMs = a.onset ? new Date(a.onset).getTime() : NaN;
+        const barStart = !isNaN(onsetMs) ? onsetMs : startMs;
+        const be = new Date(a.ends || a.expires || 0).getTime();
+        const barEnd = !isNaN(be) ? be : endMs;
+        const leftPct = pct(barStart);
+        const widthPct = Math.max(0, pct(barEnd) - leftPct);
+        return { leftPct: +leftPct.toFixed(2), widthPct: +widthPct.toFixed(2), upcoming: !isNaN(onsetMs) && onsetMs > nowMs };
+    });
+
+    return { startMs, endMs, nowPct: +pct(nowMs).toFixed(2), ticks, rows };
+}
+
+// One aligned ledger row per row-descriptor. Live rows are expandable buttons
+// carrying a data-alert-idx; degraded rows (built from AFD text before the live
+// fetch lands) are static divs. All NWS-sourced strings are escaped here.
+function ledgerRowHTML(kind, event, area, until, idx) {
+    const lead = idx == null
+        ? '<div class="hz-line">'
+        : `<button class="hz-btn" data-alert-idx="${idx}" aria-expanded="false">`;
+    const tail = idx == null ? '</div>' : '</button>';
+    const body = idx == null ? '' : '<div class="hz-body" hidden></div>';
+    return `<div class="hz-row hz-${kind}">${lead}`
+        + '<span class="hz-mark" aria-hidden="true"></span>'
+        + `<span class="hz-ev">${escapeHTML(event)}</span>`
+        + `<span class="hz-area">${escapeHTML(area)}</span>`
+        + `<span class="hz-until">${escapeHTML(until)}</span>`
+        + `${tail}${body}</div>`;
+}
+
+const HZ_ORDER = { warn: 0, watch: 1, adv: 2, stmt: 3 };
+
+function formatAlerts(text, alertMap) {
+    const tz = OFFICE_TIMEZONES[currentOffice] || 'America/Los_Angeles';
+    const nowMs = Date.now();
+    const mapEntries = alertMap ? Object.entries(alertMap) : [];
+
+    // Live data: one row per alert entry (not per event), ordered
+    // warn → watch → adv → stmt and stable within a kind.
+    if (mapEntries.length) {
+        const list = [];
+        for (const [event, entries] of mapEntries) {
+            for (const ad of entries) list.push({ ad, event, kind: classifyAlertKind(event) });
+        }
+        list.sort((a, b) => HZ_ORDER[a.kind] - HZ_ORDER[b.kind]);
+        const rows = list.map(({ ad, event, kind }) => {
+            const idx = alertIdx++;
+            ALERT_DATA[idx] = ad;
+            const until = formatUntilCell(ad, tz, nowMs);
+            return ledgerRowHTML(kind, event, areaDigest(ad.areaDesc), until, idx);
+        });
+        return `<div class="hz-ledger">${rows.join('')}</div>`;
+    }
+
+    // Degraded / first-paint: no live data. Render static rows from the matched
+    // AFD sentences, or the plain body ("None.") when nothing matches. The strip
+    // + big-alternation match run only here — the live path never uses them.
+    const t = stripNWSArtifacts(text);
     const matches = t.match(ALERT_PATTERN);
     if (!matches || matches.length === 0) {
         return `<p>${escapeHTML(t)}</p>`;
     }
-
-    const items = matches.map(m => {
+    const rows = matches.map((m) => {
         let item = m.trim().replace(/\.\s*$/, '').replace(/^\.\s*/, '').trim();
         item = item.charAt(0).toUpperCase() + item.slice(1);
-        const safeItem = escapeHTML(item);
-        // Classify by severity
-        let cls = 'alert-advisory';
-        if (/warning/i.test(item)) cls = 'alert-warning';
-        else if (/watch/i.test(item)) cls = 'alert-watch';
-        else if (/statement/i.test(item)) cls = 'alert-statement';
-        // Severity icon for accessibility (not color-only)
-        const icon = /warning/i.test(item) ? '⚠️ ' : /watch/i.test(item) ? '👁️ ' : /statement/i.test(item) ? 'ℹ️ ' : '🔹 ';
-        // Try to find matching alert details (alertMap values are arrays)
-        let alertEntries = null;
-        if (alertMap) {
-            for (const [event, entries] of Object.entries(alertMap)) {
-                if (item.toLowerCase().includes(event.toLowerCase())) { alertEntries = entries; break; }
-            }
-        }
-        let content;
-        if (alertEntries && alertEntries.length === 1) {
-            const idx = alertIdx++;
-            ALERT_DATA[idx] = alertEntries[0];
-            content = `<button class="alert-link" data-alert-idx="${idx}" aria-label="View details: ${escapeAttr(item)}">${icon}${safeItem}</button>`;
-        } else if (alertEntries && alertEntries.length > 1) {
-            // Multiple alerts of same type — show each with area info
-            content = alertEntries.map(ad => {
-                const idx = alertIdx++;
-                ALERT_DATA[idx] = ad;
-                const area = ad.areaDesc ? ` (${ad.areaDesc.split(';')[0].trim()})` : '';
-                return `<button class="alert-link" data-alert-idx="${idx}" aria-label="View details: ${escapeAttr(item + area)}">${icon}${safeItem}${escapeHTML(area)}</button>`;
-            }).join('');
-        } else {
-            content = `${icon}${safeItem}`;
-        }
-        return `<li class="${cls}">${content}</li>`;
+        const kind = classifyAlertKind(item);
+        const ev = item.match(ALERT_EVENT_PATTERN);
+        const event = ev ? ev[0] : item;
+        const rest = ev ? item.slice(ev.index + ev[0].length).replace(/^[\s,:]+/, '').trim() : '';
+        return ledgerRowHTML(kind, event, rest, '', null);
     });
+    return `<div class="hz-ledger">${rows.join('')}</div>`;
+}
 
-    return `<ul class="alert-list">${items.join('')}</ul>`;
+// The alert's window as a tooltip/label: 'Now → THU 8:00 PM' when in effect,
+// or 'start → end' when it hasn't started yet.
+function alertWindowLabel(data, tz, nowMs) {
+    const end = formatAlertTime(data.ends || data.expires || '', tz, nowMs);
+    const onsetMs = data.onset ? new Date(data.onset).getTime() : NaN;
+    if (!isNaN(onsetMs) && onsetMs > nowMs) return `${formatAlertTime(data.onset, tz, nowMs)} → ${end}`;
+    return `Now → ${end}`;
+}
+
+// The facts + "what to do" + verbatim block (no plain lead — that is prepended
+// lazily). All NWS-sourced strings escaped. Pure (returns HTML string), so it
+// lives in the VM test region for escaping tests.
+function alertFactsHTML(data) {
+    const tz = OFFICE_TIMEZONES[currentOffice] || 'America/Los_Angeles';
+    const nowMs = Date.now();
+    const facts = [];
+    if (data.severity) facts.push(escapeHTML(data.severity));
+    const zoneCount = data.areaDesc ? data.areaDesc.split(';').filter(z => z.trim()).length : 0;
+    if (zoneCount) facts.push(`${zoneCount} zone${zoneCount === 1 ? '' : 's'}`);
+    const until = formatUntilCell(data, tz, nowMs);
+    if (until) facts.push(escapeHTML(until));
+
+    let html = '';
+    if (facts.length) html += `<ul class="hz-facts">${facts.map(f => `<li>${f}</li>`).join('')}</ul>`;
+    if (data.instruction) {
+        const paras = data.instruction.split(/\n\s*\n/).map(p => escapeHTML(p.replace(/\s+/g, ' ').trim())).filter(Boolean);
+        if (paras.length) html += `<div class="hz-do"><b>What to do</b>${paras.map(p => `<p>${p}</p>`).join('')}</div>`;
+    }
+    if (data.description) {
+        html += `<details class="hz-verbatim"><summary>The official text · verbatim</summary>`
+            + `<pre>${escapeHTML(data.description)}</pre></details>`;
+    }
+    return html;
 }
 
 // ─── AI Translation ─────────────────────────────────────────────────
@@ -647,6 +873,126 @@ function formatTranslationHTML(raw) {
         .filter(b => b.trim())
         .map(b => `<p>${b.trim().replace(/\n/g, ' ')}</p>`)
         .join('');
+}
+
+// ─── Alert ledger interactions (DOM side of the Hazard Ledger) ───────
+// The pure row/geometry/markup helpers live in the VM test region above; these
+// build and mutate DOM, so they stay out of it.
+
+// The "On the clock" timetable only earns its place when enough alerts have
+// real time windows to compare.
+const CLOCK_MIN_TIMED_ALERTS = 3;
+
+// Lazy plain-English lead via /api/explain-alert (unforgeable input: server
+// fetches by id). Soft-fails, and drops itself if a re-render supersedes it.
+function lazyExplain(host, data, place) {
+    if (!data.id) return;
+    const gen = alertRenderGen;
+    const lead = document.createElement('div');
+    lead.className = 'hz-plain';
+    lead.innerHTML = '<div class="ai-loading-label"><span class="ai-loading"></span> Summarizing…</div>';
+    if (place === 'prepend') host.insertBefore(lead, host.firstChild);
+    else host.appendChild(lead);
+    fetch(`/api/explain-alert?id=${encodeURIComponent(data.id)}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => {
+            if (gen !== alertRenderGen) return;
+            if (d && d.explanation) {
+                lead.innerHTML = '<div class="hz-plain-label">In plain English · via <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a></div>'
+                    + formatTranslationHTML(d.explanation);
+            } else {
+                lead.remove();
+            }
+        })
+        .catch(() => { if (gen === alertRenderGen) lead.remove(); });
+}
+
+// Fill a row/clock expansion body: facts block + lazy plain-English lead above.
+function buildAlertExpansion(host, data) {
+    host.innerHTML = alertFactsHTML(data);
+    lazyExplain(host, data, 'prepend');
+}
+
+// The Bulletin Slab: promote the worst severe warning to a headline above the
+// ledger. The same alert keeps its ordinary row below (ledger stays complete).
+function renderAlertSlab(plainCol, ordered) {
+    const worst = pickWorstAlert(ordered.map(o => o.data));
+    if (!worst) return;
+    const entry = ordered.find(o => o.data === worst) || { kind: classifyAlertKind(worst.event) };
+    const tz = OFFICE_TIMEZONES[currentOffice] || 'America/Los_Angeles';
+    const nowMs = Date.now();
+    const slab = document.createElement('div');
+    slab.className = `hz-slab hz-${entry.kind}`;
+    slab.innerHTML = `<p class="hz-slab-eyebrow"><span class="hz-mark" aria-hidden="true"></span>`
+        + `${escapeHTML(worst.event || 'Alert')} <span class="hz-sep">·</span> ${escapeHTML(alertWindowLabel(worst, tz, nowMs))}</p>`
+        + `<h3 class="hz-slab-head">${escapeHTML(slabHeadline(worst, tz, nowMs))}</h3>`
+        + `<div class="hz-slab-plain"></div>`;
+    plainCol.insertBefore(slab, plainCol.firstChild);
+    lazyExplain(slab.querySelector('.hz-slab-plain'), worst, 'append');
+}
+
+// The timetable chart. `ordered` rows carry {idx, kind, data} in ledger order,
+// so clock rows reuse the same ALERT_DATA index for their expansion.
+function renderAlertClock(host, ordered) {
+    const tz = OFFICE_TIMEZONES[currentOffice] || 'America/Los_Angeles';
+    const nowMs = Date.now();
+    const geo = clockGeometry(ordered.map(o => o.data), nowMs);
+    // Must match the label column in .hz-clock-row grid-template-columns and
+    // .hz-clock-axis margin-left (styles.css) — the three stay in sync by hand.
+    const LABEL = '13.5rem';
+    const trackLeft = (p) => `calc(${LABEL} + (100% - ${LABEL}) * ${(p / 100).toFixed(4)})`;
+    const nowLabel = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(nowMs));
+
+    const axis = '<div class="hz-clock-axis">'
+        + geo.ticks.map(t => `<span class="hz-clock-tick" style="left:${t.pct}%">`
+            + `${t.day ? `<span class="hz-clock-day">${escapeHTML(t.day)}</span>` : ''}${t.label}</span>`).join('')
+        + '</div>';
+
+    let grid = '<div class="hz-clock-grid">';
+    grid += geo.ticks.map(t => `<div class="hz-clock-vline" style="left:${trackLeft(t.pct)}"></div>`).join('');
+    grid += `<div class="hz-clock-now" style="left:${trackLeft(geo.nowPct)}"><i>NOW · ${escapeHTML(nowLabel)}</i></div>`;
+    grid += ordered.map((o, i) => {
+        const r = geo.rows[i];
+        const zoneCount = o.data.areaDesc ? o.data.areaDesc.split(';').filter(z => z.trim()).length : 0;
+        return `<button class="hz-clock-row hz-${o.kind}" data-alert-idx="${o.idx}" aria-expanded="false">`
+            + `<span class="hz-clock-lab"><span class="hz-mark" aria-hidden="true"></span>`
+            + `<span class="t">${escapeHTML(o.data.event || '')}</span>`
+            + `${zoneCount > 1 ? `<span class="z">×${zoneCount}</span>` : ''}</span>`
+            + `<span class="hz-clock-track"><span class="hz-clock-bar${r.upcoming ? ' upcoming' : ''}" `
+            + `style="left:${r.leftPct}%;width:${r.widthPct}%" data-tip="${escapeAttr(alertWindowLabel(o.data, tz, nowMs))}"></span></span>`
+            + `</button>`;
+    }).join('');
+    grid += '</div>';
+
+    host.innerHTML = `<div class="hz-clock-scroll"><div class="hz-clock-chart">${axis}${grid}</div></div>`
+        + '<div class="hz-clock-panel" hidden></div>';
+}
+
+// Add the "On the clock" toggle + timetable column to the alerts section. The
+// clock column is PREPENDED (first child) so the mobile show-plain rule still
+// targets the original column (see styles.css note).
+function addClockView(sectionEl, ordered) {
+    const toggleBar = sectionEl.querySelector('.ai-toggle');
+    const columns = sectionEl.querySelector('.columns');
+    if (!toggleBar || !columns) return;
+    // has-clock surfaces the toggle on desktop too (clock button only there —
+    // plain/original stay a mobile-only choice since desktop shows both columns).
+    toggleBar.classList.add('has-clock');
+    if (!toggleBar.querySelector('[data-view="clock"]')) {
+        const btn = document.createElement('button');
+        btn.className = 'ai-toggle-btn';
+        btn.dataset.view = 'clock';
+        btn.setAttribute('aria-pressed', 'false');
+        btn.textContent = 'On the clock';
+        toggleBar.appendChild(btn);
+    }
+    let clockCol = columns.querySelector('.clock-col');
+    if (!clockCol) {
+        clockCol = document.createElement('div');
+        clockCol.className = 'clock-col';
+        columns.insertBefore(clockCol, columns.firstChild);
+    }
+    renderAlertClock(clockCol, ordered);
 }
 
 // Whole-issuance translation, one GET per (office, productId). The server
@@ -1041,10 +1387,6 @@ async function fetchAFD(office) {
         <div class="skeleton-section"><div class="skeleton-title"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
         <div class="skeleton-section"><div class="skeleton-title"></div><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
     </div>`;
-    // Reset alert state for new fetch
-    alertIdx = 0;
-    for (const k of Object.keys(ALERT_DATA)) delete ALERT_DATA[k];
-
     // Update footer office name
     const footerOffice = document.getElementById('footer-office');
     if (footerOffice) footerOffice.textContent = office;
@@ -1141,6 +1483,13 @@ async function fetchAFD(office) {
 const afterRender = [];
 
 async function renderAFD(prodData, office) {
+    // Reset the alert store on EVERY render path — edition/history navigation
+    // enters here without fetchAFD, and without this the store accumulates
+    // stale entries (and a slow explain-alert fetch could fill dead DOM).
+    alertIdx = 0;
+    alertRenderGen++;
+    for (const k of Object.keys(ALERT_DATA)) delete ALERT_DATA[k];
+
     const sectionsEl = document.getElementById('sections');
 
     // Update raw link
@@ -1204,11 +1553,19 @@ async function renderAFD(prodData, office) {
     currentAlerts = {};
     render(orderedSections, { issuanceTime: prodData.issuanceTime, productId: prodData.id });
 
-    // Then fetch alerts and re-render the alerts section with links
+    // Then fetch alerts and re-render the alerts section with links.
+    // thisAlertGen guards the SAME-office race too: rapid edition switching
+    // re-enters renderAFD (which bumps alertRenderGen) without changing
+    // currentOffice, and a slower earlier fetch must not clobber the newer
+    // render with stale alert data.
+    const thisAlertGen = alertRenderGen;
     fetchAlerts(office).then(alertMap => {
         if (office !== currentOffice) return; // user switched offices mid-fetch — don't clobber
+        if (thisAlertGen !== alertRenderGen) return; // a newer render superseded this fetch
         currentAlerts = alertMap;
-        // Re-render just the alerts section if we got links
+        // Re-render just the alerts section with the live Hazard Ledger, then
+        // promote severe posture to a Bulletin Slab and, when enough alerts are
+        // timed, offer the "On the clock" timetable view.
         if (Object.keys(alertMap).length > 0) {
             const alertSection = orderedSections.find(s => s.key === 'Active Alerts');
             if (alertSection) {
@@ -1216,7 +1573,20 @@ async function renderAFD(prodData, office) {
                 if (el) {
                     el.style.display = ''; // un-hide if it was a "None." body now superseded by live alerts
                     const plainCol = el.querySelector('.plain-col');
-                    if (plainCol) plainCol.innerHTML = formatAlerts(alertSection.text, alertMap);
+                    if (plainCol) {
+                        alertRenderGen++; // supersede any in-flight expansion/slab fetch
+                        plainCol.innerHTML = formatAlerts(alertSection.text, alertMap);
+                        // Ledger-order list with each row's ALERT_DATA index, so
+                        // the slab and clock reuse the exact same entries.
+                        const ordered = Array.from(plainCol.querySelectorAll('.hz-btn[data-alert-idx]')).map(b => ({
+                            idx: b.dataset.alertIdx,
+                            kind: (b.closest('.hz-row').className.match(/hz-(warn|watch|adv|stmt)/) || [])[1] || 'adv',
+                            data: ALERT_DATA[b.dataset.alertIdx],
+                        }));
+                        renderAlertSlab(plainCol, ordered);
+                        const timed = ordered.filter(o => o.data && o.data.onset && (o.data.ends || o.data.expires));
+                        if (timed.length >= CLOCK_MIN_TIMED_ALERTS) addClockView(el, ordered);
+                    }
                 }
             }
         }

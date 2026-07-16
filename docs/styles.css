@@ -63,6 +63,13 @@
     --step-4:  2.6rem;
     --step-5:  clamp(2.7rem, 1.2rem + 6vw, 5.4rem);
 
+    /* Severity inks — the emoji-free alert language (Hazard Ledger) */
+    --sev-warn:  #8a2b18;
+    --sev-watch: #9a5a14;
+    --sev-adv:   #0c5e54;
+    --sev-stmt:  #6d6453;
+    --sev-warn-wash: rgba(138, 43, 24, 0.055);
+
     --shadow-sheet: 0 1px 2px rgba(40, 32, 18, 0.05), 0 22px 60px -28px rgba(40, 32, 18, 0.32);
 }
 
@@ -94,6 +101,12 @@
     --newsprint:    #1a1c19;   /* cool charcoal source stock */
     --moon-lit:     #d6d0c2;
     --moon-shadow:  #0f0e0b;
+
+    --sev-warn:  #d8765c;
+    --sev-watch: #d6a24e;
+    --sev-adv:   #6fc6b6;
+    --sev-stmt:  #9a9082;
+    --sev-warn-wash: rgba(216, 118, 92, 0.08);
 
     --shadow-sheet: 0 1px 2px rgba(0,0,0,0.4), 0 30px 80px -30px rgba(0,0,0,0.7);
 }
@@ -518,6 +531,11 @@ a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset:
     background: none; cursor: pointer; transition: all 0.15s;
 }
 .ai-toggle-btn.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+/* Once the timetable exists, the alerts section's toggle appears on desktop
+   too — but only its "On the clock" button; plain/original stay mobile-only
+   because desktop already shows both columns side by side. */
+.ai-toggle.has-clock { display: flex; }
+.ai-toggle.has-clock .ai-toggle-btn:not([data-view="clock"]) { display: none; }
 
 /* ── Pull-quote (inserted by JS into a section) ── */
 .pullquote {
@@ -537,22 +555,165 @@ a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset:
 }
 .pullquote cite::before { content: "— "; }
 
-/* ─────────────────────────────  ALERTS  ───────────────────────────── */
-.plain-col .alert-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
-.plain-col .alert-list li {
-    font-family: var(--font-ui); font-size: 0.88rem; line-height: 1.5;
-    padding: 0.65rem 0.5rem 0.65rem 0.9rem; border-left: 3px solid; background: transparent;
+/* ─────────────────────  ALERTS — THE HAZARD LEDGER  ───────────────── */
+/* Severity kind sets the shared --sev ink; marks, rules, and headings read it. */
+.hz-warn  { --sev: var(--sev-warn); }
+.hz-watch { --sev: var(--sev-watch); }
+.hz-adv   { --sev: var(--sev-adv); }
+.hz-stmt  { --sev: var(--sev-stmt); }
+
+/* The printed, emoji-free severity mark (0.62em). */
+.hz-mark {
+    display: inline-block; width: 0.62em; height: 0.62em; flex: none;
+    vertical-align: baseline; position: relative; top: 0.02em;
 }
-.plain-col .alert-list li.alert-warning  { border-left-color: #b4452c; }
-.plain-col .alert-list li.alert-watch     { border-left-color: var(--amber); }
-.plain-col .alert-list li.alert-advisory  { border-left-color: var(--accent); }
-.plain-col .alert-list li.alert-statement { border-left-color: var(--text-muted); }
-.alert-link {
-    color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule-strong);
-    display: block; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none;
-    font: inherit; padding: 0 0 1px; text-align: left; width: 100%;
+.hz-warn  .hz-mark { background: var(--sev-warn); }
+.hz-watch .hz-mark { border: 1px solid var(--sev-watch);
+    background: repeating-linear-gradient(45deg, var(--sev-watch) 0 1.5px, transparent 1.5px 4px); }
+.hz-adv   .hz-mark { border: 1.5px solid var(--sev-adv); background: transparent; }
+.hz-stmt  .hz-mark { border: 1px dashed var(--sev-stmt); background: transparent; }
+
+.hz-ledger { margin: 0; }
+.hz-row { border-top: 1px solid var(--rule); }
+.hz-row:last-child { border-bottom: 1px solid var(--rule); }
+.hz-btn, .hz-line {
+    /* Stacked row: mark | event | until, with the area on its own line below —
+       the plain column is half a sheet wide, too narrow for four columns. */
+    display: grid; grid-template-columns: 1.4rem 1fr auto; gap: 0.15rem 0.7rem;
+    align-items: baseline; width: 100%; text-align: left; padding: 0.72rem 0.35rem;
+    font: inherit; color: inherit;
 }
-.alert-link:hover { border-bottom-color: var(--accent); color: var(--accent); }
+.hz-btn { background: none; border: none; cursor: pointer; transition: background 0.15s ease; }
+.hz-btn:hover { background: var(--paper-edge); }
+.hz-row.open .hz-btn { background: var(--paper-edge); }
+.hz-ev {
+    font-family: var(--font-ui); font-weight: 700; font-size: 0.8rem;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--sev);
+}
+.hz-area {
+    font-style: italic; font-size: var(--step--1); color: var(--text-secondary);
+    grid-column: 2 / -1; grid-row: 2; min-width: 0; line-height: 1.35;
+}
+.hz-until {
+    font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-secondary);
+    font-variant-numeric: tabular-nums; letter-spacing: 0.02em; white-space: nowrap;
+}
+
+/* Row expansion (reused by the slab plain lead and the clock panel). */
+.hz-body[hidden] { display: none; }
+.hz-body {
+    border-left: 2px solid var(--sev, var(--rule-strong));
+    padding: 0.4rem 0 0.4rem 1.15rem; margin: 0 0.35rem 0.9rem 0.4rem;
+}
+.hz-plain-label {
+    font-family: var(--font-ui); font-weight: 700; font-size: var(--step--2);
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--sev, var(--text-muted));
+    margin: 0 0 0.35rem;
+}
+.hz-plain p { font-size: var(--step-0); line-height: 1.62; margin: 0 0 0.9rem; }
+.hz-plain p:last-child { margin-bottom: 0; }
+.hz-facts { display: flex; flex-wrap: wrap; gap: 0.35rem 1.4rem; margin: 0.4rem 0 0.9rem; padding: 0; list-style: none; }
+.hz-facts li {
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+.hz-facts li::before { content: "· "; color: var(--sev, var(--rule-strong)); }
+.hz-do { font-size: var(--step--1); color: var(--text-secondary); line-height: 1.6; margin: 0 0 0.6rem; }
+.hz-do b {
+    display: block; font-family: var(--font-ui); font-weight: 700; font-size: var(--step--2);
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--sev, var(--text-muted)); margin-bottom: 0.3rem;
+}
+.hz-do p { margin: 0 0 0.4rem; }
+.hz-do p:last-child { margin-bottom: 0; }
+.hz-verbatim { margin-top: 0.4rem; }
+.hz-verbatim summary {
+    cursor: pointer; font-family: var(--font-ui); font-size: var(--step--2); font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted);
+    list-style: none; display: inline-flex; align-items: center; gap: 0.45rem;
+}
+.hz-verbatim summary::-webkit-details-marker { display: none; }
+.hz-verbatim summary::after { content: "+"; font-family: var(--font-mono); color: var(--control-line); }
+.hz-verbatim[open] summary::after { content: "–"; }
+.hz-verbatim summary:hover { color: var(--accent); }
+.hz-verbatim pre {
+    font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.65; white-space: pre-wrap;
+    background: var(--newsprint); color: var(--text-secondary); padding: 0.9rem 1rem;
+    margin-top: 0.6rem; border-radius: 2px; max-height: 300px; overflow-y: auto;
+}
+
+/* ─── Bulletin Slab: the worst warning gets a headline above the ledger ─── */
+.hz-slab {
+    border-top: 3px solid var(--sev); border-bottom: 1px solid var(--rule-strong);
+    background: linear-gradient(var(--sev-warn-wash), transparent 70%);
+    padding: 1.3rem 0.2rem 1.4rem; margin: 0 0 0.5rem;
+}
+.hz-slab-eyebrow {
+    display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0;
+    font-family: var(--font-ui); font-size: var(--step--2); font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--sev);
+}
+.hz-slab-eyebrow .hz-sep { color: var(--rule-strong); }
+.hz-slab-head {
+    font-family: var(--font-display); font-weight: 580;
+    font-variation-settings: "opsz" 110, "SOFT" 20, "WONK" 1;
+    font-size: clamp(1.55rem, 1.1rem + 2.4vw, 2.4rem); line-height: 1.12;
+    margin: 0.55rem 0 0.75rem; text-wrap: balance; max-width: 24em;
+}
+.hz-slab-plain .hz-plain p { margin: 0 0 0.6rem; }
+
+/* ─── On the clock: the timetable (Study № 2) ─── */
+.hz-clock-scroll { overflow-x: auto; }
+.hz-clock-chart { min-width: 560px; }
+.hz-clock-axis { position: relative; height: 2rem; margin-left: 13.5rem; border-bottom: 1px solid var(--rule-strong); }
+.hz-clock-tick {
+    position: absolute; bottom: 0; transform: translateX(-50%); text-align: center; white-space: nowrap;
+    font-family: var(--font-mono); font-size: 0.64rem; color: var(--text-muted);
+    padding-bottom: 0.3rem; letter-spacing: 0.04em;
+}
+.hz-clock-tick::after { content: ""; position: absolute; left: 50%; bottom: -4px; width: 1px; height: 4px; background: var(--rule-strong); }
+.hz-clock-day {
+    position: absolute; top: -1.15rem; left: 50%; transform: translateX(-50%);
+    font-family: var(--font-ui); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.2em; color: var(--text-muted);
+}
+.hz-clock-grid { position: relative; }
+.hz-clock-vline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--rule); }
+.hz-clock-now { position: absolute; top: -0.4rem; bottom: -0.5rem; width: 0; border-left: 1px dashed var(--rubric); z-index: 2; }
+.hz-clock-now i {
+    position: absolute; top: -1.3rem; left: -0.5px; transform: translateX(-50%);
+    font-style: normal; font-family: var(--font-ui); font-size: 0.6rem; font-weight: 700;
+    letter-spacing: 0.14em; color: var(--rubric); white-space: nowrap;
+    background: var(--paper); padding: 0.1rem 0.4rem; z-index: 3;
+}
+.hz-clock-row {
+    display: grid; grid-template-columns: 13.5rem 1fr; align-items: center; width: 100%;
+    background: none; border: none; border-top: 1px solid var(--rule); cursor: pointer;
+    padding: 0; text-align: left; transition: background 0.15s ease; min-height: 2.75rem; font: inherit; color: inherit;
+}
+.hz-clock-row:hover, .hz-clock-row[aria-expanded="true"] { background: var(--paper-edge); }
+.hz-clock-lab { display: flex; align-items: center; gap: 0.55rem; padding: 0.35rem 0.8rem 0.35rem 0.35rem; min-width: 0; }
+.hz-clock-lab .t {
+    font-family: var(--font-ui); font-weight: 700; font-size: 0.72rem; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--sev); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hz-clock-lab .z { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); white-space: nowrap; }
+.hz-clock-track { position: relative; height: 100%; min-height: 2.35rem; }
+.hz-clock-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 9px; background: var(--sev); border-radius: 1px; min-width: 3px; }
+.hz-clock-bar.upcoming { opacity: 0.55; }
+.hz-clock-bar.upcoming::before { content: ""; position: absolute; inset: 0; border: 1px solid var(--sev); background: var(--paper); border-radius: 1px; }
+.hz-clock-bar::after {
+    content: attr(data-tip); position: absolute; bottom: calc(100% + 7px); left: 0;
+    background: var(--ink); color: var(--paper); font-family: var(--font-mono); font-size: 0.66rem;
+    padding: 0.28rem 0.55rem; border-radius: 2px; white-space: nowrap; opacity: 0;
+    pointer-events: none; transition: opacity 0.12s ease; z-index: 5;
+}
+.hz-clock-row:hover .hz-clock-bar::after, .hz-clock-row:focus-visible .hz-clock-bar::after { opacity: 1; }
+.hz-clock-panel[hidden] { display: none; }
+
+/* Timetable column: hidden until the "On the clock" view is active. The
+   3-class selector out-specifies the 2-class + element hide rule below it. */
+.clock-col { display: none; }
+.columns.show-clock > div { display: none; }
+.columns.show-clock > .clock-col { display: block; grid-column: 1 / -1; }
 
 /* ─────────────────────────────  MODALS  ───────────────────────────── */
 .alert-modal-overlay {
@@ -662,8 +823,12 @@ kbd {
     .atmosphere { display: none; }
     .columns { grid-template-columns: 1fr; gap: 1.25rem; }
     .columns.show-plain > div:last-child { display: none; }
-    .columns.show-original > div:first-child { display: none; }
+    /* The plain (ledger) column is always the second-to-last child — with the
+       optional clock column prepended first, its old :first-child slot moved. */
+    .columns.show-original > div:nth-last-child(2) { display: none; }
     .ai-toggle { display: flex; }
+    /* On mobile all three view buttons return (desktop hides all but the clock). */
+    .ai-toggle.has-clock .ai-toggle-btn:not([data-view="clock"]) { display: inline-block; }
     /* The toggle pill labels the active view — the column header is redundant on mobile. */
     .columns > div > .col-label { display: none; }
     .ai-toggle-btn { min-height: 44px; padding: 0 1.1rem; }
@@ -796,21 +961,6 @@ body.view-changelog .section-nav { display: none !important; }
 .timeline-more-btn:hover { border-color: var(--accent); }
 .timeline-more-btn:disabled { opacity: 0.6; cursor: default; }
 
-/* Alert modal — plain-English lead above the verbatim official text */
-.alert-modal-plain {
-    font-family: var(--font-body); font-size: 1rem; line-height: 1.65;
-    padding-bottom: 0.9rem; margin-bottom: 0.9rem;
-    border-bottom: 1px solid var(--rule);
-}
-.alert-modal-plain p { margin: 0 0 0.6rem; }
-.alert-plain-label {
-    font-family: var(--font-ui); font-size: 0.7rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted);
-    margin-bottom: 0.5rem;
-}
-.alert-plain-label a { color: inherit; }
-.alert-plain-below { margin: 0.9rem 0 0; }
-
 /* ─────────────────────────────  PRINT  ───────────────────────────── */
 @media print {
     /* Fine-press page setup: generous margins, no widowed lines, sections
@@ -823,12 +973,18 @@ body.view-changelog .section-nav { display: none !important; }
     .timeline-diff, .timeline-read, .timeline-more, .changelog-view-link { display: none !important; }
     .atmosphere, .utility-bar, .section-nav, .ai-toggle, .theme-toggle, .share-btn, .kbd-hint,
     .banner, .explainer, .alert-modal-overlay, #kbd-overlay, .diff-toggle, .colophon-editions,
-    .annotated-col, .columns > div:last-child, .col-label, .ai-loading-label {
+    .annotated-col, .columns > div:last-child, .col-label, .ai-loading-label,
+    .clock-col, .hz-body {
         display: none !important;
     }
     .dark { --paper:#fff; --ink:#1a1a1a; --text:#1a1a1a; --text-muted:#555; --rule:#ddd; --rule-strong:#bbb; --accent:#0c5e54; }
     body, .sheet { background: #fff !important; color: #1a1a1a !important; box-shadow: none !important; border: none !important; }
     .columns { grid-template-columns: 1fr !important; }
+    /* Print always falls back to the plain (ledger) column, even if the
+       on-screen view was "On the clock" — otherwise show-clock hides every
+       column and the alerts section prints empty. */
+    .columns.show-clock > div { display: block !important; }
+    .columns.show-clock > div:last-child, .columns.show-clock > .clock-col { display: none !important; }
     .sheet { max-width: none; margin: 0; }
 }
 
