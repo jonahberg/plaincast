@@ -19,7 +19,7 @@ Plaincast sets each edition like a fine print publication: plain-English transla
 ## Features
 
 ### 🤖 AI-Powered Summaries
-Every forecast section is summarized by DeepSeek (V4 Flash) into natural, readable prose. Not just abbreviation expansion - actual explanation of *why* weather is happening, what the models show, and what it means for you. Translations are computed once per issuance and served from the CDN, so AI cost is bounded by (offices × issuances), not traffic. Falls back to regex translation if the model is unavailable - the page works, and makes sense, before and without AI.
+Every forecast section is summarized by AI into natural, readable prose. Not just abbreviation expansion - actual explanation of *why* weather is happening, what the models show, and what it means for you. Translations are computed once per issuance and served from the CDN, so AI cost is bounded by (offices × issuances), not traffic. Falls back to regex translation if the model is unavailable - the page works, and makes sense, before and without AI.
 
 ### 📖 Side-by-Side Layout
 AI summary on the left, original AFD with jargon annotations on the right. Every highlighted term in the original has a hover tooltip (or tap on mobile) explaining what it means. 230+ term glossary covering synoptic meteorology, aviation, marine, pressure levels, model names, and airport codes, plus 109 abbreviation expansion patterns.
@@ -145,7 +145,7 @@ Plaincast turns that into:
 
 ## Credits
 
-Built by [Jonah Berg](https://github.com/notjbg). Forecast data from the [National Weather Service](https://www.weather.gov). Summaries powered by [DeepSeek](https://www.deepseek.com).
+Built by [Jonah Berg](https://github.com/notjbg). Forecast data from the [National Weather Service](https://www.weather.gov). Summaries powered by AI.
 
 ---
 
