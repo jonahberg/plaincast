@@ -45,5 +45,5 @@ Each office has a dedicated page at https://plaincast.live/o/<CODE>/ — substit
 
 ## Links
 - Website: https://plaincast.live
-- GitHub: https://github.com/notjbg/plaincast
+- GitHub: https://github.com/jonahberg/plaincast
 - Author: Jonah Berg (https://jonahberg.com)

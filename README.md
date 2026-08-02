@@ -2,7 +2,7 @@
 
 **What the forecast actually says.**
 
-**[→ plaincast.live](https://plaincast.live)** · **[☕ Support the Project](https://buymeacoffee.com/notjbg)** · **[💡 Suggest a Feature](https://github.com/notjbg/plaincast/issues)**
+**[→ plaincast.live](https://plaincast.live)** · **[☕ Support the Project](https://buymeacoffee.com/notjbg)** · **[💡 Suggest a Feature](https://github.com/jonahberg/plaincast/issues)**
 
 ---
 
@@ -145,7 +145,7 @@ Plaincast turns that into:
 
 ## Credits
 
-Built by [Jonah Berg](https://github.com/notjbg). Forecast data from the [National Weather Service](https://www.weather.gov). Summaries powered by [Claude](https://www.anthropic.com/claude/haiku).
+Built by [Jonah Berg](https://github.com/jonahberg). Forecast data from the [National Weather Service](https://www.weather.gov). Summaries powered by [Claude](https://www.anthropic.com/claude/haiku).
 
 ---
 
