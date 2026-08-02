@@ -126,7 +126,7 @@ export default async function handler(req, res) {
         }
 
         const result = await generateText({
-            model: 'deepseek/deepseek-v4-flash-0731',
+            model: 'anthropic/claude-haiku-4.5',
             system: SYSTEM,
             prompt,
             maxOutputTokens: 400,

@@ -1,6 +1,6 @@
 // Vercel serverless function: one-line plain-English "what changed since the
 // last AFD issuance" per office. Diffs the latest two AFDs at the paragraph
-// level and summarizes the delta via DeepSeek V4 Flash (AI Gateway), cached per
+// level and summarizes the delta via Claude Haiku (AI Gateway), cached per
 // issuance so AI runs at most once per (office, issuance).
 import { generateText } from 'ai';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
@@ -175,7 +175,7 @@ export default async function handler(req, res) {
         const prompt = `Forecast office: ${OFFICE_NAMES[office]}.\n\nNEW OR CHANGED PASSAGES FROM THE LATEST UPDATE:\n\n${changes.join('\n\n')}`;
 
         const result = await generateText({
-            model: 'deepseek/deepseek-v4-flash-0731',
+            model: 'anthropic/claude-haiku-4.5',
             system,
             prompt,
             maxOutputTokens: 120,
