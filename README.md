@@ -19,7 +19,7 @@ Plaincast sets each edition like a fine print publication: plain-English transla
 ## Features
 
 ### 🤖 AI-Powered Summaries
-Every forecast section is summarized by Claude (Haiku) into natural, readable prose. Not just abbreviation expansion - actual explanation of *why* weather is happening, what the models show, and what it means for you. Translations are computed once per issuance and served from the CDN, so AI cost is bounded by (offices × issuances), not traffic. Falls back to regex translation if the model is unavailable - the page works, and makes sense, before and without AI.
+Every forecast section is summarized by AI into natural, readable prose. Not just abbreviation expansion - actual explanation of *why* weather is happening, what the models show, and what it means for you. Translations are computed once per issuance and served from the CDN, so AI cost is bounded by (offices × issuances), not traffic. Falls back to regex translation if the model is unavailable - the page works, and makes sense, before and without AI.
 
 ### 📖 Side-by-Side Layout
 AI summary on the left, original AFD with jargon annotations on the right. Every highlighted term in the original has a hover tooltip (or tap on mobile) explaining what it means. 230+ term glossary covering synoptic meteorology, aviation, marine, pressure levels, model names, and airport codes, plus 109 abbreviation expansion patterns.
@@ -96,7 +96,7 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 - **Modular vanilla app** - ES modules in `docs/js/`, no framework, no build step
 - **Zero frontend dependencies** - Vanilla HTML/CSS/JS with ES module imports
 - **NWS API** - Pulls directly from `api.weather.gov` (no API key needed)
-- **AI summaries** - Claude Haiku via Vercel AI Gateway with OIDC auth
+- **AI summaries** - DeepSeek V4 Flash via Vercel AI Gateway with OIDC auth
 - **Forecast diff** - Paragraph-level comparison showing what changed between AFD versions
 - **Custom typography** - Fraunces display, Source Serif 4 body, DM Sans UI, JetBrains Mono for raw AFD; self-hosted subsetted woff2 (~393KB total, real small caps and oldstyle figures)
 - **Light/dark mode** - Editorial design with warm cream backgrounds, dark mode with warm near-blacks
@@ -145,7 +145,7 @@ Plaincast turns that into:
 
 ## Credits
 
-Built by [Jonah Berg](https://github.com/notjbg). Forecast data from the [National Weather Service](https://www.weather.gov). Summaries powered by [Claude](https://www.anthropic.com/claude/haiku).
+Built by [Jonah Berg](https://github.com/notjbg). Forecast data from the [National Weather Service](https://www.weather.gov). Summaries powered by AI.
 
 ---
 

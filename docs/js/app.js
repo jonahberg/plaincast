@@ -898,7 +898,7 @@ function lazyExplain(host, data, place) {
         .then(d => {
             if (gen !== alertRenderGen) return;
             if (d && d.explanation) {
-                lead.innerHTML = '<div class="hz-plain-label">In plain English · via <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a></div>'
+                lead.innerHTML = '<div class="hz-plain-label">In plain English · simplified by AI</div>'
                     + formatTranslationHTML(d.explanation);
             } else {
                 lead.remove();
@@ -1204,10 +1204,10 @@ function render(sections, productContext = {}) {
                 if (renderGen !== fetchGeneration) return;
                 plainCol.innerHTML = html;
                 plainCol.style.opacity = '1';
-                // Credit Claude only once its translation is actually on screen —
+                // Swap in the AI credit only once its translation is actually on screen —
                 // the regex gloss shown before (or instead, on AI failure) isn't its work.
                 const colLabel = el.querySelector('.col-label');
-                if (colLabel) colLabel.innerHTML = 'In plain English · via <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a>';
+                if (colLabel) colLabel.innerHTML = 'In plain English · simplified by AI';
                 setTimeout(() => { plainCol.style.minHeight = ''; }, 250);
             }, 200);
         } catch (err) {

@@ -1,9 +1,9 @@
 // Plaincast Service Worker — offline-capable weather forecasts
-const CACHE_NAME = 'plaincast-v8';
+const CACHE_NAME = 'plaincast-v9';
 // Runtime /api/* responses live in their own cache, trimmed FIFO — every
 // office/edition URL is a distinct key, so folding them into the app-shell
 // cache would grow it without bound.
-const RUNTIME_CACHE = 'plaincast-runtime-v8';
+const RUNTIME_CACHE = 'plaincast-runtime-v9';
 const RUNTIME_MAX = 60;
 const APP_SHELL = [
     '/',
