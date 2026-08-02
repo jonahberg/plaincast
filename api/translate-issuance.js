@@ -142,7 +142,7 @@ export default async function handler(req, res) {
         const settled = await Promise.all(sections.map(async (s) => {
             try {
                 const result = await generateText({
-                    model: 'anthropic/claude-haiku-4.5',
+                    model: 'deepseek/deepseek-v4-flash-0731',
                     system: buildSystemPrompt({ section: s.key, office, issuanceTime }),
                     prompt: s.text,
                     maxOutputTokens: 1024,

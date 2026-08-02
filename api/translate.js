@@ -1,4 +1,4 @@
-// Vercel serverless function: AI translation of AFD sections via Claude Haiku
+// Vercel serverless function: AI translation of AFD sections via DeepSeek V4 Flash
 // Uses AI Gateway for model routing, failover, and cost tracking
 
 import { generateText } from 'ai';
@@ -362,7 +362,7 @@ export default async function handler(req, res) {
 
     try {
         const result = await generateText({
-            model: 'anthropic/claude-haiku-4.5',
+            model: 'deepseek/deepseek-v4-flash-0731',
             system: systemPrompt,
             prompt: text,
             maxOutputTokens: degraded ? DEGRADED_MAX_TOKENS : 1024,
