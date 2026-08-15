@@ -1,5 +1,7 @@
 import { describe, test, expect, afterEach } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { officeFromAlert, groupDispatches, buildCensus, parseSpcOutlook } from '../api/_national.js';
+import { OFFICE_NAMES } from '../docs/js/offices.js';
 // `?real` forces a distinct module instance from the bare '../api/_utils.js'
 // specifier. Several other test files call mock.module('../api/_utils.js',
 // ...) with stubs that predate these three exports; Bun's module mocks are
@@ -110,5 +112,37 @@ describe('national fetchers', () => {
     test('fetchAlertTotals returns null on non-OK (soft data)', async () => {
         globalThis.fetch = async () => new Response('nope', { status: 503 });
         expect(await fetchAlertTotals({})).toBeNull();
+    });
+});
+
+// The baked shell is the fail-safe floor for /national/: api/national-desk.js
+// string-replaces the #desk-loading marker with SSR content and, on any error,
+// serves these exact bytes. These assertions pin the marker contract (drift
+// here silently degrades the live page to the shell forever) and the shell's
+// standalone value — a typeset index linking all 68 local desks.
+// Paths are repo-root-relative, matching the readFileSync in tests/sw.test.js.
+describe('national shell', () => {
+    const shell = readFileSync('docs/national/index.html', 'utf8');
+
+    test('carries the SSR marker and local-desk slot', () => {
+        expect(shell).toContain('<div class="loading" id="desk-loading">Setting the type…</div>');
+        expect(shell).toContain('id="local-desk"');
+        expect(shell).toContain('src="/js/national.js"');
+    });
+
+    test('links every covered office in the desk index', () => {
+        for (const code of Object.keys(OFFICE_NAMES)) {
+            expect(shell).toContain(`href="/o/${code}/"`);
+        }
+    });
+
+    test('self-canonical, absolute assets, static OG card', () => {
+        expect(shell).toContain('<link rel="canonical" href="https://plaincast.live/national/">');
+        expect(shell).toContain('href="/styles.css"');
+        expect(shell).toContain('content="https://plaincast.live/og-image.png"');
+    });
+
+    test('is excluded from deployment', () => {
+        expect(readFileSync('.vercelignore', 'utf8')).toMatch(/^docs\/national$/m);
     });
 });

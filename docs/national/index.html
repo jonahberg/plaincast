@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The National Desk · Plaincast</title>
+    <meta name="description" content="Where the weather is today — the national front page of Plaincast. The SPC outlook in plain English, and every forecast office under a severe warning.">
+    <meta name="keywords" content="severe weather, SPC convective outlook, Day 1 outlook, tornado warning, severe thunderstorm warning, NWS alerts, National Weather Service, plain English weather">
+    <meta name="theme-color" content="#f7f3ea">
+    <meta name="author" content="Jonah Berg">
+    <meta property="og:locale" content="en_US">
+    <meta name="google-site-verification" content="IdNCtGpFPAc0ZPT6T41Z-KgfP-AzHr7qfAn-7asX96Y">
+    <link rel="canonical" href="https://plaincast.live/national/">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>">
+    <!-- api.weather.gov gates all forecast content; warm the connection early -->
+    <link rel="preconnect" href="https://api.weather.gov" crossorigin>
+    <link rel="modulepreload" href="/js/national.js">
+    <link rel="preload" href="/fonts/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/source-serif-4-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/fonts/fonts.css">
+    <script defer src="/_vercel/insights/script.js"></script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
+    <!-- Pre-paint theme + sky-phase (blocking, no defer/module): must run
+         before first paint. Extracted to a file so the CSP needs no
+         script-src 'unsafe-inline'. -->
+    <script src="/js/theme-init.js"></script>
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://plaincast.live/national/">
+    <meta property="og:title" content="The National Desk · Plaincast">
+    <meta property="og:description" content="Where the weather is today — the national front page of Plaincast. The SPC outlook in plain English, and every forecast office under a severe warning.">
+    <meta property="og:site_name" content="Plaincast">
+    <meta property="og:image" content="https://plaincast.live/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="The NWS forecast, decoded into plain English">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="The National Desk · Plaincast">
+    <meta name="twitter:description" content="Where the weather is today — the national front page of Plaincast. The SPC outlook in plain English, and every forecast office under a severe warning.">
+    <meta name="twitter:image" content="https://plaincast.live/og-image.png">
+    <meta name="twitter:image:alt" content="The NWS forecast, decoded into plain English">
+
+    <!-- Structured Data. Page-specific only: the homepage's WebApplication /
+         FAQPage / HowTo blocks describe the office reader, not this front
+         page, so they are deliberately not duplicated here. -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "@id": "https://plaincast.live/national/",
+        "url": "https://plaincast.live/national/",
+        "name": "The National Desk",
+        "description": "Where the weather is today — the national front page of Plaincast. The SPC Day 1 Convective Outlook in plain English, every forecast office under a severe warning, and an index of all 68 local editions.",
+        "inLanguage": "en-US",
+        "isPartOf": {
+            "@type": "WebSite",
+            "name": "Plaincast",
+            "url": "https://plaincast.live"
+        },
+        "author": {
+            "@type": "Person",
+            "name": "Jonah Berg",
+            "url": "https://jonahberg.com"
+        },
+        "sourceOrganization": {
+            "@type": "GovernmentOrganization",
+            "name": "National Weather Service",
+            "url": "https://www.weather.gov"
+        }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Plaincast",
+                "item": "https://plaincast.live"
+            },
+            {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "The National Desk",
+                "item": "https://plaincast.live/national/"
+            }
+        ]
+    }
+    </script>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- Living atmosphere: a fixed, time-of-day-tinted sky behind the paper. Decorative. -->
+<div class="atmosphere" aria-hidden="true">
+    <div class="atmosphere-wash"></div>
+    <div class="atmosphere-glow"></div>
+    <div class="atmosphere-grain"></div>
+</div>
+
+<a class="skip-link" href="#desk">Skip to the desk</a>
+
+<div class="sheet">
+<!-- Masthead: the nameplate, motto, and dateline -->
+<header class="masthead header">
+    <div class="wrap masthead-inner">
+        <div class="folio folio-left" id="folio-date"></div>
+        <div class="nameplate-block">
+            <h1 class="nameplate">Plaincast</h1>
+        </div>
+        <div class="folio folio-right">The National Desk</div>
+        <p class="motto">What the forecast actually says</p>
+        <div class="rule-double" role="presentation"></div>
+        <p class="dateline">
+            <span class="dateline-city">UNITED STATES</span>
+            <span class="dateline-sep" aria-hidden="true">·</span>
+            <span class="dateline-date">Convective Outlook &amp; Severe Wire</span>
+        </p>
+    </div>
+</header>
+
+<!-- The desk. api/national-desk.js replaces the #desk-loading div below with
+     the server-rendered lede + wire + census; on any upstream failure these
+     exact bytes ship instead, so the page is never less than a masthead and a
+     typeset index of every local edition. Do not edit the marker div. -->
+<main class="wrap main" id="desk">
+    <p class="local-desk" id="local-desk" hidden></p>
+    <div class="loading" id="desk-loading">Setting the type…</div>
+</main>
+
+<!-- Office index: internal links to every per-office edition. Copied verbatim
+     from docs/index.html so the two stay byte-identical; keep in sync with
+     OFFICE_NAMES in docs/js/offices.js (tests/national.test.js enforces the
+     pairing here, tests/seo-pages.test.js on the homepage). -->
+<nav class="office-index" aria-label="All Plaincast forecast offices">
+    <div class="wrap office-index-inner">
+        <div class="office-index-rule" role="presentation"></div>
+        <h2 class="office-index-label">The forecast, office by office</h2>
+        <ul class="office-index-list">
+            <li><a href="/o/OKX/">New York (OKX)</a></li>
+            <li><a href="/o/BOX/">Boston (BOX)</a></li>
+            <li><a href="/o/PHI/">Philadelphia (PHI)</a></li>
+            <li><a href="/o/LWX/">Washington DC (LWX)</a></li>
+            <li><a href="/o/PBZ/">Pittsburgh (PBZ)</a></li>
+            <li><a href="/o/BUF/">Buffalo (BUF)</a></li>
+            <li><a href="/o/RAH/">Raleigh (RAH)</a></li>
+            <li><a href="/o/CHS/">Charleston SC (CHS)</a></li>
+            <li><a href="/o/FFC/">Atlanta (FFC)</a></li>
+            <li><a href="/o/MFL/">Miami (MFL)</a></li>
+            <li><a href="/o/JAX/">Jacksonville (JAX)</a></li>
+            <li><a href="/o/TBW/">Tampa Bay (TBW)</a></li>
+            <li><a href="/o/BMX/">Birmingham (BMX)</a></li>
+            <li><a href="/o/OHX/">Nashville (OHX)</a></li>
+            <li><a href="/o/MRX/">Morristown (MRX)</a></li>
+            <li><a href="/o/JAN/">Jackson MS (JAN)</a></li>
+            <li><a href="/o/LOT/">Chicago (LOT)</a></li>
+            <li><a href="/o/DTX/">Detroit (DTX)</a></li>
+            <li><a href="/o/IND/">Indianapolis (IND)</a></li>
+            <li><a href="/o/CLE/">Cleveland (CLE)</a></li>
+            <li><a href="/o/ILN/">Cincinnati (ILN)</a></li>
+            <li><a href="/o/MKX/">Milwaukee (MKX)</a></li>
+            <li><a href="/o/GRR/">Grand Rapids (GRR)</a></li>
+            <li><a href="/o/LSX/">St. Louis (LSX)</a></li>
+            <li><a href="/o/EAX/">Kansas City (EAX)</a></li>
+            <li><a href="/o/DMX/">Des Moines (DMX)</a></li>
+            <li><a href="/o/MPX/">Minneapolis (MPX)</a></li>
+            <li><a href="/o/DLH/">Duluth (DLH)</a></li>
+            <li><a href="/o/FSD/">Sioux Falls (FSD)</a></li>
+            <li><a href="/o/BIS/">Bismarck (BIS)</a></li>
+            <li><a href="/o/OAX/">Omaha (OAX)</a></li>
+            <li><a href="/o/FGF/">Grand Forks (FGF)</a></li>
+            <li><a href="/o/FWD/">Dallas/Fort Worth (FWD)</a></li>
+            <li><a href="/o/HGX/">Houston (HGX)</a></li>
+            <li><a href="/o/EWX/">San Antonio (EWX)</a></li>
+            <li><a href="/o/OUN/">Oklahoma City (OUN)</a></li>
+            <li><a href="/o/TSA/">Tulsa (TSA)</a></li>
+            <li><a href="/o/LZK/">Little Rock (LZK)</a></li>
+            <li><a href="/o/LIX/">New Orleans (LIX)</a></li>
+            <li><a href="/o/SHV/">Shreveport (SHV)</a></li>
+            <li><a href="/o/LCH/">Lake Charles (LCH)</a></li>
+            <li><a href="/o/BOU/">Denver (BOU)</a></li>
+            <li><a href="/o/PUB/">Pueblo (PUB)</a></li>
+            <li><a href="/o/GJT/">Grand Junction (GJT)</a></li>
+            <li><a href="/o/SLC/">Salt Lake City (SLC)</a></li>
+            <li><a href="/o/BOI/">Boise (BOI)</a></li>
+            <li><a href="/o/BYZ/">Billings (BYZ)</a></li>
+            <li><a href="/o/MSO/">Missoula (MSO)</a></li>
+            <li><a href="/o/RIW/">Riverton (RIW)</a></li>
+            <li><a href="/o/PSR/">Phoenix (PSR)</a></li>
+            <li><a href="/o/VEF/">Las Vegas (VEF)</a></li>
+            <li><a href="/o/TWC/">Tucson (TWC)</a></li>
+            <li><a href="/o/FGZ/">Flagstaff (FGZ)</a></li>
+            <li><a href="/o/ABQ/">Albuquerque (ABQ)</a></li>
+            <li><a href="/o/EPZ/">El Paso (EPZ)</a></li>
+            <li><a href="/o/LOX/">Los Angeles (LOX)</a></li>
+            <li><a href="/o/SGX/">San Diego (SGX)</a></li>
+            <li><a href="/o/MTR/">San Francisco (MTR)</a></li>
+            <li><a href="/o/STO/">Sacramento (STO)</a></li>
+            <li><a href="/o/HNX/">Central California (HNX)</a></li>
+            <li><a href="/o/EKA/">Eureka (EKA)</a></li>
+            <li><a href="/o/SEW/">Seattle (SEW)</a></li>
+            <li><a href="/o/PQR/">Portland (PQR)</a></li>
+            <li><a href="/o/MFR/">Medford (MFR)</a></li>
+            <li><a href="/o/OTX/">Spokane (OTX)</a></li>
+            <li><a href="/o/AFC/">Anchorage (AFC)</a></li>
+            <li><a href="/o/AFG/">Fairbanks (AFG)</a></li>
+            <li><a href="/o/HFO/">Honolulu (HFO)</a></li>
+        </ul>
+    </div>
+</nav>
+
+<footer class="colophon">
+    <div class="wrap colophon-inner">
+        <div class="colophon-rule" role="presentation"></div>
+        <p class="colophon-line">
+            <span class="colophon-mark">❧</span>
+            Reported by the <a href="https://www.weather.gov" target="_blank" rel="noopener noreferrer">National Weather Service</a>
+            and the <a href="https://www.spc.noaa.gov" target="_blank" rel="noopener noreferrer">Storm Prediction Center</a>.
+            Translated by <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a>.
+        </p>
+        <p class="colophon-line colophon-links">
+            <a href="/">Read your local edition</a>
+            <span class="dot" aria-hidden="true">·</span>
+            <a href="https://github.com/jonahberg/plaincast" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
+            <span class="dot" aria-hidden="true">·</span>
+            <span class="colophon-credit">Set by <a href="https://jonahberg.com" target="_blank" rel="noopener noreferrer">Jonah Berg</a></span>
+        </p>
+    </div>
+</footer>
+</div><!-- /.sheet -->
+
+<script type="module" src="/js/national.js" defer></script>
+
+</body>
+</html>

@@ -6,3 +6,9 @@
 # baked page in-memory (renderOfficePage + docs/index.html via includeFiles)
 # as its fail-safe fallback, so /o/<CODE>/ never serves less than today.
 docs/o
+
+# Same reasoning for the baked National Desk shell: a deployed static
+# docs/national/index.html would shadow the /national rewrite and
+# api/national-desk.js would never run (it serves these same bytes as its
+# fail-safe fallback, delivered via includeFiles).
+docs/national
