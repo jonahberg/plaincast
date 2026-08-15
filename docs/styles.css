@@ -1034,11 +1034,11 @@ body.view-changelog .section-nav { display: none !important; }
 
 /* ── The National Desk ─────────────────────────────────────────── */
 .desk-lede { margin: 2rem 0 2.5rem; text-align: center; }
-.desk-kicker { font-family: 'DM Sans', sans-serif; text-transform: uppercase; letter-spacing: .14em; font-size: .78rem; color: var(--rubric); }
-.desk-deck { font-family: Fraunces, serif; font-variation-settings: 'opsz' 40; font-size: clamp(1.3rem, 3vw, 1.8rem); line-height: 1.35; margin: .6rem auto 0; max-width: 42ch; }
+.desk-kicker { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .14em; font-size: .78rem; color: var(--rubric); }
+.desk-deck { font-family: var(--font-display); font-variation-settings: 'opsz' 40; font-size: clamp(1.3rem, 3vw, 1.8rem); line-height: 1.35; margin: .6rem auto 0; max-width: 42ch; }
 .desk-attrib { color: var(--text-muted); font-size: .85rem; margin-top: .6rem; font-style: italic; }
 .wire { border-top: 2px solid var(--ink); margin-top: 2.5rem; }
-.wire-label { font-family: 'DM Sans', sans-serif; text-transform: uppercase; letter-spacing: .14em; font-size: .78rem; padding: .5rem 0; border-bottom: 1px solid var(--control-line); }
+.wire-label { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .14em; font-size: .78rem; padding: .5rem 0; border-bottom: 1px solid var(--control-line); }
 .wire-list { list-style: none; margin: 0; padding: 0; }
 .wire-item { display: flex; justify-content: space-between; gap: 1rem; padding: .55rem 0; border-bottom: 1px solid var(--control-line); font-variant-numeric: oldstyle-nums; }
 .wire-item .wire-event { color: var(--text-muted); text-align: right; }

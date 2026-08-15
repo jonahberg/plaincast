@@ -128,7 +128,14 @@
 <!-- The desk. api/national-desk.js replaces the #desk-loading div below with
      the server-rendered lede + wire + census; on any upstream failure these
      exact bytes ship instead, so the page is never less than a masthead and a
-     typeset index of every local edition. Do not edit the marker div. -->
+     typeset index of every local edition. Do not edit the marker div.
+
+     This shell lives in api/ (underscore-prefixed, so Vercel does not treat it
+     as an endpoint — same convention as api/_utils.js) rather than under
+     docs/. Keeping it out of the deployed static root means there is no
+     docs/national/index.html to shadow the /national rewrite, so it needs no
+     .vercelignore entry, and it reaches the function through the proven
+     includeFiles path already used for api/_og-fonts/**. -->
 <main class="wrap main" id="desk">
     <p class="local-desk" id="local-desk" hidden></p>
     <div class="loading" id="desk-loading">Setting the type…</div>

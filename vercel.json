@@ -9,7 +9,7 @@
       "includeFiles": "api/_og-fonts/**"
     },
     "api/national-desk.js": {
-      "includeFiles": "docs/national/index.html"
+      "includeFiles": "api/_national-shell.html"
     }
   },
   "rewrites": [

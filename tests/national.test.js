@@ -1,5 +1,5 @@
 import { describe, test, expect, afterEach } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { officeFromAlert, groupDispatches, buildCensus, parseSpcOutlook } from '../api/_national.js';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 // `?real` forces a distinct module instance from the bare '../api/_utils.js'
@@ -120,9 +120,18 @@ describe('national fetchers', () => {
 // serves these exact bytes. These assertions pin the marker contract (drift
 // here silently degrades the live page to the shell forever) and the shell's
 // standalone value — a typeset index linking all 68 local desks.
+//
+// The shell lives at api/_national-shell.html, NOT under docs/. Unlike the
+// per-office pages it has no reason to exist in the static root: nothing links
+// to a static /national/index.html, and putting one there would shadow the
+// /national rewrite (rewrites are evaluated after the filesystem check), which
+// would then need a .vercelignore entry — and an ignored file's availability to
+// `includeFiles` is undocumented. Underscore-prefixed in api/ sidesteps all of
+// it: Vercel does not treat it as an endpoint (see api/_utils.js) and it ships
+// to the function via the same includeFiles path as api/_og-fonts/**.
 // Paths are repo-root-relative, matching the readFileSync in tests/sw.test.js.
 describe('national shell', () => {
-    const shell = readFileSync('docs/national/index.html', 'utf8');
+    const shell = readFileSync('api/_national-shell.html', 'utf8');
 
     test('carries the SSR marker and local-desk slot', () => {
         expect(shell).toContain('<div class="loading" id="desk-loading">Setting the type…</div>');
@@ -142,7 +151,21 @@ describe('national shell', () => {
         expect(shell).toContain('content="https://plaincast.live/og-image.png"');
     });
 
-    test('is excluded from deployment', () => {
-        expect(readFileSync('.vercelignore', 'utf8')).toMatch(/^docs\/national$/m);
+    // Guards the routing hazard in the other direction: if anyone reintroduces
+    // a static docs/national/, it shadows the /national rewrite and
+    // api/national-desk.js silently stops running. Keeping the shell out of
+    // docs/ is what makes a .vercelignore entry unnecessary, so a rule
+    // reappearing there is the signal that the shell moved back.
+    test('no static docs/national/ exists to shadow the /national rewrite', () => {
+        expect(existsSync('docs/national')).toBe(false);
+        expect(readFileSync('.vercelignore', 'utf8')).not.toMatch(/docs\/national/);
+    });
+
+    test('ships to the serverless function via includeFiles', () => {
+        const cfg = JSON.parse(readFileSync('vercel.json', 'utf8'));
+        expect(cfg.functions['api/national-desk.js'].includeFiles).toBe('api/_national-shell.html');
+        const sources = cfg.rewrites.map(r => r.source);
+        expect(sources).toContain('/national');
+        expect(sources).toContain('/national/');
     });
 });
