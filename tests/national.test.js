@@ -1,5 +1,15 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, afterEach } from 'bun:test';
 import { officeFromAlert, groupDispatches, buildCensus, parseSpcOutlook } from '../api/_national.js';
+// `?real` forces a distinct module instance from the bare '../api/_utils.js'
+// specifier. Several other test files call mock.module('../api/_utils.js',
+// ...) with stubs that predate these three exports; Bun's module mocks are
+// process-global (not file-scoped) and also hijack same-module internal
+// cross-references (fetchSpcDy1 -> fetchAFDProduct/productUrlFromItem), so a
+// plain import here can silently receive a stale, partially-stubbed module
+// depending on file run order. The query-string suffix sidesteps that by
+// resolving to a fresh, unmocked instance (_utils.js has no module-level
+// state beyond a constant, so double-instantiation is safe).
+import { fetchSevereAlerts, fetchAlertTotals, fetchSpcDy1 } from '../api/_utils.js?real';
 import alerts from './fixtures/national/severe-alerts.json';
 import swody1 from './fixtures/national/swody1.json';
 
@@ -64,3 +74,41 @@ describe('parseSpcOutlook', () => {
 function f(event, severity, awips) {
     return { properties: { event, severity, parameters: { AWIPSidentifier: [awips] } } };
 }
+
+// These three fetchers call the global `fetch` directly (NWS APIs), so we
+// stub globalThis.fetch per test rather than mock.module — mirroring the
+// save/restore mechanics in tests/api-conditions.test.js. realFetch is
+// captured once here and restored after every test so no mock leaks into
+// the rest of the suite.
+describe('national fetchers', () => {
+    const realFetch = globalThis.fetch;
+    afterEach(() => { globalThis.fetch = realFetch; });
+
+    test('fetchSevereAlerts hits the exact verified query and unwraps features', async () => {
+        let seen;
+        globalThis.fetch = async (url) => {
+            seen = String(url);
+            return new Response(JSON.stringify({ features: [{ properties: { event: 'X' } }] }), { status: 200 });
+        };
+        const feats = await fetchSevereAlerts({});
+        expect(seen).toBe('https://api.weather.gov/alerts/active?status=actual&severity=Severe,Extreme&region_type=land');
+        expect(feats.length).toBe(1);
+    });
+
+    test('fetchSpcDy1 follows @graph[0]["@id"] and returns text+issuance', async () => {
+        globalThis.fetch = async (url) => {
+            if (String(url).includes('/products/types/SWO/locations/DY1')) {
+                return new Response(JSON.stringify({ '@graph': [{ '@id': 'https://api.weather.gov/products/abc' }] }), { status: 200 });
+            }
+            return new Response(JSON.stringify({ productText: 'TEXT', issuanceTime: '2026-08-15T19:42:00+00:00' }), { status: 200 });
+        };
+        const out = await fetchSpcDy1({});
+        expect(out.productText).toBe('TEXT');
+        expect(out.issuanceTime).toContain('2026');
+    });
+
+    test('fetchAlertTotals returns null on non-OK (soft data)', async () => {
+        globalThis.fetch = async () => new Response('nope', { status: 503 });
+        expect(await fetchAlertTotals({})).toBeNull();
+    });
+});
