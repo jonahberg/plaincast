@@ -29,6 +29,13 @@ $$`;
 let mockList = [];
 let mockListThrows = false;
 mock.module('../api/_utils.js', () => ({
+    // A module mock replaces the WHOLE module process-wide (Bun mocks are
+    // global), so the National Desk fetchers must be stubbed here too —
+    // omitting them makes api/national-desk.js fail to link when this file
+    // loads first. Stub every export of _utils.js, always.
+    fetchSevereAlerts: async () => [],
+    fetchAlertTotals: async () => null,
+    fetchSpcDy1: async () => null,
     fetchAlertById: async () => null,
     fetchAFDList: async () => { if (mockListThrows) throw new Error('NWS down'); return mockList; },
     fetchAFDProduct: async () => ({ productText: AFD_TEXT, issuanceTime: '2026-03-24T18:25:00+00:00' }),
