@@ -1,19 +1,25 @@
 import { describe, test, expect, afterEach } from 'bun:test';
 import { readFileSync, existsSync } from 'node:fs';
-import { officeFromAlert, groupDispatches, buildCensus, parseSpcOutlook } from '../api/_national.js';
+import {
+    officeFromAlert, groupDispatches, buildCensus, parseSpcOutlook,
+    parseRiskCategory, parseDiscussionBody, digestArea, formatExpiry, nextOutlookTime,
+} from '../api/_national.js';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 // `?real` forces a distinct module instance from the bare '../api/_utils.js'
 // specifier. Several other test files call mock.module('../api/_utils.js',
-// ...) with stubs that predate these three exports; Bun's module mocks are
+// ...) with stubs that predate these four exports; Bun's module mocks are
 // process-global (not file-scoped) and also hijack same-module internal
 // cross-references (fetchSpcDy1 -> fetchAFDProduct/productUrlFromItem), so a
 // plain import here can silently receive a stale, partially-stubbed module
 // depending on file run order. The query-string suffix sidesteps that by
 // resolving to a fresh, unmocked instance (_utils.js has no module-level
 // state beyond a constant, so double-instantiation is safe).
-import { fetchSevereAlerts, fetchAlertTotals, fetchSpcDy1 } from '../api/_utils.js?real';
+import { fetchSevereAlerts, fetchAlertTotals, fetchSpcDy1, fetchSpcOutlook } from '../api/_utils.js?real';
 import alerts from './fixtures/national/severe-alerts.json';
 import swody1 from './fixtures/national/swody1.json';
+import swody1Fresh from './fixtures/national/swody1-fresh.json';
+import swody2 from './fixtures/national/swody2.json';
+import swody3 from './fixtures/national/swody3.json';
 
 const NAMES = { PUB: 'Pueblo', EPZ: 'El Paso', LOT: 'Chicago' };
 
@@ -37,8 +43,11 @@ describe('groupDispatches', () => {
             f('Flood Watch', 'Severe', 'FFAEPZ'), // watch: excluded
         ];
         const rows = groupDispatches(feats, NAMES);
-        expect(rows[0]).toEqual({ code: 'LOT', city: 'Chicago', event: 'Tornado Warning', count: 1, extreme: true });
-        expect(rows[1]).toEqual({ code: 'PUB', city: 'Pueblo', event: 'Severe Thunderstorm Warning', count: 2, extreme: false });
+        // toMatchObject (not toEqual): rows now also carry raw areaDesc/expires
+        // passthrough fields (see the dedicated describe block below) — the
+        // code/city/event/count/extreme contract here is unchanged.
+        expect(rows[0]).toMatchObject({ code: 'LOT', city: 'Chicago', event: 'Tornado Warning', count: 1, extreme: true });
+        expect(rows[1]).toMatchObject({ code: 'PUB', city: 'Pueblo', event: 'Severe Thunderstorm Warning', count: 2, extreme: false });
         expect(rows.length).toBe(2);
     });
     test('uncovered office keeps its dispatch with city null', () => {
@@ -48,6 +57,30 @@ describe('groupDispatches', () => {
     });
     test('live fixture produces rows without throwing', () => {
         expect(Array.isArray(groupDispatches(alerts.features, NAMES))).toBe(true);
+    });
+    test('passes through raw areaDesc/expires from the leading warning, unformatted', () => {
+        const rows = groupDispatches(
+            [f('Severe Thunderstorm Warning', 'Severe', 'SVRPUB', { areaDesc: 'Otero; Crowley', expires: '2026-08-16T01:30:00Z' })],
+            NAMES,
+        );
+        expect(rows[0].areaDesc).toBe('Otero; Crowley');
+        expect(rows[0].expires).toBe('2026-08-16T01:30:00Z');
+    });
+    test('expires falls back to ends; both null when absent', () => {
+        const withEnds = groupDispatches([f('Tornado Warning', 'Extreme', 'TORLOT', { ends: '2026-08-16T02:00:00Z' })], NAMES);
+        expect(withEnds[0].expires).toBe('2026-08-16T02:00:00Z');
+        const withNeither = groupDispatches([f('Tornado Warning', 'Extreme', 'TORLOT')], NAMES);
+        expect(withNeither[0].areaDesc).toBeNull();
+        expect(withNeither[0].expires).toBeNull();
+    });
+    test('promotion to a worse warning carries that warning\'s own areaDesc/expires, not the first warning\'s', () => {
+        const rows = groupDispatches([
+            f('Severe Thunderstorm Warning', 'Severe', 'SVRPUB', { areaDesc: 'FirstArea', expires: '2026-08-16T01:00:00Z' }),
+            f('Tornado Warning', 'Extreme', 'SVRPUB', { areaDesc: 'SecondArea', expires: '2026-08-16T02:00:00Z' }),
+        ], NAMES);
+        expect(rows[0].event).toBe('Tornado Warning');
+        expect(rows[0].areaDesc).toBe('SecondArea');
+        expect(rows[0].expires).toBe('2026-08-16T02:00:00Z');
     });
 });
 
@@ -73,8 +106,118 @@ describe('parseSpcOutlook', () => {
     });
 });
 
-function f(event, severity, awips) {
-    return { properties: { event, severity, parameters: { AWIPSidentifier: [awips] } } };
+describe('parseRiskCategory', () => {
+    test('extracts level and regions from a THERE-IS headline', () => {
+        const r = parseRiskCategory('THERE IS A SLIGHT RISK OF SEVERE THUNDERSTORMS PORTIONS OF THE OHIO VALLEY AND PARTS OF THE CENTRAL HIGH PLAINS');
+        expect(r.level).toBe('SLIGHT');
+        expect(r.regions).toMatch(/Ohio Valley/i);
+    });
+    test('all five categorical words map', () => {
+        for (const w of ['MARGINAL','SLIGHT','ENHANCED','MODERATE','HIGH']) {
+            expect(parseRiskCategory(`THERE IS A ${w} RISK OF SEVERE THUNDERSTORMS SOMEWHERE`).level).toBe(w);
+        }
+    });
+    test('null on no-risk / garbage headlines (calm face)', () => {
+        expect(parseRiskCategory('NO SEVERE THUNDERSTORM AREAS FORECAST')).toBeNull();
+        expect(parseRiskCategory(null)).toBeNull();
+    });
+});
+
+describe('parseDiscussionBody', () => {
+    // The FRESH-issuance fixture (12:44Z, first product of its cycle) is the
+    // one that exercises the running-copy path end to end: no PREV block, no
+    // reissue preamble, discussion prose straight after the summary.
+    test('returns post-SUMMARY prose only, from the live fresh-issuance DY1 fixture', () => {
+        const paras = parseDiscussionBody(swody1Fresh.productText);
+        expect(paras.length).toBeGreaterThan(0);
+        expect(paras.length).toBeLessThanOrEqual(3);
+        const { summary } = parseSpcOutlook(swody1Fresh.productText);
+        expect(paras[0]).not.toBe(summary);           // never the summary itself
+        for (const p of paras) {
+            expect(p).not.toMatch(/^\.\.\./);          // no section-header lines
+            expect(p.length).toBeGreaterThanOrEqual(40);
+        }
+        // spec: running copy opens with the meteorology, not editorial preamble
+        expect(paras[0]).toMatch(/^Satellite and regional radar imagery/);
+    });
+    test('empty array when nothing follows the summary', () => {
+        expect(parseDiscussionBody('...SUMMARY...\nOnly a summary here with enough length to pass filters.\n$$')).toEqual([]);
+        expect(parseDiscussionBody('')).toEqual([]);
+    });
+
+    // The 20Z DY1 fixture is a REISSUE: a ".PREV DISCUSSION... /ISSUED 1135
+    // AM/" block republishing the superseded 11:35 AM discussion, and above
+    // it a paragraph of reissue housekeeping ("The previous forecast (see
+    // below) remains generally on track…"). Neither is current forecast
+    // prose: the PREV block is this morning's forecast, and the preamble
+    // points at content we just cut, so "(see below)" would dangle at the
+    // reader. Both go; the product then has no running copy of its own and
+    // falls back to the summary (spec §5).
+    test('a reissued product yields no running copy at all — PREV block and preamble both dropped', () => {
+        const paras = parseDiscussionBody(swody1.productText);
+        expect(paras).toEqual([]);
+    });
+
+    test('the reissue preamble is dropped even without a PREV block', () => {
+        const text = '...SUMMARY...\nA summary paragraph long enough to survive the length filter here.\n\n...20Z Update...\nThe previous forecast (see below) remains generally on track, with only minor changes made this hour.\n';
+        expect(parseDiscussionBody(text)).toEqual([]);
+    });
+
+    // Narrow by construction: the preamble pattern must not eat a paragraph
+    // that merely mentions a previous forecast while reporting weather.
+    test('the preamble filter does not swallow genuine prose that mentions a forecast', () => {
+        const text = '...SUMMARY...\nA summary paragraph long enough to survive the length filter here.\n\n...Discussion...\nSevere storms will develop along the dryline this afternoon, and the previous forecast reasoning about storm mode still applies across the warm sector.\n';
+        const paras = parseDiscussionBody(text);
+        expect(paras.length).toBe(1);
+        expect(paras[0]).toMatch(/^Severe storms will develop/);
+    });
+
+    test('the PREV marker matches 1-3 dots, any case', () => {
+        const body = (mark) => `...SUMMARY...\nA summary paragraph long enough to survive the length filter here.\n\n...20Z Update...\nCurrent prose that is comfortably past the forty character floor.\n\n${mark} /ISSUED 1135 AM CDT/\n\n...Front Range...\nStale prose that is also comfortably past the forty character floor.\n`;
+        for (const mark of ['.PREV DISCUSSION...', '..PREV DISCUSSION...', '...PREV DISCUSSION...', '.prev discussion...']) {
+            const paras = parseDiscussionBody(body(mark));
+            expect(paras.length).toBe(1);
+            expect(paras[0]).toMatch(/Current prose/);
+            expect(paras.join(' ')).not.toMatch(/Stale prose/);
+        }
+    });
+
+    test('a PREV marker ahead of the summary leaves nothing to render (fallback path)', () => {
+        const text = '.PREV DISCUSSION... /ISSUED 1135 AM CDT/\n...SUMMARY...\nA summary paragraph long enough to survive the length filter.\n\n...Region...\nProse that would otherwise pass every filter in this parser.\n';
+        expect(parseDiscussionBody(text)).toEqual([]);
+    });
+});
+
+describe('digestArea', () => {
+    test('two areas + overflow marker', () => {
+        expect(digestArea('Otero; Crowley; Pueblo; Las Animas')).toBe('Otero & Crowley +2 more');
+        expect(digestArea('Franklin Mountains')).toBe('Franklin Mountains');
+        expect(digestArea('A; B')).toBe('A & B');
+        expect(digestArea('')).toBeNull();
+        expect(digestArea(null)).toBeNull();
+    });
+});
+
+describe('formatExpiry', () => {
+    test('office-local until-time', () => {
+        expect(formatExpiry('2026-08-16T01:30:00Z', 'America/Denver')).toMatch(/until 7:30 PM MDT/i);
+    });
+    test('null on garbage', () => {
+        expect(formatExpiry('nope', 'America/Denver')).toBeNull();
+        expect(formatExpiry(null, 'America/Denver')).toBeNull();
+    });
+});
+
+describe('nextOutlookTime', () => {
+    test('walks the fixed SPC schedule', () => {
+        expect(nextOutlookTime('2026-08-16T02:00:00Z')).toBe('0600 UTC');
+        expect(nextOutlookTime('2026-08-16T06:01:00Z')).toBe('1300 UTC');
+        expect(nextOutlookTime('2026-08-16T23:30:00Z')).toBe('0100 UTC'); // wraps
+    });
+});
+
+function f(event, severity, awips, extra = {}) {
+    return { properties: { event, severity, parameters: { AWIPSidentifier: [awips] }, ...extra } };
 }
 
 // These three fetchers call the global `fetch` directly (NWS APIs), so we
@@ -112,6 +255,43 @@ describe('national fetchers', () => {
     test('fetchAlertTotals returns null on non-OK (soft data)', async () => {
         globalThis.fetch = async () => new Response('nope', { status: 503 });
         expect(await fetchAlertTotals({})).toBeNull();
+    });
+
+    test('fetchSpcOutlook(DY2) hits the DY2 locations endpoint and unwraps text+issuance', async () => {
+        let seen;
+        globalThis.fetch = async (url) => {
+            if (String(url).includes('/products/types/SWO/locations/DY2')) {
+                seen = String(url);
+                return new Response(JSON.stringify({ '@graph': [{ '@id': 'https://api.weather.gov/products/def' }] }), { status: 200 });
+            }
+            return new Response(JSON.stringify({ productText: 'TEXT2', issuanceTime: '2026-08-16T17:34:00+00:00' }), { status: 200 });
+        };
+        const out = await fetchSpcOutlook('DY2', {});
+        expect(seen).toBe('https://api.weather.gov/products/types/SWO/locations/DY2');
+        expect(out.productText).toBe('TEXT2');
+        expect(out.issuanceTime).toContain('2026');
+    });
+
+    test('fetchSpcOutlook rejects an invalid location without fetching', async () => {
+        let called = false;
+        globalThis.fetch = async () => { called = true; throw new Error('must not fetch'); };
+        // Asserts the specific validation message (not just "rejects") — a
+        // tripwire mock that throws on fetch would otherwise satisfy a bare
+        // rejects.toThrow() even if the guard were deleted and fetch ran.
+        await expect(fetchSpcOutlook('EVIL', {})).rejects.toThrow('bad outlook location');
+        expect(called).toBe(false);
+    });
+
+    test('fetchSpcDy1 still resolves through the shared fetchSpcOutlook path', async () => {
+        globalThis.fetch = async (url) => {
+            if (String(url).includes('/products/types/SWO/locations/DY1')) {
+                return new Response(JSON.stringify({ '@graph': [{ '@id': 'https://api.weather.gov/products/abc' }] }), { status: 200 });
+            }
+            return new Response(JSON.stringify({ productText: 'TEXT', issuanceTime: '2026-08-15T19:42:00+00:00' }), { status: 200 });
+        };
+        const out = await fetchSpcDy1({});
+        expect(out.productText).toBe('TEXT');
+        expect(out.issuanceTime).toContain('2026');
     });
 });
 

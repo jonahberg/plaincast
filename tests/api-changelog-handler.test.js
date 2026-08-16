@@ -23,6 +23,7 @@ mock.module('../api/_utils.js', () => ({
     fetchSevereAlerts: async () => [],
     fetchAlertTotals: async () => null,
     fetchSpcDy1: async () => null,
+    fetchSpcOutlook: async () => null,
     fetchAlertById: async () => null,
     fetchAFDList: async (office) => {
         listCalls += 1;

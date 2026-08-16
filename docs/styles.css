@@ -1037,19 +1037,169 @@ body.view-changelog .section-nav { display: none !important; }
 }
 
 /* ── The National Desk ─────────────────────────────────────────── */
-.desk-lede { margin: 2rem 0 2.5rem; text-align: center; }
-.desk-kicker { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .14em; font-size: .78rem; color: var(--rubric); }
-.desk-deck { font-family: var(--font-display); font-variation-settings: 'opsz' 40; font-size: clamp(1.3rem, 3vw, 1.8rem); line-height: 1.35; margin: .6rem auto 0; max-width: 42ch; }
-.desk-attrib { color: var(--text-muted); font-size: .85rem; margin-top: .6rem; font-style: italic; }
-.wire { border-top: 2px solid var(--ink); margin-top: 2.5rem; }
-.wire-label { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .14em; font-size: .78rem; padding: .5rem 0; border-bottom: 1px solid var(--rule); }
+/* The composed desk, set in the order the page reads: census strip → risk
+   moment → standfirst → running copy → three-day rail → the Wire → outlook
+   clock. Translated from Study F of the approved national-desk studies; the
+   mockup is a 700px miniature set at .82rem, so its sizes are scaled ~1.3×
+   onto the production body step. Emphasis here is ink and rubric italic
+   only — no meters, no cards, no wash of colour to say "severe". */
+
+/* The census strip: the whole national picture in one rule-bounded band,
+   set like the almanac ledger. Cells flex-fill so the row always closes
+   flush at both ends; the hairlines ride on the CELLS rather than the
+   container so a row that wraps on a phone still rules off underneath. */
+.desk-strip {
+    display: flex; flex-wrap: wrap;
+    border-top: 1px solid var(--ink);
+    font-family: var(--font-ui); font-size: 0.7rem;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin: 1.8rem 0 0;
+}
+.desk-strip span {
+    flex: 1 1 auto; text-align: center; white-space: nowrap;
+    padding: 0.4rem 0.6rem;
+    border-right: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+}
+.desk-strip b {
+    font-family: var(--font-body); font-variant-numeric: oldstyle-nums;
+    font-size: 0.95rem; letter-spacing: 0;
+}
+
+/* The risk moment: the Day-1 categorical word is the page's one display
+   line. Sized to own the desk without rivalling the nameplate (--step-5),
+   and clamped so an eight-letter word — Marginal, Enhanced, Moderate —
+   still holds a 320px column. */
+.desk-risk { text-align: center; margin: 1.7rem 0 0; }
+.desk-risk-word {
+    font-family: var(--font-display); font-weight: 600;
+    font-variation-settings: "opsz" 144, "SOFT" 12, "WONK" 0;
+    font-size: clamp(2.6rem, 2rem + 2.4vw, 3.9rem);
+    line-height: 1; letter-spacing: 0.02em; color: var(--rubric);
+    text-wrap: balance;
+}
+/* SPC writes its regions SHOUTED ("THE OHIO VALLEY"), and the builder ships
+   them as written — the display case is the stylesheet's business.
+   all-small-caps sets BOTH cases as small capitals, so parsed regions and our
+   own prose come out in one voice whatever case the product arrived in. Use
+   the longhand, never `font-variant:` — the shorthand resets every other
+   variant axis (numerals included) to normal. */
+.desk-risk-of {
+    font-family: var(--font-ui); font-size: 0.8rem;
+    font-variant-caps: all-small-caps;
+    letter-spacing: 0.18em; color: var(--text-muted);
+    max-width: 54ch; margin: 0.45rem auto 0;
+}
+/* Calm face: no outlined risk is the day's actual news, not an empty slot.
+   It says so in ink italic, standing down from the display word — the page
+   never shouts on a still day. */
+.desk-risk-quiet {
+    font-family: var(--font-display); font-style: italic;
+    font-size: var(--step-2); line-height: 1.25; color: var(--ink);
+}
+
+/* The standfirst: the deterministic deck (swapped for the AI edition
+   client-side) over its attribution. One size step below v1's, because the
+   risk word above it now carries the hero role. */
+.desk-lede { margin: 0.9rem 0 0; text-align: center; }
+.desk-deck {
+    font-family: var(--font-display); font-variation-settings: "opsz" 40;
+    font-size: clamp(1.05rem, 2.4vw, 1.45rem); line-height: 1.4;
+    max-width: 44ch; margin: 0 auto; text-wrap: balance;
+}
+/* The de-dup fallback ships this <p> EMPTY to keep the client's swap target
+   alive; an empty deck must not leave a paragraph of white behind it. */
+.desk-deck:empty { display: none; }
+.desk-attrib { color: var(--text-muted); font-size: .85rem; margin: .5rem 0 0; font-style: italic; }
+
+/* The running copy: the SPC's own discussion, set as one measure column
+   under the centred standfirst. Justified with hyphenation at reading
+   widths; ragged-right on a phone, where justification opens rivers. */
+.desk-copy { max-width: var(--measure); margin: 1.7rem auto 0; }
+.desk-copy p { margin: 0 0 0.85rem; text-align: justify; hyphens: auto; }
+.desk-copy p:last-child { margin-bottom: 0; }
+/* Rubricated three-line initial — first paragraph only, at Fraunces'
+   display optical size, matching the office page's lede. */
+.desk-copy p:first-of-type::first-letter {
+    font-family: var(--font-display); font-weight: 600;
+    font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0;
+    -webkit-initial-letter: 3 3; initial-letter: 3 3;
+    margin-right: 0.12em; color: var(--rubric);
+}
+@supports not ((initial-letter: 3) or (-webkit-initial-letter: 3)) {
+    .desk-copy p:first-of-type::first-letter {
+        float: left; font-size: 3.4em; line-height: 0.7; padding: 0.02em 0.12em 0 0;
+        margin: 0.02em 0.04em -0.1em 0; color: var(--rubric);
+    }
+}
+
+/* The three-day rail: a reference strip, not a headline. It restates Day 1's
+   word by design — an outlook is a sequence — so it is set small, quiet and
+   tabular, and the display moment above keeps the voice. Today's cell is
+   marked by the newsprint stock alone, never by a coloured word. */
+.desk-rail {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    border: 1px solid var(--rule); border-right: none;
+    margin: 1.8rem 0 0;
+}
+.desk-rail-day { border-right: 1px solid var(--rule); padding: 0.65rem 0.8rem; }
+.desk-rail-day.now { background: var(--newsprint); }
+.desk-rail-label {
+    font-family: var(--font-ui); font-size: 0.7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted);
+    margin: 0 0 0.2rem;
+}
+.desk-rail-level {
+    font-family: var(--font-display); font-weight: 600;
+    font-variation-settings: "opsz" 28, "SOFT" 0, "WONK" 0;
+    font-size: 1.25rem; line-height: 1.2;
+}
+/* Region prose arrives SHOUTED and the no-risk note does not; all-small-caps
+   levels both so one ledger voice sets the whole rail. */
+.desk-rail-note {
+    font-size: 0.82rem; line-height: 1.45; color: var(--text-muted);
+    font-variant-caps: all-small-caps; letter-spacing: 0.02em;
+    margin: 0.15rem 0 0;
+}
+
+/* The Wire: two lines an office. Line one names the desk and its worst
+   event; line two — a full-basis flex child, so it always takes its own
+   line — says where and until when. NWS writes areaDesc in title case, so
+   small caps set it without a transform. */
+.wire { border-top: 2px solid var(--ink); margin-top: 2.2rem; }
+.wire-label { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .14em; font-size: .78rem; font-weight: 700; padding: .5rem 0; border-bottom: 1px solid var(--rule); }
 .wire-list { list-style: none; margin: 0; padding: 0; }
-.wire-item { display: flex; justify-content: space-between; gap: 1rem; padding: .55rem 0; border-bottom: 1px solid var(--rule); font-variant-numeric: oldstyle-nums; }
+.wire-item { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 1rem; padding: .55rem 0; border-bottom: 1px solid var(--rule); font-variant-numeric: oldstyle-nums; }
+.wire-item .wire-office { flex: 1 1 auto; }
 .wire-item .wire-event { color: var(--text-muted); text-align: right; }
 .wire-item.wire-extreme .wire-event { color: var(--rubric); font-style: italic; }
+.wire-area {
+    flex: 0 0 100%; margin-top: .1rem;
+    font-size: .8rem; line-height: 1.5; color: var(--text-muted);
+    font-variant-caps: small-caps; letter-spacing: .03em;
+}
 .wire-more { color: var(--text-muted); font-size: .85rem; padding: .55rem 0; }
-.census { margin: 2.5rem 0; }
+
+/* The outlook clock: when the next Day 1 lands. A colophon line for the
+   desk — hairline above, tracked small caps, muted. */
+.desk-clock {
+    font-family: var(--font-ui); font-size: .78rem;
+    text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted);
+    text-align: center; border-top: 1px solid var(--rule);
+    margin: 1rem 0 0; padding-top: .6rem;
+}
+
 .local-desk { border: 1px solid var(--rule); padding: .6rem .9rem; font-size: .9rem; margin: 1.2rem 0; }
+
+/* Phones. 639.98px, not 640px, so justification survives at exactly 640 —
+   the build rule sets running copy justified at 640 and up. The rail stacks
+   with the mockup's border flip, which keeps the box closed either way. */
+@media (max-width: 639.98px) {
+    .desk-copy p { text-align: left; hyphens: manual; }
+    .desk-rail { grid-template-columns: 1fr; border-right: 1px solid var(--rule); border-bottom: none; }
+    .desk-rail-day { border-right: none; border-bottom: 1px solid var(--rule); }
+    .desk-risk-of { letter-spacing: 0.12em; }
+}
 /* Masthead dateline entry pointing at /national/. Font comes from .dateline;  */
 /* the small-caps pair matches its .dateline-date/.dateline-edition siblings   */
 /* so the row reads as one line. Quiet-link idiom: accent, underline on hover. */

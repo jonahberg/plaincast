@@ -1,0 +1,14 @@
+{
+ "@context": {
+  "@version": "1.1",
+  "@vocab": "https://api.weather.gov/ontology#"
+ },
+ "@id": "https://api.weather.gov/products/5b0d613e-f36d-4f81-8d1e-2abaf6451e2b",
+ "id": "5b0d613e-f36d-4f81-8d1e-2abaf6451e2b",
+ "wmoCollectiveId": "ACUS03",
+ "issuingOffice": "KWNS",
+ "issuanceTime": "2026-08-16T19:36:00+00:00",
+ "productCode": "SWO",
+ "productName": "Severe Storm Outlook Narrative (AC)",
+ "productText": "\n000\nACUS03 KWNS 161936\nSWODY3\nSPC AC 161936\n\nDay 3 Convective Outlook  \nNWS Storm Prediction Center Norman OK\n0236 PM CDT Sun Aug 16 2026\n\nValid 181200Z - 191200Z\n\n...THERE IS A SLIGHT RISK OF SEVERE THUNDERSTORMS OVER PARTS OF THE\nCENTRAL PLAINS TO LOWER MISSOURI/MID MISSISSIPPI VALLEY...\n\n...SUMMARY...\nSevere thunderstorms capable of large hail and damaging wind gusts\nare expected Tuesday afternoon/evening across parts of the central\nPlains and toward the Lower Missouri/Mid-Mississippi Valley.\n\n...NE/IA/KS/MO...\nModerate northwest flow aloft will exist across the region, with\nsome cooling aloft late in the day. Low pressure will develop over\nwestern KS into southwest NE ahead of a convectively enhanced front\nwhich will drop south across I-80 in NE/IA. The presence of morning\nthunderstorms may further augment the boundary, and lends\nuncertainty to positioning. However, a plume of strong heating will\nexist as southwest low-level winds develop during the day near an\neast of the surface low, and strong instability may develop across\nthe warm sector.\n\nThe area over NE appears quite favorable for supercells given some\nmodel progs, with deep-layer shear to 50 kt, and increased SRH near\nthe boundary. Given the expected southeastward storm motions,\nsupercells could remain on any such boundary, with isolated tornado\npotential. Very large hail may also occur with the late\nafternoon/early evening cells before likely mergers into an MCS,\nwhich may produce damaging winds as far south as northeast KS and\nnorthern MO.\n\nGiven uncertainties, will maintain 15% coverage, but with\nconditional CIG1 area.\n\n..Jewell.. 08/16/2026\n\n$$\n"
+}

@@ -67,9 +67,11 @@ export async function fetchAlertTotals({ signal } = {}) {
     } catch { return null; }
 }
 
-// Latest SPC Day 1 Convective Outlook, listing + product in two hops.
-export async function fetchSpcDy1({ signal } = {}) {
-    const res = await fetch('https://api.weather.gov/products/types/SWO/locations/DY1', {
+// Latest SPC Convective Outlook for a given day (DY1/DY2/DY3), listing +
+// product in two hops. Location is validated before any network call.
+export async function fetchSpcOutlook(location, { signal } = {}) {
+    if (!/^DY[123]$/.test(location)) throw new Error('bad outlook location');
+    const res = await fetch(`https://api.weather.gov/products/types/SWO/locations/${location}`, {
         headers: { 'User-Agent': NWS_USER_AGENT }, signal
     });
     if (!res.ok) throw new Error(`NWS API error: ${res.status}`);
@@ -80,3 +82,6 @@ export async function fetchSpcDy1({ signal } = {}) {
     const productText = typeof prod?.productText === 'string' ? prod.productText : null;
     return productText ? { productText, issuanceTime: prod?.issuanceTime || null } : null;
 }
+
+// Day 1 remains its own export — api/national-lede.js imports it directly.
+export const fetchSpcDy1 = ({ signal } = {}) => fetchSpcOutlook('DY1', { signal });

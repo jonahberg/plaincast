@@ -30,6 +30,7 @@ mock.module('../api/_utils.js', () => ({
         if (spcThrows) throw new Error('SPC down');
         return mockSpc;
     },
+    fetchSpcOutlook: async () => null,
     fetchSevereAlerts: async () => [],
     fetchAlertTotals: async () => null,
     fetchAlertById: async () => null,

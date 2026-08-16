@@ -36,6 +36,7 @@ mock.module('../api/_utils.js', () => ({
     fetchSevereAlerts: async () => [],
     fetchAlertTotals: async () => null,
     fetchSpcDy1: async () => null,
+    fetchSpcOutlook: async () => null,
     fetchAlertById: async () => null,
     fetchAFDList: async () => { if (mockListThrows) throw new Error('NWS down'); return mockList; },
     fetchAFDProduct: async () => ({ productText: AFD_TEXT, issuanceTime: '2026-03-24T18:25:00+00:00' }),
