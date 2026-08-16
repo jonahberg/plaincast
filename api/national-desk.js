@@ -366,9 +366,9 @@ export default async function handler(req, res) {
             buildCopyHtml(copy),
             buildRailHtml(rail),
             buildWireHtml(rows),
-            // Request-time, so the emitted HTML is time-dependent by design —
-            // the CDN window (10 min) is far shorter than the gap between
-            // issuance slots, so a cached copy never names a slot that passed.
+            // Request-time clock. Near a slot boundary a CDN-cached copy can name a
+            // slot up to ~30 min past (600s fresh + SWR); "expected by" tolerates it
+            // and the next origin render self-corrects. Accepted staleness, not a bug.
             buildClockHtml(nextOutlookTime(new Date().toISOString())),
         ].filter(Boolean).join('\n\n    ');
 
