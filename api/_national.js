@@ -116,10 +116,22 @@ export function parseRiskCategory(headline) {
 const SECTION_MARK = /^\s*\.{1,3}[A-Z0-9]/;
 const HEADER_LINE = /^\s*\.\.\./;
 
+// A reissued outlook republishes the discussion it supersedes verbatim under
+// ".PREV DISCUSSION... /ISSUED <time>/" — the 20Z update's own prose comes
+// FIRST, the stale 1135 AM copy after. Everything from that line down is
+// last issuance's forecast; printing it as running copy would date the front
+// page by hours. Dot count varies in the live products (1-3), hence {1,3}.
+const PREV_DISCUSSION = /^\s*\.{1,3}PREV DISCUSSION/im;
+
 // Narrative paragraphs AFTER the ...SUMMARY... block — the standfirst already
 // covers the summary, so the running copy must never repeat it (spec §5).
 export function parseDiscussionBody(productText) {
-    const text = String(productText || '');
+    const raw = String(productText || '');
+    // Truncate BEFORE anything else: a PREV marker sitting ahead of the
+    // summary leaves no searchable text at all, which the sumIdx === -1 guard
+    // below turns into [] — the running-copy fallback, exactly right.
+    const prevIdx = raw.search(PREV_DISCUSSION);
+    const text = prevIdx === -1 ? raw : raw.slice(0, prevIdx);
     const sumIdx = text.search(/\.\.\.SUMMARY\.\.\./i);
     if (sumIdx === -1) return [];
     const after = text.slice(sumIdx);

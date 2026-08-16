@@ -138,6 +138,34 @@ describe('parseDiscussionBody', () => {
         expect(parseDiscussionBody('...SUMMARY...\nOnly a summary here with enough length to pass filters.\n$$')).toEqual([]);
         expect(parseDiscussionBody('')).toEqual([]);
     });
+
+    // The live DY1 fixture carries a ".PREV DISCUSSION... /ISSUED 1135 AM/"
+    // block: the SUPERSEDED 11:35 AM discussion, republished verbatim under
+    // the 20Z update. Rendering it as running copy would print this morning's
+    // forecast as this afternoon's news.
+    test('stops at the PREV DISCUSSION marker — superseded prose never becomes current copy', () => {
+        const paras = parseDiscussionBody(swody1.productText);
+        expect(paras.length).toBe(1);
+        expect(paras[0]).toMatch(/previous forecast/i);
+        const joined = paras.join(' ');
+        expect(joined).not.toMatch(/Modestly strong southwesterly/);   // Front Range block, under .PREV
+        expect(joined).not.toMatch(/Thunderstorms have generally weakened/); // Midwest block, under .PREV
+    });
+
+    test('the PREV marker matches 1-3 dots, any case', () => {
+        const body = (mark) => `...SUMMARY...\nA summary paragraph long enough to survive the length filter here.\n\n...20Z Update...\nCurrent prose that is comfortably past the forty character floor.\n\n${mark} /ISSUED 1135 AM CDT/\n\n...Front Range...\nStale prose that is also comfortably past the forty character floor.\n`;
+        for (const mark of ['.PREV DISCUSSION...', '..PREV DISCUSSION...', '...PREV DISCUSSION...', '.prev discussion...']) {
+            const paras = parseDiscussionBody(body(mark));
+            expect(paras.length).toBe(1);
+            expect(paras[0]).toMatch(/Current prose/);
+            expect(paras.join(' ')).not.toMatch(/Stale prose/);
+        }
+    });
+
+    test('a PREV marker ahead of the summary leaves nothing to render (fallback path)', () => {
+        const text = '.PREV DISCUSSION... /ISSUED 1135 AM CDT/\n...SUMMARY...\nA summary paragraph long enough to survive the length filter.\n\n...Region...\nProse that would otherwise pass every filter in this parser.\n';
+        expect(parseDiscussionBody(text)).toEqual([]);
+    });
 });
 
 describe('digestArea', () => {
