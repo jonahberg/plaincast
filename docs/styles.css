@@ -999,6 +999,10 @@ body.view-changelog .section-nav { display: none !important; }
     text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted);
     margin: 0 0 0.85rem;
 }
+/* Sitewide link to /national/ — added to the office index Task 7 (National */
+/* Desk linkage). font-family uses the --font-ui token, not a literal font */
+/* name, per house ruling. */
+.office-index-national { font-family: var(--font-ui); letter-spacing: .05em; margin: .4rem 0 1rem; }
 .office-index-list {
     list-style: none; margin: 0; padding: 0;
     columns: 4 10rem; column-gap: 1.8rem;

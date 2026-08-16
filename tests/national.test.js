@@ -169,3 +169,15 @@ describe('national shell', () => {
         expect(sources).toContain('/national/');
     });
 });
+
+// Sitewide linkage: the homepage office-index and the sitemap both need to
+// point at /national/, or the desk is orphaned — reachable only by URL.
+describe('national linkage', () => {
+    test('homepage office-index links the National Desk', () => {
+        const home = readFileSync('docs/index.html', 'utf8');
+        expect(home).toContain('href="/national/"');
+    });
+    test('sitemap carries /national/', () => {
+        expect(readFileSync('docs/sitemap.xml', 'utf8')).toContain('https://plaincast.live/national/</loc>');
+    });
+});
