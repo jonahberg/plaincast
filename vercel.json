@@ -7,12 +7,17 @@
     },
     "api/og.js": {
       "includeFiles": "api/_og-fonts/**"
+    },
+    "api/national-desk.js": {
+      "includeFiles": "api/_national-shell.html"
     }
   },
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/o/:code", "destination": "/api/office-page?code=:code" },
-    { "source": "/o/:code/", "destination": "/api/office-page?code=:code" }
+    { "source": "/o/:code/", "destination": "/api/office-page?code=:code" },
+    { "source": "/national", "destination": "/api/national-desk" },
+    { "source": "/national/", "destination": "/api/national-desk" }
   ],
   "headers": [
     {

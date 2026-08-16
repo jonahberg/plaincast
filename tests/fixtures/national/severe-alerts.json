@@ -1,0 +1,3257 @@
+{
+ "features": [
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.58781841f2f04931d929377bea2be632c1df1a8e.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -118.03,
+       44.4
+      ],
+      [
+       -118.18,
+       44.35
+      ],
+      [
+       -118.2,
+       44.47
+      ],
+      [
+       -118.06,
+       44.57
+      ],
+      [
+       -117.99,
+       44.6
+      ],
+      [
+       -117.96,
+       44.6
+      ],
+      [
+       -117.9,
+       44.57
+      ],
+      [
+       -117.96,
+       44.44
+      ],
+      [
+       -117.97,
+       44.44
+      ],
+      [
+       -117.97,
+       44.43
+      ],
+      [
+       -118.01,
+       44.43
+      ],
+      [
+       -118.01,
+       44.42
+      ],
+      [
+       -118.03,
+       44.42
+      ],
+      [
+       -118.03,
+       44.4
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.58781841f2f04931d929377bea2be632c1df1a8e.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.58781841f2f04931d929377bea2be632c1df1a8e.001.1",
+    "areaDesc": "Baker, OR",
+    "geocode": {
+     "SAME": [
+      "041001"
+     ],
+     "UGC": [
+      "ORC001"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/ORC001"
+    ],
+    "references": [],
+    "sent": "2026-08-15T15:21:00-07:00",
+    "effective": "2026-08-15T15:21:00-07:00",
+    "onset": "2026-08-15T15:21:00-07:00",
+    "expires": "2026-08-15T18:15:00-07:00",
+    "ends": "2026-08-15T18:15:00-07:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Flash Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Boise ID",
+    "headline": "Flash Flood Warning issued August 15 at 3:21PM PDT until August 15 at 6:15PM PDT by NWS Boise ID",
+    "description": "FFWBOI\n\nThe National Weather Service in Boise has issued a\n\n* Flash Flood Warning for...\nSouthwestern Baker County in northeastern Oregon...\n\n* Until 615 PM PDT.\n\n* At 321 PM PDT, Doppler radar indicated thunderstorms producing\nheavy rain across the warned area. Between 1 and 1.5 inches of rain\nhave fallen. The expected rainfall rate is 1 to 2 inches in 30\nminutes. Additional rainfall amounts of 1 to 2 inches are possible\nin the warned area. Flash flooding is ongoing or expected to begin\nshortly.\n\nHAZARD...Life threatening flash flooding. Thunderstorms producing\nflash flooding.\n\nSOURCE...Radar indicated.\n\nIMPACT...Life threatening flash flooding of creeks and streams,\nurban areas, highways, streets and underpasses.\n\n* Some locations that will experience flash flooding include...\nUnity, and US Highway 26.",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.\n\nBe aware of your surroundings and do not drive on flooded roads.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFWBOI"
+     ],
+     "WMOidentifier": [
+      "WGUS55 KBOI 152221"
+     ],
+     "flashFloodDetection": [
+      "RADAR INDICATED"
+     ],
+     "flashFloodDamageThreat": [
+      "CONSIDERABLE"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KBOI.FF.W.0008.260815T2221Z-260816T0115Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T18:15:00-07:00"
+     ],
+     "WEAHandling": [
+      "Imminent Threat"
+     ],
+     "CMAMtext": [
+      "NWS: FLASH FLOOD WARNING this area til 6:15 PM PDT. Avoid flooded areas."
+     ],
+     "CMAMlongtext": [
+      "National Weather Service: A FLASH FLOOD WARNING is in effect for this area until 6:15 PM PDT. This is a dangerous and life-threatening situation. Do not attempt to travel unless you are fleeing an area subject to flooding or under an evacuation order."
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFW"
+     ],
+     "NationalWeatherService": [
+      "FFW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.93ce618c62957333cde27534a3836c1a4e1ad87e.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -89.27,
+       40.57
+      ],
+      [
+       -88.64,
+       40.51
+      ],
+      [
+       -88.65,
+       40.28
+      ],
+      [
+       -89.26,
+       40.28
+      ],
+      [
+       -89.27,
+       40.57
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.93ce618c62957333cde27534a3836c1a4e1ad87e.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.93ce618c62957333cde27534a3836c1a4e1ad87e.001.1",
+    "areaDesc": "McLean, IL",
+    "geocode": {
+     "SAME": [
+      "017113"
+     ],
+     "UGC": [
+      "ILC113"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/ILC113"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.a2672fd9f8b5e74bdc6625ddbe1b34731f2c5d51.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.a2672fd9f8b5e74bdc6625ddbe1b34731f2c5d51.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T12:40:00-05:00"
+     },
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.06622218bd79b666d4b4ec44fa644434907c8cde.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.06622218bd79b666d4b4ec44fa644434907c8cde.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T17:18:00-05:00"
+     }
+    ],
+    "sent": "2026-08-15T17:21:00-05:00",
+    "effective": "2026-08-15T17:21:00-05:00",
+    "onset": "2026-08-15T17:21:00-05:00",
+    "expires": "2026-08-16T12:00:00-05:00",
+    "ends": "2026-08-16T12:00:00-05:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Expected",
+    "event": "Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Lincoln IL",
+    "headline": "Flood Warning issued August 15 at 5:21PM CDT until August 16 at 12:00PM CDT by NWS Lincoln IL",
+    "description": "* WHAT...Urban area and small stream flooding caused by excessive\nrainfall continues.\n\n* WHERE...A portion of central Illinois, including the following\ncounty, McLean.\n\n* WHEN...Until noon CDT Sunday.\n\n* IMPACTS...Flooding of rivers, creeks, streams, and other low-lying\nand flood-prone locations is imminent or occurring.\n\n* ADDITIONAL DETAILS...\n- At 521 PM CDT, Doppler radar and automated rain gauges\nindicated between 4 and 7 inches of rain have fallen.\n- Additional rainfall amounts of 1 to 3 inches are possible\nthis evening and overnight in the warned area.\n- Some locations that will experience flooding include...\nBloomington, Normal, Le Roy, Heyworth, Danvers, Downs,\nMcLean, Stanford, Ellsworth, Central Illinois Regional\nAirport, Shirley, Holder and Moraine View State Park.\n- This includes the following State Parks...\nMoraine View State Park.\n\nThis includes the following highways...\nInterstate 39 between  mile markers 0 and 1.\nInterstate 74 between  mile markers 123 and 155.\nInterstate 55 between  mile markers 142 and 167.\n- http://www.weather.gov/safety/flood",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FLWILX"
+     ],
+     "WMOidentifier": [
+      "WGUS43 KILX 152221"
+     ],
+     "NWSheadline": [
+      "FLOOD WARNING NOW IN EFFECT UNTIL NOON CDT SUNDAY"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.EXT.KILX.FA.W.0011.000000T0000Z-260816T1700Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-16T12:00:00-05:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FLW"
+     ],
+     "NationalWeatherService": [
+      "FAW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.d05d971365492d25854f29a8c904a446bb60845a.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -105.73,
+       31.15
+      ],
+      [
+       -105.7,
+       31.28
+      ],
+      [
+       -105.62,
+       31.34
+      ],
+      [
+       -105.57,
+       31.33
+      ],
+      [
+       -105.57,
+       31.26
+      ],
+      [
+       -105.49,
+       31.19
+      ],
+      [
+       -105.54,
+       31.18
+      ],
+      [
+       -105.61,
+       31.09
+      ],
+      [
+       -105.63,
+       31.1
+      ],
+      [
+       -105.64,
+       31.1
+      ],
+      [
+       -105.65,
+       31.11
+      ],
+      [
+       -105.71,
+       31.14
+      ],
+      [
+       -105.72,
+       31.14
+      ],
+      [
+       -105.72,
+       31.15
+      ],
+      [
+       -105.73,
+       31.15
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.d05d971365492d25854f29a8c904a446bb60845a.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.d05d971365492d25854f29a8c904a446bb60845a.001.1",
+    "areaDesc": "Hudspeth, TX",
+    "geocode": {
+     "SAME": [
+      "048229"
+     ],
+     "UGC": [
+      "TXC229"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/TXC229"
+    ],
+    "references": [],
+    "sent": "2026-08-15T16:18:00-06:00",
+    "effective": "2026-08-15T16:18:00-06:00",
+    "onset": "2026-08-15T16:18:00-06:00",
+    "expires": "2026-08-15T18:15:00-06:00",
+    "ends": "2026-08-15T18:15:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Flash Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS El Paso Tx/Santa Teresa NM",
+    "headline": "Flash Flood Warning issued August 15 at 4:18PM MDT until August 15 at 6:15PM MDT by NWS El Paso Tx/Santa Teresa NM",
+    "description": "FFWEPZ\n\nThe National Weather Service in El Paso Tx/Santa Teresa has issued a\n\n* Flash Flood Warning for...\nCentral Hudspeth County in western Texas...\n\n* Until 615 PM MDT.\n\n* At 418 PM MDT, Doppler radar indicated thunderstorms producing\nheavy rain across the warned area. Up to 1.5 inches of rain have\nfallen. Additional rainfall amounts up to 1 inch are possible in\nthe warned area. Flash flooding is ongoing or expected to begin\nshortly.\n\nHAZARD...Flash flooding caused by thunderstorms.\n\nSOURCE...Radar indicated.\n\nIMPACT...Flash flooding of small creeks and streams, urban areas,\nhighways, streets and underpasses as well as other poor\ndrainage and low-lying areas.\n\n* Some locations that will experience flash flooding include...\nFort Quitman, Esperanza and Finlay.",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.\n\nBe aware of your surroundings and do not drive on flooded roads.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFWEPZ"
+     ],
+     "WMOidentifier": [
+      "WGUS54 KEPZ 152218"
+     ],
+     "flashFloodDetection": [
+      "RADAR INDICATED"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KEPZ.FF.W.0097.260815T2218Z-260816T0015Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T18:15:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFW"
+     ],
+     "NationalWeatherService": [
+      "FFW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.a85c725415b8f8b003ed8ba3f22e6e741a4b7bb1.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -103.43,
+       42.17
+      ],
+      [
+       -103.42,
+       42.27
+      ],
+      [
+       -102.84,
+       42.4
+      ],
+      [
+       -102.99,
+       42.02
+      ],
+      [
+       -103.43,
+       42.17
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.a85c725415b8f8b003ed8ba3f22e6e741a4b7bb1.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.a85c725415b8f8b003ed8ba3f22e6e741a4b7bb1.001.1",
+    "areaDesc": "Box Butte, NE",
+    "geocode": {
+     "SAME": [
+      "031013"
+     ],
+     "UGC": [
+      "NEC013"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/NEC013"
+    ],
+    "references": [],
+    "sent": "2026-08-15T16:18:00-06:00",
+    "effective": "2026-08-15T16:18:00-06:00",
+    "onset": "2026-08-15T16:18:00-06:00",
+    "expires": "2026-08-15T17:00:00-06:00",
+    "ends": "2026-08-15T17:00:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Observed",
+    "urgency": "Immediate",
+    "event": "Severe Thunderstorm Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Cheyenne WY",
+    "headline": "Severe Thunderstorm Warning issued August 15 at 4:18PM MDT until August 15 at 5:00PM MDT by NWS Cheyenne WY",
+    "description": "SVRCYS\n\nThe National Weather Service in Cheyenne has issued a\n\n* Severe Thunderstorm Warning for...\nCentral Box Butte County in the Panhandle of Nebraska...\n\n* Until 500 PM MDT.\n\n* At 418 PM MDT, a severe thunderstorm was located 9 miles north of\nKilpatrick Lake, or 25 miles west of Alliance, moving east at 25\nmph.\n\nHAZARD...60 mph wind gusts and quarter size hail.\n\nSOURCE...Radar indicated.\n\nIMPACT...Hail damage to vehicles is expected. Expect wind damage\nto roofs, siding, and trees.\n\n* Locations impacted include...\nHemingford, Box Butte County Fairgrounds, and Berea.",
+    "instruction": "For your protection move to an interior room on the lowest floor of a\nbuilding.\n\nTorrential rainfall is occurring with this storm, and may lead to\nflash flooding. Do not drive your vehicle through flooded roadways.",
+    "response": "Shelter",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "SVRCYS"
+     ],
+     "WMOidentifier": [
+      "WUUS55 KCYS 152218"
+     ],
+     "eventMotionDescription": [
+      "2026-08-15T22:18:00-00:00...storm...270DEG...23KT...42.21,-103.34"
+     ],
+     "windThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxWindGust": [
+      "60 MPH"
+     ],
+     "hailThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxHailSize": [
+      "1.00"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KCYS.SV.W.0244.260815T2218Z-260815T2300Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T17:00:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "SVR"
+     ],
+     "NationalWeatherService": [
+      "SVW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.3caad4cf19048d8527b66d8686d9463fad51344b.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -88.46,
+       40.37
+      ],
+      [
+       -88.46,
+       40.28
+      ],
+      [
+       -88.48,
+       40.28
+      ],
+      [
+       -88.52,
+       40.28
+      ],
+      [
+       -88.54,
+       40.28
+      ],
+      [
+       -88.55,
+       40.28
+      ],
+      [
+       -88.58,
+       40.28
+      ],
+      [
+       -88.6,
+       40.28
+      ],
+      [
+       -88.65,
+       40.28
+      ],
+      [
+       -88.63,
+       40.62
+      ],
+      [
+       -88.57,
+       40.62
+      ],
+      [
+       -88.55,
+       40.62
+      ],
+      [
+       -88.53,
+       40.62
+      ],
+      [
+       -88.46,
+       40.62
+      ],
+      [
+       -88.46,
+       40.43
+      ],
+      [
+       -88.46,
+       40.4
+      ],
+      [
+       -88.46,
+       40.38
+      ],
+      [
+       -88.46,
+       40.37
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.3caad4cf19048d8527b66d8686d9463fad51344b.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.3caad4cf19048d8527b66d8686d9463fad51344b.001.1",
+    "areaDesc": "McLean, IL",
+    "geocode": {
+     "SAME": [
+      "017113"
+     ],
+     "UGC": [
+      "ILC113"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/ILC113"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.f45bf0ef104e6a02f839cf17f50f9f216e019c9d.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.f45bf0ef104e6a02f839cf17f50f9f216e019c9d.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T10:43:00-05:00"
+     }
+    ],
+    "sent": "2026-08-15T17:16:00-05:00",
+    "effective": "2026-08-15T17:16:00-05:00",
+    "onset": "2026-08-15T17:16:00-05:00",
+    "expires": "2026-08-16T12:00:00-05:00",
+    "ends": "2026-08-16T12:00:00-05:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Expected",
+    "event": "Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Lincoln IL",
+    "headline": "Flood Warning issued August 15 at 5:16PM CDT until August 16 at 12:00PM CDT by NWS Lincoln IL",
+    "description": "* WHAT...Flooding caused by excessive rainfall continues.\n\n* WHERE...A portion of central Illinois, including the following\ncounty, McLean.\n\n* WHEN...Until noon CDT Sunday.\n\n* IMPACTS...Flooding of rivers, creeks, streams, and other low-lying\nand flood-prone locations is imminent or occurring. Numerous roads\nremain closed due to flooding. Streams continue to rise due to\nexcess runoff from earlier rainfall. Expect many areas of slow\nmoving or standing water.\n\n* ADDITIONAL DETAILS...\n- At 515 PM CDT, Doppler radar and automated rain gauges\nindicated heavy rain due to thunderstorms. Flooding is\nalready occurring in the warned area. Between 2 and 5 inches\nof rain have fallen.\n- Additional rainfall amounts of 1 to 3 inches are possible\nthis evening and overnight in the warned area.\n- Some locations that will experience flooding include...\nColfax, Saybrook, Bellflower, Arrowsmith, Cropsey and Anchor.\n- http://www.weather.gov/safety/flood",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FLWILX"
+     ],
+     "WMOidentifier": [
+      "WGUS43 KILX 152216"
+     ],
+     "NWSheadline": [
+      "FLOOD WARNING NOW IN EFFECT UNTIL NOON CDT SUNDAY"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.EXT.KILX.FA.W.0010.000000T0000Z-260816T1700Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-16T12:00:00-05:00"
+     ],
+     "expiredReferences": [
+      "w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.45456232c1dc21496f3dd90ba29492bafa9810f9.001.1,2026-08-15T07:40:00-05:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FLW"
+     ],
+     "NationalWeatherService": [
+      "FAW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.a535de6f850a98e3ce1e86499b771e50be39c7ad.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -90.44,
+       40.82
+      ],
+      [
+       -90.05,
+       40.82
+      ],
+      [
+       -89.26,
+       40.71
+      ],
+      [
+       -89.26,
+       40.59
+      ],
+      [
+       -89.27,
+       40.59
+      ],
+      [
+       -89.26,
+       40.33
+      ],
+      [
+       -90.44,
+       40.33
+      ],
+      [
+       -90.44,
+       40.82
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.a535de6f850a98e3ce1e86499b771e50be39c7ad.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.a535de6f850a98e3ce1e86499b771e50be39c7ad.001.1",
+    "areaDesc": "Fulton, IL; Knox, IL; Mason, IL; Peoria, IL; Tazewell, IL; Woodford, IL",
+    "geocode": {
+     "SAME": [
+      "017057",
+      "017095",
+      "017125",
+      "017143",
+      "017179",
+      "017203"
+     ],
+     "UGC": [
+      "ILC057",
+      "ILC095",
+      "ILC125",
+      "ILC143",
+      "ILC179",
+      "ILC203"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/ILC057",
+     "https://api.weather.gov/zones/county/ILC095",
+     "https://api.weather.gov/zones/county/ILC125",
+     "https://api.weather.gov/zones/county/ILC143",
+     "https://api.weather.gov/zones/county/ILC179",
+     "https://api.weather.gov/zones/county/ILC203"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.52d89c4530e28f5951c50632ef6b5f01fc67eda6.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.52d89c4530e28f5951c50632ef6b5f01fc67eda6.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T10:41:00-05:00"
+     }
+    ],
+    "sent": "2026-08-15T17:14:00-05:00",
+    "effective": "2026-08-15T17:14:00-05:00",
+    "onset": "2026-08-15T17:14:00-05:00",
+    "expires": "2026-08-16T12:00:00-05:00",
+    "ends": "2026-08-16T12:00:00-05:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Expected",
+    "event": "Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Lincoln IL",
+    "headline": "Flood Warning issued August 15 at 5:14PM CDT until August 16 at 12:00PM CDT by NWS Lincoln IL",
+    "description": "* WHAT...Flooding caused by excessive rainfall continues.\n\n* WHERE...Portions of central and west central Illinois, including\nthe following counties, in central Illinois, Mason, Peoria,\nTazewell and Woodford. In west central Illinois, Fulton and Knox.\n\n* WHEN...Until noon CDT Sunday.\n\n* IMPACTS...Flooding of rivers, creeks, streams, and other low-lying\nand flood-prone locations is imminent or occurring. Streams\ncontinue to rise due to excess runoff from earlier rainfall.\nExpect many areas of slow moving or standing water. It will take\nseveral hours for all the water from these storms to work through\nlocal drainage systems in urban areas.\n\n* ADDITIONAL DETAILS...\n- At 513 PM CDT, Doppler radar and automated rain gauges\nindicated heavy rain due to thunderstorms. Flooding is\nalready occurring in the warned area. Between 2.5 and 6\ninches of rain have fallen.\n- Additional rainfall amounts of 1 to 3 inches are possible\nthis evening and overnight in the warned area.\n- Some locations that will experience flooding include...\nPeoria, Pekin, East Peoria, Morton, Canton, Eureka,\nLewistown, Washington, Bartonville, Creve Coeur, West Peoria,\nAbingdon, Marquette Heights, Farmington, Tremont, Elmwood,\nBellevue, Mackinaw, Delavan and Manito.\n- This includes the following State Parks...\nBanner Marsh State Fish and Wildlife Area, Powerton Lake\nState Fish and Wildlife Area, Rice Lake State Fish and\nWildlife Area, Sand Ridge State Forest, Spring Lake State\nFish and Wildlife Area and Mackinaw River State Fish and\nWildlife Area.\n\nThis includes the following highways...\nInterstate 74 between  mile markers 81 and 112.\nInterstate 155 between  mile markers 12 and 31.\nInterstate 474 between  mile markers 0 and 14.\n- http://www.weather.gov/safety/flood",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FLWILX"
+     ],
+     "WMOidentifier": [
+      "WGUS43 KILX 152214"
+     ],
+     "NWSheadline": [
+      "FLOOD WARNING NOW IN EFFECT UNTIL NOON CDT SUNDAY"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.EXT.KILX.FA.W.0008.000000T0000Z-260816T1700Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-16T12:00:00-05:00"
+     ],
+     "expiredReferences": [
+      "w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.b8f53cdf0d6cb97f7e146d712ef0d64687cde343.001.1,2026-08-15T07:23:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.4385f73a44f635076691ff585474ae37dbcac1fe.001.1,2026-08-15T06:37:00-05:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FLW"
+     ],
+     "NationalWeatherService": [
+      "FAW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.afd57af8a6c84cadc94b0692f54d6f0cf67d61e2.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -105.22,
+       42.2
+      ],
+      [
+       -105.35,
+       42.24
+      ],
+      [
+       -105.42,
+       42.52
+      ],
+      [
+       -104.9,
+       42.33
+      ],
+      [
+       -105.22,
+       42.2
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.afd57af8a6c84cadc94b0692f54d6f0cf67d61e2.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.afd57af8a6c84cadc94b0692f54d6f0cf67d61e2.001.1",
+    "areaDesc": "Albany, WY; Converse, WY; Platte, WY",
+    "geocode": {
+     "SAME": [
+      "056001",
+      "056009",
+      "056031"
+     ],
+     "UGC": [
+      "WYC001",
+      "WYC009",
+      "WYC031"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/WYC001",
+     "https://api.weather.gov/zones/county/WYC009",
+     "https://api.weather.gov/zones/county/WYC031"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.bf65e9d577eabffab837bf2a9cb115feb48fd97d.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.bf65e9d577eabffab837bf2a9cb115feb48fd97d.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T15:50:00-06:00"
+     },
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.5754ab46dface0b2f2198a31dc3caaefdf474b2e.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.5754ab46dface0b2f2198a31dc3caaefdf474b2e.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T15:59:00-06:00"
+     }
+    ],
+    "sent": "2026-08-15T16:09:00-06:00",
+    "effective": "2026-08-15T16:09:00-06:00",
+    "onset": "2026-08-15T16:09:00-06:00",
+    "expires": "2026-08-15T16:30:00-06:00",
+    "ends": "2026-08-15T16:30:00-06:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Observed",
+    "urgency": "Immediate",
+    "event": "Severe Thunderstorm Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Cheyenne WY",
+    "headline": "Severe Thunderstorm Warning issued August 15 at 4:09PM MDT until August 15 at 4:30PM MDT by NWS Cheyenne WY",
+    "description": "At 409 PM MDT, a severe thunderstorm was located near Harris Park, or\n23 miles northwest of Wheatland, moving northeast at 30 mph.\n\nHAZARD...Ping pong ball size hail and 60 mph wind gusts.\n\nSOURCE...Radar indicated.\n\nIMPACT...People and animals outdoors will be injured. Expect hail\ndamage to roofs, siding, windows, and vehicles. Expect wind\ndamage to roofs, siding, and trees.\n\nLocations impacted include...\nEsterbrook Campground, Harris Park, and Esterbrook.\n\nThis includes Interstate 25 in Wyoming between mile markers 96 and\n103.",
+    "instruction": "For your protection move to an interior room on the lowest floor of a\nbuilding.",
+    "response": "Shelter",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "SVSCYS"
+     ],
+     "WMOidentifier": [
+      "WWUS55 KCYS 152209"
+     ],
+     "NWSheadline": [
+      "A SEVERE THUNDERSTORM WARNING REMAINS IN EFFECT UNTIL 430 PM MDT FOR NORTHEASTERN ALBANY...NORTHWESTERN PLATTE AND SOUTHERN CONVERSE COUNTIES"
+     ],
+     "eventMotionDescription": [
+      "2026-08-15T22:09:00-00:00...storm...208DEG...26KT...42.28,-105.3"
+     ],
+     "windThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxWindGust": [
+      "60 MPH"
+     ],
+     "hailThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxHailSize": [
+      "1.50"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.CON.KCYS.SV.W.0242.000000T0000Z-260815T2230Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T16:30:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "SVS"
+     ],
+     "NationalWeatherService": [
+      "SVW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.ce6c93571f18dc9a010aab6730c960783abe9c78.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -103.57,
+       40.98
+      ],
+      [
+       -103.62,
+       40.9
+      ],
+      [
+       -103.66,
+       40.87
+      ],
+      [
+       -103.59,
+       40.79
+      ],
+      [
+       -103.61,
+       40.77
+      ],
+      [
+       -103.87,
+       40.82
+      ],
+      [
+       -103.76,
+       41
+      ],
+      [
+       -103.57,
+       41
+      ],
+      [
+       -103.57,
+       40.98
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.ce6c93571f18dc9a010aab6730c960783abe9c78.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.ce6c93571f18dc9a010aab6730c960783abe9c78.001.1",
+    "areaDesc": "Weld, CO",
+    "geocode": {
+     "SAME": [
+      "008123"
+     ],
+     "UGC": [
+      "COC123"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/COC123"
+    ],
+    "references": [],
+    "sent": "2026-08-15T16:08:00-06:00",
+    "effective": "2026-08-15T16:08:00-06:00",
+    "onset": "2026-08-15T16:08:00-06:00",
+    "expires": "2026-08-15T19:15:00-06:00",
+    "ends": "2026-08-15T19:15:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Flash Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Denver CO",
+    "headline": "Flash Flood Warning issued August 15 at 4:08PM MDT until August 15 at 7:15PM MDT by NWS Denver CO",
+    "description": "FFWBOU\n\nThe National Weather Service in Denver has issued a\n\n* Flash Flood Warning for...\nNortheastern Weld County in northeastern Colorado...\n\n* Until 715 PM MDT.\n\n* At 408 PM MDT, Doppler radar indicated thunderstorms producing\nheavy rain across the warned area. Between 1 and 2 inches of rain\nhave fallen. The expected rainfall rate is 1.5 to 3 inches in 1\nhour. Additional rainfall amounts of 1 to 1.5 inches are possible\nin the warned area. Flash flooding is ongoing or expected to begin\nshortly.\n\nHAZARD...Flash flooding caused by thunderstorms.\n\nSOURCE...Radar indicated.\n\nIMPACT...Flash flooding of small creeks and streams, gulches,\nroads, and poor drainage and low-lying areas.\n\n* Some locations that will experience flash flooding include...\nMainly rural areas of Northeastern Weld County.\n\nThis includes the following streams and drainages...\nSpring Creek, Twomile Creek, Horsetail Creek, Cottonwood Creek,\nSidney Draw, George Creek and North Pawnee Creek.",
+    "instruction": "Move to higher ground now. Act quickly to protect your life.\n\nExcessive runoff from this storm will cause flash flooding of small\ncreeks and streams, country roads, farmland along creeks, and other\nlow lying areas.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFWBOU"
+     ],
+     "WMOidentifier": [
+      "WGUS55 KBOU 152208"
+     ],
+     "flashFloodDetection": [
+      "RADAR INDICATED"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KBOU.FF.W.0031.260815T2208Z-260816T0115Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T19:15:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFW"
+     ],
+     "NationalWeatherService": [
+      "FFW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.a391bd34785f67f4de2f751c6defc86a77393c53.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -118.14,
+       44.33
+      ],
+      [
+       -118.27,
+       44.46
+      ],
+      [
+       -118.01,
+       44.63
+      ],
+      [
+       -117.72,
+       44.51
+      ],
+      [
+       -118.14,
+       44.33
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.a391bd34785f67f4de2f751c6defc86a77393c53.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.a391bd34785f67f4de2f751c6defc86a77393c53.001.1",
+    "areaDesc": "Baker, OR; Malheur, OR",
+    "geocode": {
+     "SAME": [
+      "041001",
+      "041045"
+     ],
+     "UGC": [
+      "ORC001",
+      "ORC045"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/ORC001",
+     "https://api.weather.gov/zones/county/ORC045"
+    ],
+    "references": [],
+    "sent": "2026-08-15T15:06:00-07:00",
+    "effective": "2026-08-15T15:06:00-07:00",
+    "onset": "2026-08-15T15:06:00-07:00",
+    "expires": "2026-08-15T15:45:00-07:00",
+    "ends": "2026-08-15T15:45:00-07:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Observed",
+    "urgency": "Immediate",
+    "event": "Severe Thunderstorm Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Boise ID",
+    "headline": "Severe Thunderstorm Warning issued August 15 at 3:06PM PDT until August 15 at 3:45PM PDT by NWS Boise ID",
+    "description": "SVRBOI\n\nThe National Weather Service in Boise has issued a\n\n* Severe Thunderstorm Warning for...\nSouthwestern Baker County in northeastern Oregon...\nNorthern Malheur County in southeastern Oregon...\n\n* Until 345 PM PDT.\n\n* At 306 PM PDT, a severe thunderstorm was located near Unity, or 28\nmiles southwest of Baker City, moving northeast at 20 mph.\n\nHAZARD...60 mph wind gusts and quarter size hail.\n\nSOURCE...Radar indicated.\n\nIMPACT...Hail damage to vehicles is expected. Expect wind damage\nto roofs, siding, and trees.\n\n* This severe thunderstorm will remain over mainly rural areas of\nsouthwestern Baker and northern Malheur Counties.",
+    "instruction": "For your protection move to an interior room on the lowest floor of a\nbuilding.\n\nWhen safe to do so, please relay storm reports to the National\nWeather Service in Boise via local law enforcement, or National\nWeather Service Boise Facebook and Twitter accounts.",
+    "response": "Shelter",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "SVRBOI"
+     ],
+     "WMOidentifier": [
+      "WUUS55 KBOI 152206"
+     ],
+     "eventMotionDescription": [
+      "2026-08-15T22:06:00-00:00...storm...241DEG...19KT...44.42,-118.12"
+     ],
+     "windThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxWindGust": [
+      "60 MPH"
+     ],
+     "hailThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxHailSize": [
+      "1.00"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KBOI.SV.W.0044.260815T2206Z-260815T2245Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T15:45:00-07:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "SVR"
+     ],
+     "NationalWeatherService": [
+      "SVW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.13599c9ccc826969da2894b4d8c9be9b6da00fc2.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -103.43,
+       41.14
+      ],
+      [
+       -103.44,
+       41.07
+      ],
+      [
+       -103.48,
+       41
+      ],
+      [
+       -103.71,
+       41
+      ],
+      [
+       -103.67,
+       41.07
+      ],
+      [
+       -103.57,
+       41.13
+      ],
+      [
+       -103.43,
+       41.14
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.13599c9ccc826969da2894b4d8c9be9b6da00fc2.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.13599c9ccc826969da2894b4d8c9be9b6da00fc2.001.1",
+    "areaDesc": "Kimball, NE",
+    "geocode": {
+     "SAME": [
+      "031105"
+     ],
+     "UGC": [
+      "NEC105"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/NEC105"
+    ],
+    "references": [],
+    "sent": "2026-08-15T16:05:00-06:00",
+    "effective": "2026-08-15T16:05:00-06:00",
+    "onset": "2026-08-15T16:05:00-06:00",
+    "expires": "2026-08-15T19:00:00-06:00",
+    "ends": "2026-08-15T19:00:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Flash Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Cheyenne WY",
+    "headline": "Flash Flood Warning issued August 15 at 4:05PM MDT until August 15 at 7:00PM MDT by NWS Cheyenne WY",
+    "description": "FFWCYS\n\nThe National Weather Service in Cheyenne has issued a\n\n* Flash Flood Warning for...\nSoutheastern Kimball County in the panhandle of Nebraska...\n\n* Until 700 PM MDT.\n\n* At 405 PM MDT, Doppler radar indicated thunderstorms producing\nheavy rain across the warned area. Between 0.75 and 1.5 inches of\nrain have fallen. Additional rainfall amounts of 1 to 2 inches are\npossible in the warned area. Flash flooding is ongoing or expected\nto begin shortly.\n\nHAZARD...Flash flooding caused by thunderstorms.\n\nSOURCE...Radar.\n\nIMPACT...Flash flooding of small creeks and streams, urban\nareas, highways, streets and underpasses as well as\nother poor drainage and low-lying areas.\n\n* Some locations that will experience flash flooding include...\nmainly rural areas of Southeastern Kimball County",
+    "instruction": "Be aware of your surroundings and do not drive on flooded roads.\n\nIn hilly terrain there are hundreds of low water crossings which are\npotentially dangerous in heavy rain. Do not attempt to cross flooded\nroads. Find an alternate route.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFWCYS"
+     ],
+     "WMOidentifier": [
+      "WGUS55 KCYS 152205"
+     ],
+     "flashFloodDetection": [
+      "RADAR INDICATED"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KCYS.FF.W.0022.260815T2205Z-260816T0100Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T19:00:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFW"
+     ],
+     "NationalWeatherService": [
+      "FFW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.40b878f27f5dc54630b8acd6102e821ad1b899cd.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -103.47,
+       37.07
+      ],
+      [
+       -103.59,
+       37.26
+      ],
+      [
+       -103.42,
+       37.49
+      ],
+      [
+       -103.22,
+       37.33
+      ],
+      [
+       -103.09,
+       37.11
+      ],
+      [
+       -103.47,
+       37.07
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.40b878f27f5dc54630b8acd6102e821ad1b899cd.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.40b878f27f5dc54630b8acd6102e821ad1b899cd.001.1",
+    "areaDesc": "Las Animas, CO",
+    "geocode": {
+     "SAME": [
+      "008071"
+     ],
+     "UGC": [
+      "COC071"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/COC071"
+    ],
+    "references": [],
+    "sent": "2026-08-15T16:04:00-06:00",
+    "effective": "2026-08-15T16:04:00-06:00",
+    "onset": "2026-08-15T16:04:00-06:00",
+    "expires": "2026-08-15T16:45:00-06:00",
+    "ends": "2026-08-15T16:45:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Observed",
+    "urgency": "Immediate",
+    "event": "Severe Thunderstorm Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Pueblo CO",
+    "headline": "Severe Thunderstorm Warning issued August 15 at 4:04PM MDT until August 15 at 4:45PM MDT by NWS Pueblo CO",
+    "description": "SVRPUB\n\nThe National Weather Service in Pueblo has issued a\n\n* Severe Thunderstorm Warning for...\nSoutheastern Las Animas County in southeastern Colorado...\n\n* Until 445 PM MDT.\n\n* At 404 PM MDT, a severe thunderstorm was located near Kim, or 39\nmiles northeast of Des Moines, moving northeast at 15 mph.\n\nHAZARD...60 mph wind gusts and nickel size hail.\n\nSOURCE...Radar indicated.\n\nIMPACT...Expect damage to roofs, siding, and trees.\n\n* Locations impacted include...\nKim.",
+    "instruction": "For your protection move to an interior room on the lowest floor of a\nbuilding.\n\nTorrential rainfall is occurring with this storm, and may lead to\nflash flooding. Do not drive your vehicle through flooded roadways.",
+    "response": "Shelter",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "SVRPUB"
+     ],
+     "WMOidentifier": [
+      "WUUS55 KPUB 152204"
+     ],
+     "eventMotionDescription": [
+      "2026-08-15T22:04:00-00:00...storm...233DEG...13KT...37.21,-103.4"
+     ],
+     "windThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxWindGust": [
+      "60 MPH"
+     ],
+     "hailThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxHailSize": [
+      "0.88"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KPUB.SV.W.0232.260815T2204Z-260815T2245Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T16:45:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "SVR"
+     ],
+     "NationalWeatherService": [
+      "SVW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.82a26bda7fdaf30ed79ffb04775cbd2281355899.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -105.61,
+       31.09
+      ],
+      [
+       -105.54,
+       31.18
+      ],
+      [
+       -105.49,
+       31.2
+      ],
+      [
+       -105.42,
+       31.17
+      ],
+      [
+       -105.38,
+       31.11
+      ],
+      [
+       -105.42,
+       31.06
+      ],
+      [
+       -105.5,
+       31.02
+      ],
+      [
+       -105.58,
+       31.03
+      ],
+      [
+       -105.58,
+       31.04
+      ],
+      [
+       -105.59,
+       31.06
+      ],
+      [
+       -105.6,
+       31.07
+      ],
+      [
+       -105.6,
+       31.08
+      ],
+      [
+       -105.61,
+       31.09
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.82a26bda7fdaf30ed79ffb04775cbd2281355899.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.82a26bda7fdaf30ed79ffb04775cbd2281355899.001.1",
+    "areaDesc": "Hudspeth, TX",
+    "geocode": {
+     "SAME": [
+      "048229"
+     ],
+     "UGC": [
+      "TXC229"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/TXC229"
+    ],
+    "references": [],
+    "sent": "2026-08-15T16:01:00-06:00",
+    "effective": "2026-08-15T16:01:00-06:00",
+    "onset": "2026-08-15T16:01:00-06:00",
+    "expires": "2026-08-15T18:00:00-06:00",
+    "ends": "2026-08-15T18:00:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Flash Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS El Paso Tx/Santa Teresa NM",
+    "headline": "Flash Flood Warning issued August 15 at 4:01PM MDT until August 15 at 6:00PM MDT by NWS El Paso Tx/Santa Teresa NM",
+    "description": "FFWEPZ\n\nThe National Weather Service in El Paso Tx/Santa Teresa has issued a\n\n* Flash Flood Warning for...\nCentral Hudspeth County in western Texas...\n\n* Until 600 PM MDT.\n\n* At 401 PM MDT, Doppler radar indicated thunderstorms producing\nheavy rain across the warned area. Up to 1.8 inches of rain have\nfallen. Additional rainfall amounts up to 1 inch are possible in\nthe warned area. Flash flooding is ongoing or expected to begin\nshortly.\n\nHAZARD...Flash flooding caused by thunderstorms.\n\nSOURCE...Radar indicated.\n\nIMPACT...Flash flooding of small creeks and streams, urban areas,\nhighways, streets and underpasses as well as other poor\ndrainage and low-lying areas.\n\n* Some locations that will experience flash flooding include...\nFort Quitman and Quitman Canyon.",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.\n\nBe aware of your surroundings and do not drive on flooded roads.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFWEPZ"
+     ],
+     "WMOidentifier": [
+      "WGUS54 KEPZ 152201"
+     ],
+     "flashFloodDetection": [
+      "RADAR INDICATED"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KEPZ.FF.W.0096.260815T2201Z-260816T0000Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T18:00:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFW"
+     ],
+     "NationalWeatherService": [
+      "FFW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.554aaf1cfe2f0d53ed2d19afd7cfdcbe7e809b5d.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -102.82,
+       37.34
+      ],
+      [
+       -102.99,
+       37.35
+      ],
+      [
+       -103.11,
+       37.6
+      ],
+      [
+       -102.71,
+       37.61
+      ],
+      [
+       -102.82,
+       37.34
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.554aaf1cfe2f0d53ed2d19afd7cfdcbe7e809b5d.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.554aaf1cfe2f0d53ed2d19afd7cfdcbe7e809b5d.001.1",
+    "areaDesc": "Baca, CO; Las Animas, CO",
+    "geocode": {
+     "SAME": [
+      "008009",
+      "008071"
+     ],
+     "UGC": [
+      "COC009",
+      "COC071"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/COC009",
+     "https://api.weather.gov/zones/county/COC071"
+    ],
+    "references": [],
+    "sent": "2026-08-15T15:59:00-06:00",
+    "effective": "2026-08-15T15:59:00-06:00",
+    "onset": "2026-08-15T15:59:00-06:00",
+    "expires": "2026-08-15T16:45:00-06:00",
+    "ends": "2026-08-15T16:45:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Observed",
+    "urgency": "Immediate",
+    "event": "Severe Thunderstorm Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Pueblo CO",
+    "headline": "Severe Thunderstorm Warning issued August 15 at 3:59PM MDT until August 15 at 4:45PM MDT by NWS Pueblo CO",
+    "description": "SVRPUB\n\nThe National Weather Service in Pueblo has issued a\n\n* Severe Thunderstorm Warning for...\nNorthwestern Baca County in southeastern Colorado...\nNortheastern Las Animas County in southeastern Colorado...\n\n* Until 445 PM MDT.\n\n* At 359 PM MDT, a severe thunderstorm was located near Pritchett, or\n16 miles west of Springfield, and is nearly stationary.\n\nHAZARD...60 mph wind gusts and half dollar size hail.\n\nSOURCE...Radar indicated.\n\nIMPACT...Hail damage to vehicles is expected. Expect wind damage\nto roofs, siding, and trees.\n\n* Locations impacted include...\nPritchett.",
+    "instruction": "For your protection move to an interior room on the lowest floor of a\nbuilding.\n\nTorrential rainfall is occurring with this storm, and may lead to\nflash flooding. Do not drive your vehicle through flooded roadways.",
+    "response": "Shelter",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "SVRPUB"
+     ],
+     "WMOidentifier": [
+      "WUUS55 KPUB 152159"
+     ],
+     "eventMotionDescription": [
+      "2026-08-15T21:59:00-00:00...storm...186DEG...1KT...37.4,-102.92"
+     ],
+     "windThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxWindGust": [
+      "60 MPH"
+     ],
+     "hailThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxHailSize": [
+      "1.25"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KPUB.SV.W.0231.260815T2159Z-260815T2245Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T16:45:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "SVR"
+     ],
+     "NationalWeatherService": [
+      "SVW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.4fbf57aae79546b33a5b2f5757325d29a10b81d6.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -103.81,
+       37.19
+      ],
+      [
+       -103.76,
+       37.25
+      ],
+      [
+       -103.38,
+       37.26
+      ],
+      [
+       -103.38,
+       37
+      ],
+      [
+       -103.62,
+       37
+      ],
+      [
+       -103.53,
+       37.09
+      ],
+      [
+       -103.81,
+       37.19
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.4fbf57aae79546b33a5b2f5757325d29a10b81d6.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.4fbf57aae79546b33a5b2f5757325d29a10b81d6.001.1",
+    "areaDesc": "Las Animas, CO",
+    "geocode": {
+     "SAME": [
+      "008071"
+     ],
+     "UGC": [
+      "COC071"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/COC071"
+    ],
+    "references": [],
+    "sent": "2026-08-15T15:57:00-06:00",
+    "effective": "2026-08-15T15:57:00-06:00",
+    "onset": "2026-08-15T15:57:00-06:00",
+    "expires": "2026-08-15T19:00:00-06:00",
+    "ends": "2026-08-15T19:00:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Flash Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Pueblo CO",
+    "headline": "Flash Flood Warning issued August 15 at 3:57PM MDT until August 15 at 7:00PM MDT by NWS Pueblo CO",
+    "description": "FFWPUB\n\nThe National Weather Service in Pueblo has issued a\n\n* Flash Flood Warning for...\nSoutheastern Las Animas County in southeastern Colorado...\n\n* Until 700 PM MDT.\n\n* At 357 PM MDT, Doppler radar indicated thunderstorms producing\nheavy rain across the warned area. Between 1 and 2 inches of rain\nhave fallen. The expected rainfall rate is 1 to 2.5 inches in 1\nhour. Flash flooding is ongoing or expected to begin shortly.\n\nHAZARD...Flash flooding caused by thunderstorms.\n\nSOURCE...Radar indicated.\n\nIMPACT...Flash flooding of small creeks and streams, urban areas,\nhighways, streets and underpasses as well as other poor\ndrainage and low-lying areas.\n\n* Some locations that will experience flash flooding include...\nMainly rural areas of Southeastern Las Animas County.",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFWPUB"
+     ],
+     "WMOidentifier": [
+      "WGUS55 KPUB 152157"
+     ],
+     "flashFloodDetection": [
+      "RADAR INDICATED"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KPUB.FF.W.0054.260815T2157Z-260816T0100Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T19:00:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFW"
+     ],
+     "NationalWeatherService": [
+      "FFW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.a55a6f80a943241f7987db68276b2f25ebb5f2a2.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -103.51,
+       41.27
+      ],
+      [
+       -103.21,
+       41.04
+      ],
+      [
+       -103.34,
+       41
+      ],
+      [
+       -103.77,
+       41
+      ],
+      [
+       -103.51,
+       41.27
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.a55a6f80a943241f7987db68276b2f25ebb5f2a2.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.a55a6f80a943241f7987db68276b2f25ebb5f2a2.001.1",
+    "areaDesc": "Cheyenne, NE; Kimball, NE",
+    "geocode": {
+     "SAME": [
+      "031033",
+      "031105"
+     ],
+     "UGC": [
+      "NEC033",
+      "NEC105"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/NEC033",
+     "https://api.weather.gov/zones/county/NEC105"
+    ],
+    "references": [],
+    "sent": "2026-08-15T15:55:00-06:00",
+    "effective": "2026-08-15T15:55:00-06:00",
+    "onset": "2026-08-15T15:55:00-06:00",
+    "expires": "2026-08-15T16:45:00-06:00",
+    "ends": "2026-08-15T16:45:00-06:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Observed",
+    "urgency": "Immediate",
+    "event": "Severe Thunderstorm Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Cheyenne WY",
+    "headline": "Severe Thunderstorm Warning issued August 15 at 3:55PM MDT until August 15 at 4:45PM MDT by NWS Cheyenne WY",
+    "description": "SVRCYS\n\nThe National Weather Service in Cheyenne has issued a\n\n* Severe Thunderstorm Warning for...\nSouthwestern Cheyenne County in the Panhandle of Nebraska...\nSoutheastern Kimball County in the Panhandle of Nebraska...\n\n* Until 445 PM MDT.\n\n* At 355 PM MDT, a severe thunderstorm was located 11 miles south of\nKimball Municipal Airport, or 14 miles south of Kimball, moving\nnortheast at 20 mph.\n\nHAZARD...60 mph wind gusts and quarter size hail.\n\nSOURCE...Radar indicated.\n\nIMPACT...Hail damage to vehicles is expected. Expect wind damage\nto roofs, siding, and trees.\n\n* Locations impacted include...\nDix.\n\nThis includes Interstate 80 in Nebraska between mile markers 27 and\n31.",
+    "instruction": "For your protection move to an interior room on the lowest floor of a\nbuilding.\n\nTorrential rainfall is occurring with this storm, and may lead to\nflash flooding. Do not drive your vehicle through flooded roadways.",
+    "response": "Shelter",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "SVRCYS"
+     ],
+     "WMOidentifier": [
+      "WUUS55 KCYS 152155"
+     ],
+     "eventMotionDescription": [
+      "2026-08-15T21:55:00-00:00...storm...233DEG...17KT...41.02,-103.66"
+     ],
+     "windThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxWindGust": [
+      "60 MPH"
+     ],
+     "hailThreat": [
+      "RADAR INDICATED"
+     ],
+     "maxHailSize": [
+      "1.00"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KCYS.SV.W.0243.260815T2155Z-260815T2245Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T16:45:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "SVR"
+     ],
+     "NationalWeatherService": [
+      "SVW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.b707b327d5a13ec50b89b1eb4189da7f06ecd086.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -84.19,
+       38.37
+      ],
+      [
+       -84.1,
+       38.46
+      ],
+      [
+       -84.07,
+       38.46
+      ],
+      [
+       -84.01,
+       38.43
+      ],
+      [
+       -84,
+       38.44
+      ],
+      [
+       -84,
+       38.42
+      ],
+      [
+       -83.98,
+       38.44
+      ],
+      [
+       -83.95,
+       38.42
+      ],
+      [
+       -83.92,
+       38.36
+      ],
+      [
+       -83.89,
+       38.36
+      ],
+      [
+       -83.9,
+       38.35
+      ],
+      [
+       -83.87,
+       38.36
+      ],
+      [
+       -83.86,
+       38.33
+      ],
+      [
+       -83.84,
+       38.34
+      ],
+      [
+       -83.85,
+       38.32
+      ],
+      [
+       -83.83,
+       38.31
+      ],
+      [
+       -83.85,
+       38.29
+      ],
+      [
+       -84.03,
+       38.32
+      ],
+      [
+       -84.16,
+       38.35
+      ],
+      [
+       -84.19,
+       38.37
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.b707b327d5a13ec50b89b1eb4189da7f06ecd086.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.b707b327d5a13ec50b89b1eb4189da7f06ecd086.001.1",
+    "areaDesc": "Nicholas, KY",
+    "geocode": {
+     "SAME": [
+      "021181"
+     ],
+     "UGC": [
+      "KYC181"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/KYC181"
+    ],
+    "references": [],
+    "sent": "2026-08-15T17:52:00-04:00",
+    "effective": "2026-08-15T17:52:00-04:00",
+    "onset": "2026-08-15T17:52:00-04:00",
+    "expires": "2026-08-15T20:45:00-04:00",
+    "ends": "2026-08-15T20:45:00-04:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Flash Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Louisville KY",
+    "headline": "Flash Flood Warning issued August 15 at 5:52PM EDT until August 15 at 8:45PM EDT by NWS Louisville KY",
+    "description": "FFWLMK\n\nThe National Weather Service in Louisville has issued a\n\n* Flash Flood Warning for...\nNorthern Nicholas County in central Kentucky...\n\n* Until 845 PM EDT.\n\n* At 552 PM EDT, Doppler radar indicated thunderstorms producing\nheavy rain across the warned area. Between 1.5 and 2.5 inches of\nrain have fallen. Additional rainfall amounts of 0.5 to 1 inch are\npossible in the warned area. Flash flooding is ongoing or expected\nto begin shortly.\n\nHAZARD...Flash flooding caused by thunderstorms.\n\nSOURCE...Radar indicated.\n\nIMPACT...Flash flooding of small creeks and streams, urban areas,\nhighways, streets and underpasses as well as other poor\ndrainage and low-lying areas.\n\n* Some locations that will experience flash flooding include...\nCarlisle, Ellisville, Barterville, Myers, Pleasant Valley,\nHeadquarters, Barefoot, Morning Glory, Hooktown and Sprout.",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFWLMK"
+     ],
+     "WMOidentifier": [
+      "WGUS53 KLMK 152152"
+     ],
+     "flashFloodDetection": [
+      "RADAR INDICATED"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KLMK.FF.W.0132.260815T2152Z-260816T0045Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T20:45:00-04:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFW"
+     ],
+     "NationalWeatherService": [
+      "FFW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.cc1931d1f8b8129c6a754f56de59cba45c0f2769.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -83.85,
+       38.32
+      ],
+      [
+       -83.84,
+       38.34
+      ],
+      [
+       -83.86,
+       38.33
+      ],
+      [
+       -83.86,
+       38.35
+      ],
+      [
+       -83.87,
+       38.35
+      ],
+      [
+       -83.87,
+       38.36
+      ],
+      [
+       -83.89,
+       38.36
+      ],
+      [
+       -83.9,
+       38.37
+      ],
+      [
+       -83.92,
+       38.36
+      ],
+      [
+       -83.92,
+       38.38
+      ],
+      [
+       -83.95,
+       38.42
+      ],
+      [
+       -83.96,
+       38.43
+      ],
+      [
+       -83.76,
+       38.41
+      ],
+      [
+       -83.74,
+       38.4
+      ],
+      [
+       -83.73,
+       38.36
+      ],
+      [
+       -83.78,
+       38.31
+      ],
+      [
+       -83.88,
+       38.24
+      ],
+      [
+       -83.9,
+       38.25
+      ],
+      [
+       -83.83,
+       38.31
+      ],
+      [
+       -83.85,
+       38.32
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.cc1931d1f8b8129c6a754f56de59cba45c0f2769.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.cc1931d1f8b8129c6a754f56de59cba45c0f2769.001.1",
+    "areaDesc": "Bath, KY; Fleming, KY",
+    "geocode": {
+     "SAME": [
+      "021011",
+      "021069"
+     ],
+     "UGC": [
+      "KYC011",
+      "KYC069"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/KYC011",
+     "https://api.weather.gov/zones/county/KYC069"
+    ],
+    "references": [],
+    "sent": "2026-08-15T17:52:00-04:00",
+    "effective": "2026-08-15T17:52:00-04:00",
+    "onset": "2026-08-15T17:52:00-04:00",
+    "expires": "2026-08-15T20:45:00-04:00",
+    "ends": "2026-08-15T20:45:00-04:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Flash Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Jackson KY",
+    "headline": "Flash Flood Warning issued August 15 at 5:52PM EDT until August 15 at 8:45PM EDT by NWS Jackson KY",
+    "description": "FFWJKL\n\nThe National Weather Service in Jackson has issued a\n\n* Flash Flood Warning for...\nNorthwestern Bath County in east central Kentucky...\nWest Central Fleming County in east central Kentucky...\n\n* Until 845 PM EDT.\n\n* At 552 PM EDT, Doppler radar indicated thunderstorms producing\nheavy rain across the warned area. Between 0.5 and 1.25 inches of\nrain have fallen. Additional rainfall amounts up to 1.5 inches are\npossible in the warned area. Flash flooding is ongoing or expected\nto begin shortly.\n\nHAZARD...Flash flooding caused by thunderstorms.\n\nSOURCE...Radar.\n\nIMPACT...Flash flooding of small creeks and streams, urban\nareas, highways, streets and underpasses as well as\nother poor drainage and low-lying areas.\n\n* Some locations that will experience flash flooding include...\nPecks Ridge, Craintown, Tilton, Sherburne, Cowan and Bethel.",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFWJKL"
+     ],
+     "WMOidentifier": [
+      "WGUS53 KJKL 152152"
+     ],
+     "flashFloodDetection": [
+      "RADAR INDICATED"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.NEW.KJKL.FF.W.0058.260815T2152Z-260816T0045Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T20:45:00-04:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFW"
+     ],
+     "NationalWeatherService": [
+      "FFW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.002.1",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.002.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.002.1",
+    "areaDesc": "Starke; Pulaski; Fulton; Cass; Miami; Wabash; Huntington; Wells; Adams; Grant; Blackford; Jay",
+    "geocode": {
+     "SAME": [
+      "018149",
+      "018131",
+      "018049",
+      "018017",
+      "018103",
+      "018169",
+      "018069",
+      "018179",
+      "018001",
+      "018053",
+      "018009",
+      "018075"
+     ],
+     "UGC": [
+      "INZ012",
+      "INZ013",
+      "INZ015",
+      "INZ022",
+      "INZ023",
+      "INZ024",
+      "INZ025",
+      "INZ026",
+      "INZ027",
+      "INZ032",
+      "INZ033",
+      "INZ034"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/INZ012",
+     "https://api.weather.gov/zones/forecast/INZ013",
+     "https://api.weather.gov/zones/forecast/INZ015",
+     "https://api.weather.gov/zones/forecast/INZ022",
+     "https://api.weather.gov/zones/forecast/INZ023",
+     "https://api.weather.gov/zones/forecast/INZ024",
+     "https://api.weather.gov/zones/forecast/INZ025",
+     "https://api.weather.gov/zones/forecast/INZ026",
+     "https://api.weather.gov/zones/forecast/INZ027",
+     "https://api.weather.gov/zones/forecast/INZ032",
+     "https://api.weather.gov/zones/forecast/INZ033",
+     "https://api.weather.gov/zones/forecast/INZ034"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.071cfd59d2a0333f4fdd6f35cfecb2ab1a59a409.002.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.071cfd59d2a0333f4fdd6f35cfecb2ab1a59a409.002.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T13:37:00-04:00"
+     }
+    ],
+    "sent": "2026-08-15T17:49:00-04:00",
+    "effective": "2026-08-15T17:49:00-04:00",
+    "onset": "2026-08-15T17:49:00-04:00",
+    "expires": "2026-08-16T11:00:00-04:00",
+    "ends": "2026-08-16T11:00:00-04:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Possible",
+    "urgency": "Future",
+    "event": "Flood Watch",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Northern Indiana",
+    "headline": "Flood Watch issued August 15 at 5:49PM EDT until August 16 at 11:00AM EDT by NWS Northern Indiana",
+    "description": "* WHAT...Flooding caused by excessive rainfall continues to be\npossible.\n\n* WHERE...A portion of northern Indiana, including the following\nareas, Adams, Blackford, Cass IN, Fulton IN, Grant, Huntington,\nJay, Miami, Pulaski, Starke, Wabash and Wells.\n\n* WHEN...Through Sunday morning.\n\n* IMPACTS...Excessive runoff may result in flooding of rivers,\ncreeks, streams, and other low-lying and flood-prone locations.\nFlooding may occur in poor drainage and urban areas. Area creeks\nand streams are running high and could flood with more heavy rain.\n\n* ADDITIONAL DETAILS...\n- Brief rainfall rates of 1 to 2 inches per hour are possible\nlate tonight into Sunday morning.  Saturated conditions\ncontinue across the area due to recent heavy rainfall. Any\nadditional heavy rainfall will result in increased runoff and\nan increased flood potential.\n- http://www.weather.gov/safety/flood",
+    "instruction": "You should monitor later forecasts and be alert for possible Flood\nWarnings. Those living in areas prone to flooding should be prepared\nto take action should flooding develop.",
+    "response": "Prepare",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFAIWX"
+     ],
+     "WMOidentifier": [
+      "WGUS63 KIWX 152149"
+     ],
+     "NWSheadline": [
+      "FLOOD WATCH NOW IN EFFECT THROUGH SUNDAY MORNING"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.EXT.KIWX.FA.A.0008.000000T0000Z-260816T1500Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-16T11:00:00-04:00"
+     ],
+     "expiredReferences": [
+      "w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.3c4ee8dcc8fe6bc0bb6221819c8bd8d2528c2880.002.1,2026-08-15T03:43:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.f8831676a89c3449fd86fb025410a9ca1788ad7c.002.1,2026-08-14T16:20:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.6da505b6ab4256a384344908a9ce4ec8a6725473.003.1,2026-08-14T20:58:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.387925dc8a8bc114d856b0b623d761bff4c377fb.002.1,2026-08-14T14:04:00-04:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFA"
+     ],
+     "NationalWeatherService": [
+      "FAA"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.001.1",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.001.1",
+    "areaDesc": "White",
+    "geocode": {
+     "SAME": [
+      "018181"
+     ],
+     "UGC": [
+      "INZ020"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/INZ020"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.071cfd59d2a0333f4fdd6f35cfecb2ab1a59a409.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.071cfd59d2a0333f4fdd6f35cfecb2ab1a59a409.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T13:37:00-04:00"
+     }
+    ],
+    "sent": "2026-08-15T17:49:00-04:00",
+    "effective": "2026-08-15T17:49:00-04:00",
+    "onset": "2026-08-15T17:49:00-04:00",
+    "expires": "2026-08-16T11:00:00-04:00",
+    "ends": "2026-08-16T11:00:00-04:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Possible",
+    "urgency": "Future",
+    "event": "Flash Flood Watch",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Northern Indiana",
+    "headline": "Flash Flood Watch issued August 15 at 5:49PM EDT until August 16 at 11:00AM EDT by NWS Northern Indiana",
+    "description": "* WHAT...Flash flooding caused by upstream dam release continues to\nbe possible.\n\n* WHERE...A portion of northern Indiana, including the following\ncounty, White.\n\n* WHEN...Through Sunday morning.\n\n* IMPACTS...Flooding may occur in poor drainage and urban areas.\nLow-water crossings may be flooded.\n\n* ADDITIONAL DETAILS...\n- Discharge from the Norway Dam exceeds 9,000 cubic feet per\nsecond.\n- http://www.weather.gov/safety/flood",
+    "instruction": "You should monitor later forecasts and be prepared to take action\nshould Flash Flood Warnings be issued.\n\n\nYou should monitor later forecasts and be alert for possible Flood\nWarnings. Those living in areas prone to flooding should be prepared\nto take action should flooding develop.",
+    "response": "Monitor",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFAIWX"
+     ],
+     "WMOidentifier": [
+      "WGUS63 KIWX 152149"
+     ],
+     "NWSheadline": [
+      "FLASH FLOOD WATCH FOR A DAM FLOODGATE RELEASE NOW IN EFFECT THROUGH SUNDAY MORNING"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.EXT.KIWX.FF.A.0001.000000T0000Z-260816T1500Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-16T11:00:00-04:00"
+     ],
+     "expiredReferences": [
+      "w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.3c4ee8dcc8fe6bc0bb6221819c8bd8d2528c2880.001.1,2026-08-15T03:43:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.f8831676a89c3449fd86fb025410a9ca1788ad7c.001.1,2026-08-14T16:20:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.6da505b6ab4256a384344908a9ce4ec8a6725473.002.1,2026-08-14T20:58:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.387925dc8a8bc114d856b0b623d761bff4c377fb.001.1,2026-08-14T14:04:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.3ed380b9578a893cccaa5e929a127d3cc0cb52bd.001.1,2026-08-14T10:59:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.8d9d32b6d4c45661ddb8c286d2aa97cc1af7e13f.002.1,2026-08-14T05:22:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.5c7c74138bd1c36913e5d847223da13a3baba188.001.1,2026-08-13T22:15:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.75e4ad7fd4cfeee17a8558604d49ae1ca63ee1d5.001.1,2026-08-13T22:26:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.86f68d72058c0bd2ac13baab24b0d494810690db.001.1,2026-08-13T14:51:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.2858da47314cda5a60291e864a41e50f6c5186b6.001.1,2026-08-13T14:13:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.4f17ecb3883b9e4e87a0d67265ac087c577ed3cb.001.1,2026-08-13T04:57:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.914c847c62d4ac0ce761cd3a9d4d07162a971f39.001.1,2026-08-12T20:44:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.a031471077ebb6ac4a26d9af885c2c3a4c1ab5a9.001.1,2026-08-12T11:19:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.ef1d38fe677ab67e3a7e975a4fffc76107723488.001.1,2026-08-12T05:00:00-04:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFA"
+     ],
+     "NationalWeatherService": [
+      "FFA"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.001.2",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.001.2",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.001.2",
+    "areaDesc": "White",
+    "geocode": {
+     "SAME": [
+      "018181"
+     ],
+     "UGC": [
+      "INZ020"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/INZ020"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.071cfd59d2a0333f4fdd6f35cfecb2ab1a59a409.001.2",
+      "identifier": "urn:oid:2.49.0.1.840.0.071cfd59d2a0333f4fdd6f35cfecb2ab1a59a409.001.2",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T13:37:00-04:00"
+     }
+    ],
+    "sent": "2026-08-15T17:49:00-04:00",
+    "effective": "2026-08-15T17:49:00-04:00",
+    "onset": "2026-08-15T17:49:00-04:00",
+    "expires": "2026-08-16T11:00:00-04:00",
+    "ends": "2026-08-16T11:00:00-04:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Possible",
+    "urgency": "Future",
+    "event": "Flood Watch",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Northern Indiana",
+    "headline": "Flood Watch issued August 15 at 5:49PM EDT until August 16 at 11:00AM EDT by NWS Northern Indiana",
+    "description": "* WHAT...Flash flooding caused by upstream dam release continues to\nbe possible.\n\n* WHERE...A portion of northern Indiana, including the following\ncounty, White.\n\n* WHEN...Through Sunday morning.\n\n* IMPACTS...Flooding may occur in poor drainage and urban areas.\nLow-water crossings may be flooded.\n\n* ADDITIONAL DETAILS...\n- Discharge from the Norway Dam exceeds 9,000 cubic feet per\nsecond.\n- http://www.weather.gov/safety/flood",
+    "instruction": "You should monitor later forecasts and be prepared to take action\nshould Flash Flood Warnings be issued.\n\n\nYou should monitor later forecasts and be alert for possible Flood\nWarnings. Those living in areas prone to flooding should be prepared\nto take action should flooding develop.",
+    "response": "Prepare",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFAIWX"
+     ],
+     "WMOidentifier": [
+      "WGUS63 KIWX 152149"
+     ],
+     "NWSheadline": [
+      "FLASH FLOOD WATCH FOR A DAM FLOODGATE RELEASE NOW IN EFFECT THROUGH SUNDAY MORNING"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.EXT.KIWX.FA.A.0008.000000T0000Z-260816T1500Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-16T11:00:00-04:00"
+     ],
+     "expiredReferences": [
+      "w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.3c4ee8dcc8fe6bc0bb6221819c8bd8d2528c2880.001.2,2026-08-15T03:43:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.f8831676a89c3449fd86fb025410a9ca1788ad7c.001.2,2026-08-14T16:20:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.6da505b6ab4256a384344908a9ce4ec8a6725473.002.2,2026-08-14T20:58:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.387925dc8a8bc114d856b0b623d761bff4c377fb.001.2,2026-08-14T14:04:00-04:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFA"
+     ],
+     "NationalWeatherService": [
+      "FAA"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.003.1",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.003.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.9ea9a45529f615a3e69a05ceb7658ff4002e995b.003.1",
+    "areaDesc": "Van Wert; Allen",
+    "geocode": {
+     "SAME": [
+      "039161",
+      "039003"
+     ],
+     "UGC": [
+      "OHZ024",
+      "OHZ025"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/OHZ024",
+     "https://api.weather.gov/zones/forecast/OHZ025"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.071cfd59d2a0333f4fdd6f35cfecb2ab1a59a409.003.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.071cfd59d2a0333f4fdd6f35cfecb2ab1a59a409.003.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T13:37:00-04:00"
+     }
+    ],
+    "sent": "2026-08-15T17:49:00-04:00",
+    "effective": "2026-08-15T17:49:00-04:00",
+    "onset": "2026-08-15T17:49:00-04:00",
+    "expires": "2026-08-16T11:00:00-04:00",
+    "ends": "2026-08-16T11:00:00-04:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Possible",
+    "urgency": "Future",
+    "event": "Flood Watch",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Northern Indiana",
+    "headline": "Flood Watch issued August 15 at 5:49PM EDT until August 16 at 11:00AM EDT by NWS Northern Indiana",
+    "description": "* WHAT...Flooding caused by excessive rainfall continues to be\npossible.\n\n* WHERE...A portion of northwest Ohio, including the following\nareas, Allen OH and Van Wert.\n\n* WHEN...Through Sunday morning.\n\n* IMPACTS...Excessive runoff may result in flooding of rivers,\ncreeks, streams, and other low-lying and flood-prone locations.\nFlooding may occur in poor drainage and urban areas. Area creeks\nand streams are running high and could flood with more heavy rain.\n\n* ADDITIONAL DETAILS...\n- Brief rainfall rates of 1 to 2 inches per hour are possible\nearly this evening, and then again early Sunday morning.\nSaturated conditions continue across the area due to recent\nheavy rainfall. Any additional heavy rainfall will result in\nincreased runoff and an increased flood potential.\n- http://www.weather.gov/safety/flood",
+    "instruction": "You should monitor later forecasts and be alert for possible Flood\nWarnings. Those living in areas prone to flooding should be prepared\nto take action should flooding develop.",
+    "response": "Prepare",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFAIWX"
+     ],
+     "WMOidentifier": [
+      "WGUS63 KIWX 152149"
+     ],
+     "NWSheadline": [
+      "FLOOD WATCH NOW IN EFFECT THROUGH SUNDAY MORNING"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.EXT.KIWX.FA.A.0008.000000T0000Z-260816T1500Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-16T11:00:00-04:00"
+     ],
+     "expiredReferences": [
+      "w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.3c4ee8dcc8fe6bc0bb6221819c8bd8d2528c2880.003.1,2026-08-15T03:43:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.6da505b6ab4256a384344908a9ce4ec8a6725473.001.1,2026-08-14T20:58:00-04:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFA"
+     ],
+     "NationalWeatherService": [
+      "FAA"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.0d3ba90191279af827e3bd1675faae103b1920dc.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -87.76,
+       40.15
+      ],
+      [
+       -87.6,
+       40.15
+      ],
+      [
+       -87.44,
+       40.01
+      ],
+      [
+       -87.44,
+       39.9
+      ],
+      [
+       -87.63,
+       40.08
+      ],
+      [
+       -87.76,
+       40.08
+      ],
+      [
+       -87.76,
+       40.15
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.0d3ba90191279af827e3bd1675faae103b1920dc.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.0d3ba90191279af827e3bd1675faae103b1920dc.001.1",
+    "areaDesc": "Vermilion, IL; Vermillion, IN",
+    "geocode": {
+     "SAME": [
+      "017183",
+      "018165"
+     ],
+     "UGC": [
+      "ILC183",
+      "INC165"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/ILC183",
+     "https://api.weather.gov/zones/county/INC165"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.ee5e62a3a4f05cffcf5c89c79887df4d9a49e2cb.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.ee5e62a3a4f05cffcf5c89c79887df4d9a49e2cb.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T09:29:00-05:00"
+     }
+    ],
+    "sent": "2026-08-15T16:48:00-05:00",
+    "effective": "2026-08-15T16:48:00-05:00",
+    "onset": "2026-08-15T16:48:00-05:00",
+    "expires": "2026-08-16T09:00:00-05:00",
+    "ends": "2026-08-17T15:28:00-05:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Observed",
+    "urgency": "Immediate",
+    "event": "Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Lincoln IL",
+    "headline": "Flood Warning issued August 15 at 4:48PM CDT until August 17 at 3:28PM CDT by NWS Lincoln IL",
+    "description": "...The Flood Warning continues for the following rivers in\nIllinois...Indiana...\n\nVermilion River near Danville affecting Vermillion and Vermilion\nCounties.\n\n.The following forecasts are based on observed precipitation, soil\nmoisture conditions, and forecast precipitation.\n\n* WHAT...Moderate flooding is occurring and moderate flooding is\nforecast.\n\n* WHERE...Vermilion River near Danville.\n\n* WHEN...Until Monday afternoon.\n\n* ADDITIONAL DETAILS...\n- At 3:15 PM CDT Saturday /4:15 PM EDT Saturday/ the stage was\n22.5 feet.\n- Recent Activity...The maximum river stage in the 24 hours\nending at 3:15 PM CDT Saturday /4:15 PM EDT Saturday/ was\n22.5 feet.\n- Forecast...The river is expected to rise to a crest of 23.8\nfeet just after midnight tonight. It will then fall below\nflood stage late Monday morning.\n- Flood stage is 18.0 feet.\n- http://www.weather.gov/safety/flood",
+    "instruction": "Persons with interests along this river need to remain aware of the\nlatest forecasts and associated flood risk for their area. Stay\ntuned for further updates on this flooding situation.\n\nAdditional information is available at www.weather.gov.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FLSILX"
+     ],
+     "WMOidentifier": [
+      "WGUS83 KILX 152148"
+     ],
+     "NWSheadline": [
+      "FLOOD WARNING NOW IN EFFECT UNTIL MONDAY AFTERNOON"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.EXT.KILX.FL.W.0034.000000T0000Z-260817T2028Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-17T15:28:00-05:00"
+     ],
+     "expiredReferences": [
+      "w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.b226e37f76d9f4e4574e8809f6138d6020b5a7a4.001.1,2026-08-15T06:42:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.7953642eb4e3cdfbd830d93dd433759f1ecc463c.001.1,2026-08-14T21:06:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.e4e33d522dd5b21fcbbe1083b9e84172b466e9f2.001.1,2026-08-14T15:42:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.3700ea0c856b81aaad5e4afe0dd2a125cb226e07.001.1,2026-08-14T09:25:00-05:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FLS"
+     ],
+     "NationalWeatherService": [
+      "FLW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.0a3442297a267fb83636a62cc0b9d378cc47647b.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.89,
+       39.63
+      ],
+      [
+       -104.93,
+       39.74
+      ],
+      [
+       -104.8,
+       39.8
+      ],
+      [
+       -104.79,
+       39.8
+      ],
+      [
+       -104.79,
+       39.81
+      ],
+      [
+       -104.76,
+       39.81
+      ],
+      [
+       -104.76,
+       39.82
+      ],
+      [
+       -104.68,
+       39.82
+      ],
+      [
+       -104.74,
+       39.67
+      ],
+      [
+       -104.8,
+       39.64
+      ],
+      [
+       -104.89,
+       39.63
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.0a3442297a267fb83636a62cc0b9d378cc47647b.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.0a3442297a267fb83636a62cc0b9d378cc47647b.001.1",
+    "areaDesc": "Adams, CO; Western Arapahoe, CO; Denver, CO",
+    "geocode": {
+     "SAME": [
+      "008001",
+      "408005",
+      "008031"
+     ],
+     "UGC": [
+      "COC001",
+      "COC005",
+      "COC031"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/COC001",
+     "https://api.weather.gov/zones/county/COC005",
+     "https://api.weather.gov/zones/county/COC031"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.a05c6cf6de3a35b92564e1386a4e794b420c72b3.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.a05c6cf6de3a35b92564e1386a4e794b420c72b3.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T14:44:00-06:00"
+     },
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.651bf408d21119e2d338b3e50724d15846fb220b.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.651bf408d21119e2d338b3e50724d15846fb220b.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T15:04:00-06:00"
+     }
+    ],
+    "sent": "2026-08-15T15:36:00-06:00",
+    "effective": "2026-08-15T15:36:00-06:00",
+    "onset": "2026-08-15T15:36:00-06:00",
+    "expires": "2026-08-15T17:45:00-06:00",
+    "ends": "2026-08-15T17:45:00-06:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Flash Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Denver CO",
+    "headline": "Flash Flood Warning issued August 15 at 3:36PM MDT until August 15 at 5:45PM MDT by NWS Denver CO",
+    "description": "At 336 PM MDT, Broadcast media reported flash flooding was occurring\nnear Chambers and Iliff, and Mississippi and Havana. Between 1.5 and\n3 inches of rain have fallen. Additional rainfall amounts up to 0.2\ninches are possible in the warned area. Flash flooding is already\noccurring.\n\nHAZARD...Life threatening flash flooding. Heavy rain producing flash\nflooding.\n\nSOURCE...Broadcast media reported.\n\nIMPACT...Life threatening flash flooding of creeks and streams,\nroads, and low lying areas.\n\nSome locations that will experience flash flooding include...\nEastern Denver, Aurora, and Buckley SFB.\n\nThis includes the following streams and drainages...\nToll Gate Creek, Sand Creek, Cherry Creek, South Platte River,\nFirst Creek, East Toll Gate Creek, West Toll Gate Creek, Murphy\nCreek, Coal Creek, Westerly Creek, Third Creek and Second Creek.",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.\n\nMove to higher ground now. Act quickly to protect your life.\n\nExcessive runoff from this storm will cause flash flooding of small\ncreeks and streams, highways, streets, underpasses, drainage areas\nand other low lying spots.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFSBOU"
+     ],
+     "WMOidentifier": [
+      "WGUS75 KBOU 152136"
+     ],
+     "NWSheadline": [
+      "FLASH FLOOD WARNING REMAINS IN EFFECT UNTIL 545 PM MDT THIS AFTERNOON FOR WESTERN ADAMS, WESTERN ARAPAHOE, AND EASTERN DENVER COUNTIES"
+     ],
+     "flashFloodDetection": [
+      "OBSERVED"
+     ],
+     "flashFloodDamageThreat": [
+      "CONSIDERABLE"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.CON.KBOU.FF.W.0030.000000T0000Z-260815T2345Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T17:45:00-06:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFS"
+     ],
+     "NationalWeatherService": [
+      "FFW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.2e1be4629c028c8cf7ae9120cb890105c59e704c.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.13,
+       37.55
+      ],
+      [
+       -82.11,
+       37.56
+      ],
+      [
+       -82.1,
+       37.55
+      ],
+      [
+       -82.09,
+       37.55
+      ],
+      [
+       -82,
+       37.51
+      ],
+      [
+       -82.11,
+       37.44
+      ],
+      [
+       -82.23,
+       37.47
+      ],
+      [
+       -82.25,
+       37.5
+      ],
+      [
+       -82.31,
+       37.52
+      ],
+      [
+       -82.34,
+       37.61
+      ],
+      [
+       -82.27,
+       37.66
+      ],
+      [
+       -82.18,
+       37.59
+      ],
+      [
+       -82.14,
+       37.57
+      ],
+      [
+       -82.13,
+       37.56
+      ],
+      [
+       -82.13,
+       37.55
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.2e1be4629c028c8cf7ae9120cb890105c59e704c.001.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.2e1be4629c028c8cf7ae9120cb890105c59e704c.001.1",
+    "areaDesc": "Pike, KY",
+    "geocode": {
+     "SAME": [
+      "021195"
+     ],
+     "UGC": [
+      "KYC195"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/KYC195"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.d64444542b504bf65a6a2c5df2532a30977ffd2e.001.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.d64444542b504bf65a6a2c5df2532a30977ffd2e.001.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T16:16:00-04:00"
+     }
+    ],
+    "sent": "2026-08-15T17:17:00-04:00",
+    "effective": "2026-08-15T17:17:00-04:00",
+    "onset": "2026-08-15T17:17:00-04:00",
+    "expires": "2026-08-15T18:45:00-04:00",
+    "ends": "2026-08-15T18:45:00-04:00",
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Flash Flood Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Jackson KY",
+    "headline": "Flash Flood Warning issued August 15 at 5:17PM EDT until August 15 at 6:45PM EDT by NWS Jackson KY",
+    "description": "At 517 PM EDT, emergency management reported flash flooding in\nBelfry. Between 1 and 2.5 inches of rain have fallen. Flooding\nimpacts will continue, but no additional rainfall is imminent. Flash\nflooding is already occurring.\n\nHAZARD...Flash flooding caused by heavy rain.\n\nSOURCE...Emergency management reported.\n\nIMPACT...Flash flooding of small creeks and streams, urban areas,\nhighways, streets and underpasses as well as other poor\ndrainage and low-lying areas.\n\nSome locations that will experience flash flooding include...\nForest Hills, Board Tree, Phelps, Coleman, Jamboree, Mcandrews,\nMajestic, Hardy, Huddy, Belfry, Paw Paw, Argo, Woodman and Canada.",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.\n\nPlease report observed flooding to local emergency services or law\nenforcement and request they pass this information to the National\nWeather Service when you can do so safely.",
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "FFSJKL"
+     ],
+     "WMOidentifier": [
+      "WGUS73 KJKL 152117"
+     ],
+     "NWSheadline": [
+      "FLASH FLOOD WARNING REMAINS IN EFFECT UNTIL 645 PM EDT THIS EVENING FOR NORTHEASTERN PIKE COUNTY"
+     ],
+     "flashFloodDetection": [
+      "OBSERVED"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.CON.KJKL.FF.W.0057.000000T0000Z-260815T2245Z/"
+     ],
+     "eventEndingTime": [
+      "2026-08-15T18:45:00-04:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "FFS"
+     ],
+     "NationalWeatherService": [
+      "FFW"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.4e1276a743bb215b2d7b6f94c383dba8ab04b337.015.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -157.915,
+       21.377
+      ],
+      [
+       -157.951,
+       21.392
+      ],
+      [
+       -158.021,
+       21.403
+      ],
+      [
+       -158.057,
+       21.397
+      ],
+      [
+       -158.084,
+       21.375
+      ],
+      [
+       -158.088,
+       21.397
+      ],
+      [
+       -158.072,
+       21.455
+      ],
+      [
+       -158.105,
+       21.492
+      ],
+      [
+       -158.105,
+       21.526
+      ],
+      [
+       -158.051,
+       21.578
+      ],
+      [
+       -158.023,
+       21.617
+      ],
+      [
+       -158.006,
+       21.592
+      ],
+      [
+       -157.955,
+       21.441
+      ],
+      [
+       -157.915,
+       21.377
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.4e1276a743bb215b2d7b6f94c383dba8ab04b337.015.1",
+    "@type": "wx:Alert",
+    "id": "urn:oid:2.49.0.1.840.0.4e1276a743bb215b2d7b6f94c383dba8ab04b337.015.1",
+    "areaDesc": "Central Oahu",
+    "geocode": {
+     "SAME": [
+      "015003"
+     ],
+     "UGC": [
+      "HIZ010"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/HIZ010"
+    ],
+    "references": [
+     {
+      "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.fde44620f6868c250ea4f0b3fae82d878c15978b.015.1",
+      "identifier": "urn:oid:2.49.0.1.840.0.fde44620f6868c250ea4f0b3fae82d878c15978b.015.1",
+      "sender": "w-nws.webmaster@noaa.gov",
+      "sent": "2026-08-15T04:58:00-10:00"
+     }
+    ],
+    "sent": "2026-08-15T11:15:00-10:00",
+    "effective": "2026-08-15T11:15:00-10:00",
+    "onset": "2026-08-15T11:15:00-10:00",
+    "expires": "2026-08-15T19:15:00-10:00",
+    "ends": null,
+    "status": "Actual",
+    "messageType": "Update",
+    "category": "Met",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "event": "Tropical Storm Warning",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Honolulu HI",
+    "headline": "Tropical Storm Warning issued August 15 at 11:15AM HST by NWS Honolulu HI",
+    "description": "* LOCATIONS AFFECTED\n- Wahiawa\n- Mililani\n- Waipio\n\n* WIND\n- LATEST LOCAL FORECAST: Below tropical storm force wind\n- Peak Wind Forecast: 20-30 mph with gusts to 40 mph\n\n- THREAT TO LIFE AND PROPERTY THAT INCLUDES TYPICAL FORECAST\nUNCERTAINTY IN TRACK, SIZE AND INTENSITY: Potential for wind 58\nto 73 mph\n- The wind threat has remained nearly steady from the\nprevious assessment.\n- PLAN: Plan for dangerous wind of equivalent strong tropical\nstorm force.\n- PREPARE: Remaining efforts to protect life and property\nshould be completed as soon as possible. Prepare for\nsignificant wind damage.\n- ACT: Move to safe shelter before the wind becomes hazardous.\n\n- POTENTIAL IMPACTS: Significant\n- Some damage to roofing and siding materials, along with\ndamage to porches, awnings, carports, and sheds. A few\nbuildings experiencing window, door, and garage door\nfailures. Mobile homes damaged, especially if unanchored.\nUnsecured lightweight objects become dangerous projectiles.\n- Several large trees snapped or uprooted, but with greater\nnumbers in places where trees are shallow rooted. Several\nfences and roadway signs blown over.\n- Some roads impassable from large debris, and more within\nurban or heavily wooded places. A few bridges, causeways,\nand access routes impassable.\n- Scattered power and communications outages, but more\nprevalent in areas with above ground lines.\n\n* FLOODING RAIN\n- LATEST LOCAL FORECAST: Flood Watch is in effect\n- Peak Rainfall Amounts: Additional 2-4 inches, with locally\nhigher amounts\n\n- THREAT TO LIFE AND PROPERTY THAT INCLUDES TYPICAL FORECAST\nUNCERTAINTY IN TRACK, SIZE AND INTENSITY: Potential for\nmoderate flooding rain\n- The flooding rain threat has remained nearly steady from\nthe previous assessment.\n- PLAN: Emergency plans should include the potential for\nmoderate flooding from heavy rain. Evacuations and rescues\nare possible.\n- PREPARE: Consider protective actions if you are in an area\nvulnerable to flooding.\n- ACT: Heed any flood watches and warnings. Failure to take\naction may result in serious injury or loss of life.\n\n- POTENTIAL IMPACTS: Significant\n- Moderate rainfall flooding may prompt several evacuations\nand rescues.\n- Rivers and tributaries may quickly become swollen with\nswifter currents and overspill their banks in a few places,\nespecially in usually vulnerable spots. Small streams,\ncreeks, canals, arroyos, and ditches overflow.\n- Flood waters can enter some structures or weaken\nfoundations. Several places may experience expanded areas\nof rapid inundation at underpasses, low-lying spots, and\npoor drainage areas. Some streets and parking lots take on\nmoving water as storm drains and retention ponds overflow.\nDriving conditions become hazardous. Some road and bridge\nclosures.\n\n* TORNADO\n- LATEST LOCAL FORECAST:\n- Situation is unfavorable for tornadoes\n\n- THREAT TO LIFE AND PROPERTY THAT INCLUDES TYPICAL FORECAST\nUNCERTAINTY IN TRACK, SIZE AND INTENSITY: Tornadoes not expected\n- The tornado threat has remained nearly steady from the\nprevious assessment.\n- PLAN: Tornadoes are not expected. Showers and thunderstorms\nwith gusty winds may still occur.\n- PREPARE: Little to no preparations needed to protect\nagainst tornadoes at this time. Keep informed of the latest\ntornado situation.\n- ACT: Listen for changes in the forecast.\n\n- POTENTIAL IMPACTS: Little to None\n- Little to no potential impacts from tornadoes.\n\n* FOR MORE INFORMATION:\n- https://www.weather.gov/hfo",
+    "instruction": null,
+    "response": "Avoid",
+    "note": null,
+    "parameters": {
+     "AWIPSidentifier": [
+      "TCVHFO"
+     ],
+     "WMOidentifier": [
+      "WTHW80 PHFO 152115"
+     ],
+     "NWSheadline": [
+      "TROPICAL STORM WARNING REMAINS IN EFFECT"
+     ],
+     "BLOCKCHANNEL": [
+      "EAS",
+      "NWEM",
+      "CMAS"
+     ],
+     "EAS-ORG": [
+      "WXR"
+     ],
+     "VTEC": [
+      "/O.CON.PHFO.TR.W.3001.000000T0000Z-000000T0000Z/"
+     ],
+     "expiredReferences": [
+      "w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.bcd089f3b30cc5bf506f59e1bc51057497734479.015.1,2026-08-14T22:40:00-10:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.28c3e61700803376a83d7091c45955e7e6c2f660.015.1,2026-08-14T17:08:00-10:00"
+     ]
+    },
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "TRW"
+     ],
+     "NationalWeatherService": [
+      "TRW"
+     ]
+    }
+   }
+  }
+ ]
+}

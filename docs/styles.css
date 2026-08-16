@@ -999,6 +999,10 @@ body.view-changelog .section-nav { display: none !important; }
     text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted);
     margin: 0 0 0.85rem;
 }
+/* Sitewide link to /national/ — added to the office index Task 7 (National */
+/* Desk linkage). font-family uses the --font-ui token, not a literal font */
+/* name, per house ruling. */
+.office-index-national { font-family: var(--font-ui); letter-spacing: .05em; margin: .4rem 0 1rem; }
 .office-index-list {
     list-style: none; margin: 0; padding: 0;
     columns: 4 10rem; column-gap: 1.8rem;
@@ -1031,3 +1035,27 @@ body.view-changelog .section-nav { display: none !important; }
 @media print {
     .office-index { display: none !important; }
 }
+
+/* ── The National Desk ─────────────────────────────────────────── */
+.desk-lede { margin: 2rem 0 2.5rem; text-align: center; }
+.desk-kicker { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .14em; font-size: .78rem; color: var(--rubric); }
+.desk-deck { font-family: var(--font-display); font-variation-settings: 'opsz' 40; font-size: clamp(1.3rem, 3vw, 1.8rem); line-height: 1.35; margin: .6rem auto 0; max-width: 42ch; }
+.desk-attrib { color: var(--text-muted); font-size: .85rem; margin-top: .6rem; font-style: italic; }
+.wire { border-top: 2px solid var(--ink); margin-top: 2.5rem; }
+.wire-label { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .14em; font-size: .78rem; padding: .5rem 0; border-bottom: 1px solid var(--rule); }
+.wire-list { list-style: none; margin: 0; padding: 0; }
+.wire-item { display: flex; justify-content: space-between; gap: 1rem; padding: .55rem 0; border-bottom: 1px solid var(--rule); font-variant-numeric: oldstyle-nums; }
+.wire-item .wire-event { color: var(--text-muted); text-align: right; }
+.wire-item.wire-extreme .wire-event { color: var(--rubric); font-style: italic; }
+.wire-more { color: var(--text-muted); font-size: .85rem; padding: .55rem 0; }
+.census { margin: 2.5rem 0; }
+.local-desk { border: 1px solid var(--rule); padding: .6rem .9rem; font-size: .9rem; margin: 1.2rem 0; }
+/* Masthead dateline entry pointing at /national/. Font comes from .dateline;  */
+/* the small-caps pair matches its .dateline-date/.dateline-edition siblings   */
+/* so the row reads as one line. Quiet-link idiom: accent, underline on hover. */
+/* The shell's own dateline omits this — there it would be a self-link.        */
+.dateline-desk {
+    font-variant-caps: all-small-caps; letter-spacing: 0.06em;
+    color: var(--accent); text-decoration: none;
+}
+.dateline-desk:hover { text-decoration: underline; }

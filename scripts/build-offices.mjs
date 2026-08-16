@@ -110,6 +110,7 @@ export function renderOfficePage(template, code, city) {
 // changefreq/priority but does read <lastmod>, so every URL carries one.
 export function renderSitemap(codes, lastmod = new Date().toISOString().slice(0, 10)) {
     const urls = [`  <url><loc>https://plaincast.live/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`];
+    urls.push(`  <url><loc>https://plaincast.live/national/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>`);
     for (const code of codes) {
         urls.push(`  <url><loc>https://plaincast.live/o/${code}/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>`);
     }

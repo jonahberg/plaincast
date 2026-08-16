@@ -9,6 +9,13 @@ let mockAlertThrows = false;
 let fetchAlertCalls = 0;
 let mockFetchDelay = 0; // ms: widen the fetch window so overlap is deterministic
 mock.module('../api/_utils.js', () => ({
+    // A module mock replaces the WHOLE module process-wide (Bun mocks are
+    // global), so the National Desk fetchers must be stubbed here too —
+    // omitting them makes api/national-desk.js fail to link when this file
+    // loads first. Stub every export of _utils.js, always.
+    fetchSevereAlerts: async () => [],
+    fetchAlertTotals: async () => null,
+    fetchSpcDy1: async () => null,
     fetchAFDList: async () => [],
     fetchAFDProduct: async () => ({}),
     productUrlFromItem: () => null,

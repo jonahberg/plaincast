@@ -32,7 +32,7 @@ describe('per-office SEO pages stay in sync with docs/index.html', () => {
         const committed = readFileSync(join(DOCS, 'sitemap.xml'), 'utf8');
         const locs = [...committed.matchAll(/<loc>/g)].length;
         const stamps = [...committed.matchAll(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/g)].length;
-        expect(locs).toBe(codes.length + 1); // homepage + every office
+        expect(locs).toBe(codes.length + 2); // homepage + /national/ + every office
         expect(stamps).toBe(locs);
     });
 
