@@ -1079,9 +1079,11 @@ body.view-changelog .section-nav { display: none !important; }
     text-wrap: balance;
 }
 /* SPC writes its regions SHOUTED ("THE OHIO VALLEY"), and the builder ships
-   them as written — the display case is the stylesheet's business. Lowercase
-   first, then let small caps set the line, so parsed regions and our own
-   prose come out in one voice whatever case the product arrived in. */
+   them as written — the display case is the stylesheet's business.
+   all-small-caps sets BOTH cases as small capitals, so parsed regions and our
+   own prose come out in one voice whatever case the product arrived in. Use
+   the longhand, never `font-variant:` — the shorthand resets every other
+   variant axis (numerals included) to normal. */
 .desk-risk-of {
     font-family: var(--font-ui); font-size: 0.8rem;
     font-variant-caps: all-small-caps;
@@ -1152,8 +1154,8 @@ body.view-changelog .section-nav { display: none !important; }
     font-variation-settings: "opsz" 28, "SOFT" 0, "WONK" 0;
     font-size: 1.25rem; line-height: 1.2;
 }
-/* Region prose arrives SHOUTED and the no-risk note does not; lowercase both
-   so one ledger voice sets the whole rail. */
+/* Region prose arrives SHOUTED and the no-risk note does not; all-small-caps
+   levels both so one ledger voice sets the whole rail. */
 .desk-rail-note {
     font-size: 0.82rem; line-height: 1.45; color: var(--text-muted);
     font-variant-caps: all-small-caps; letter-spacing: 0.02em;
