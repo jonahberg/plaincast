@@ -53,4 +53,11 @@ describe('whereami', () => {
         await handler({ method: 'GET', headers: { 'x-vercel-ip-latitude': 'abc', 'x-vercel-ip-longitude': '1e99' } }, res);
         expect(res.code).toBe(204);
     });
+    test('non-GET method -> 405 no-store without fetching', async () => {
+        globalThis.fetch = async () => { throw new Error('must not fetch'); };
+        const res = mockRes();
+        await handler({ method: 'POST', headers: {} }, res);
+        expect(res.code).toBe(405);
+        expect(res.headers['cache-control']).toBe('no-store');
+    });
 });
