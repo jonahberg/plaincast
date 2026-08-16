@@ -1084,7 +1084,7 @@ body.view-changelog .section-nav { display: none !important; }
    prose come out in one voice whatever case the product arrived in. */
 .desk-risk-of {
     font-family: var(--font-ui); font-size: 0.8rem;
-    text-transform: lowercase; font-variant: small-caps;
+    font-variant-caps: all-small-caps;
     letter-spacing: 0.18em; color: var(--text-muted);
     max-width: 54ch; margin: 0.45rem auto 0;
 }
@@ -1156,7 +1156,7 @@ body.view-changelog .section-nav { display: none !important; }
    so one ledger voice sets the whole rail. */
 .desk-rail-note {
     font-size: 0.82rem; line-height: 1.45; color: var(--text-muted);
-    text-transform: lowercase; font-variant: small-caps; letter-spacing: 0.02em;
+    font-variant-caps: all-small-caps; letter-spacing: 0.02em;
     margin: 0.15rem 0 0;
 }
 
@@ -1174,7 +1174,7 @@ body.view-changelog .section-nav { display: none !important; }
 .wire-area {
     flex: 0 0 100%; margin-top: .1rem;
     font-size: .8rem; line-height: 1.5; color: var(--text-muted);
-    font-variant: small-caps; letter-spacing: .03em;
+    font-variant-caps: small-caps; letter-spacing: .03em;
 }
 .wire-more { color: var(--text-muted); font-size: .85rem; padding: .55rem 0; }
 
@@ -1193,7 +1193,7 @@ body.view-changelog .section-nav { display: none !important; }
    the build rule sets running copy justified at 640 and up. The rail stacks
    with the mockup's border flip, which keeps the box closed either way. */
 @media (max-width: 639.98px) {
-    .desk-copy p { text-align: left; }
+    .desk-copy p { text-align: left; hyphens: manual; }
     .desk-rail { grid-template-columns: 1fr; border-right: 1px solid var(--rule); border-bottom: none; }
     .desk-rail-day { border-right: none; border-bottom: 1px solid var(--rule); }
     .desk-risk-of { letter-spacing: 0.12em; }
