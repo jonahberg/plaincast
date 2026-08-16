@@ -1,6 +1,9 @@
 import { describe, test, expect, afterEach } from 'bun:test';
 import { readFileSync, existsSync } from 'node:fs';
-import { officeFromAlert, groupDispatches, buildCensus, parseSpcOutlook } from '../api/_national.js';
+import {
+    officeFromAlert, groupDispatches, buildCensus, parseSpcOutlook,
+    parseRiskCategory, parseDiscussionBody, digestArea, formatExpiry, nextOutlookTime,
+} from '../api/_national.js';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 // `?real` forces a distinct module instance from the bare '../api/_utils.js'
 // specifier. Several other test files call mock.module('../api/_utils.js',
@@ -14,6 +17,8 @@ import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { fetchSevereAlerts, fetchAlertTotals, fetchSpcDy1 } from '../api/_utils.js?real';
 import alerts from './fixtures/national/severe-alerts.json';
 import swody1 from './fixtures/national/swody1.json';
+import swody2 from './fixtures/national/swody2.json';
+import swody3 from './fixtures/national/swody3.json';
 
 const NAMES = { PUB: 'Pueblo', EPZ: 'El Paso', LOT: 'Chicago' };
 
@@ -37,8 +42,11 @@ describe('groupDispatches', () => {
             f('Flood Watch', 'Severe', 'FFAEPZ'), // watch: excluded
         ];
         const rows = groupDispatches(feats, NAMES);
-        expect(rows[0]).toEqual({ code: 'LOT', city: 'Chicago', event: 'Tornado Warning', count: 1, extreme: true });
-        expect(rows[1]).toEqual({ code: 'PUB', city: 'Pueblo', event: 'Severe Thunderstorm Warning', count: 2, extreme: false });
+        // toMatchObject (not toEqual): rows now also carry raw areaDesc/expires
+        // passthrough fields (see the dedicated describe block below) — the
+        // code/city/event/count/extreme contract here is unchanged.
+        expect(rows[0]).toMatchObject({ code: 'LOT', city: 'Chicago', event: 'Tornado Warning', count: 1, extreme: true });
+        expect(rows[1]).toMatchObject({ code: 'PUB', city: 'Pueblo', event: 'Severe Thunderstorm Warning', count: 2, extreme: false });
         expect(rows.length).toBe(2);
     });
     test('uncovered office keeps its dispatch with city null', () => {
@@ -48,6 +56,30 @@ describe('groupDispatches', () => {
     });
     test('live fixture produces rows without throwing', () => {
         expect(Array.isArray(groupDispatches(alerts.features, NAMES))).toBe(true);
+    });
+    test('passes through raw areaDesc/expires from the leading warning, unformatted', () => {
+        const rows = groupDispatches(
+            [f('Severe Thunderstorm Warning', 'Severe', 'SVRPUB', { areaDesc: 'Otero; Crowley', expires: '2026-08-16T01:30:00Z' })],
+            NAMES,
+        );
+        expect(rows[0].areaDesc).toBe('Otero; Crowley');
+        expect(rows[0].expires).toBe('2026-08-16T01:30:00Z');
+    });
+    test('expires falls back to ends; both null when absent', () => {
+        const withEnds = groupDispatches([f('Tornado Warning', 'Extreme', 'TORLOT', { ends: '2026-08-16T02:00:00Z' })], NAMES);
+        expect(withEnds[0].expires).toBe('2026-08-16T02:00:00Z');
+        const withNeither = groupDispatches([f('Tornado Warning', 'Extreme', 'TORLOT')], NAMES);
+        expect(withNeither[0].areaDesc).toBeNull();
+        expect(withNeither[0].expires).toBeNull();
+    });
+    test('promotion to a worse warning carries that warning\'s own areaDesc/expires, not the first warning\'s', () => {
+        const rows = groupDispatches([
+            f('Severe Thunderstorm Warning', 'Severe', 'SVRPUB', { areaDesc: 'FirstArea', expires: '2026-08-16T01:00:00Z' }),
+            f('Tornado Warning', 'Extreme', 'SVRPUB', { areaDesc: 'SecondArea', expires: '2026-08-16T02:00:00Z' }),
+        ], NAMES);
+        expect(rows[0].event).toBe('Tornado Warning');
+        expect(rows[0].areaDesc).toBe('SecondArea');
+        expect(rows[0].expires).toBe('2026-08-16T02:00:00Z');
     });
 });
 
@@ -73,8 +105,71 @@ describe('parseSpcOutlook', () => {
     });
 });
 
-function f(event, severity, awips) {
-    return { properties: { event, severity, parameters: { AWIPSidentifier: [awips] } } };
+describe('parseRiskCategory', () => {
+    test('extracts level and regions from a THERE-IS headline', () => {
+        const r = parseRiskCategory('THERE IS A SLIGHT RISK OF SEVERE THUNDERSTORMS PORTIONS OF THE OHIO VALLEY AND PARTS OF THE CENTRAL HIGH PLAINS');
+        expect(r.level).toBe('SLIGHT');
+        expect(r.regions).toMatch(/Ohio Valley/i);
+    });
+    test('all five categorical words map', () => {
+        for (const w of ['MARGINAL','SLIGHT','ENHANCED','MODERATE','HIGH']) {
+            expect(parseRiskCategory(`THERE IS A ${w} RISK OF SEVERE THUNDERSTORMS SOMEWHERE`).level).toBe(w);
+        }
+    });
+    test('null on no-risk / garbage headlines (calm face)', () => {
+        expect(parseRiskCategory('NO SEVERE THUNDERSTORM AREAS FORECAST')).toBeNull();
+        expect(parseRiskCategory(null)).toBeNull();
+    });
+});
+
+describe('parseDiscussionBody', () => {
+    test('returns post-SUMMARY prose only, from the live DY1 fixture', () => {
+        const paras = parseDiscussionBody(swody1.productText);
+        expect(paras.length).toBeGreaterThan(0);
+        expect(paras.length).toBeLessThanOrEqual(3);
+        const { summary } = parseSpcOutlook(swody1.productText);
+        expect(paras[0]).not.toBe(summary);           // never the summary itself
+        for (const p of paras) {
+            expect(p).not.toMatch(/^\.\.\./);          // no section-header lines
+            expect(p.length).toBeGreaterThanOrEqual(40);
+        }
+    });
+    test('empty array when nothing follows the summary', () => {
+        expect(parseDiscussionBody('...SUMMARY...\nOnly a summary here with enough length to pass filters.\n$$')).toEqual([]);
+        expect(parseDiscussionBody('')).toEqual([]);
+    });
+});
+
+describe('digestArea', () => {
+    test('two areas + overflow marker', () => {
+        expect(digestArea('Otero; Crowley; Pueblo; Las Animas')).toBe('Otero & Crowley +2 more');
+        expect(digestArea('Franklin Mountains')).toBe('Franklin Mountains');
+        expect(digestArea('A; B')).toBe('A & B');
+        expect(digestArea('')).toBeNull();
+        expect(digestArea(null)).toBeNull();
+    });
+});
+
+describe('formatExpiry', () => {
+    test('office-local until-time', () => {
+        expect(formatExpiry('2026-08-16T01:30:00Z', 'America/Denver')).toMatch(/until 7:30 PM MDT/i);
+    });
+    test('null on garbage', () => {
+        expect(formatExpiry('nope', 'America/Denver')).toBeNull();
+        expect(formatExpiry(null, 'America/Denver')).toBeNull();
+    });
+});
+
+describe('nextOutlookTime', () => {
+    test('walks the fixed SPC schedule', () => {
+        expect(nextOutlookTime('2026-08-16T02:00:00Z')).toBe('0600 UTC');
+        expect(nextOutlookTime('2026-08-16T06:01:00Z')).toBe('1300 UTC');
+        expect(nextOutlookTime('2026-08-16T23:30:00Z')).toBe('0100 UTC'); // wraps
+    });
+});
+
+function f(event, severity, awips, extra = {}) {
+    return { properties: { event, severity, parameters: { AWIPSidentifier: [awips] }, ...extra } };
 }
 
 // These three fetchers call the global `fetch` directly (NWS APIs), so we
