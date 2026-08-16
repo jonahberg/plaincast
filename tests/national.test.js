@@ -7,14 +7,14 @@ import {
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 // `?real` forces a distinct module instance from the bare '../api/_utils.js'
 // specifier. Several other test files call mock.module('../api/_utils.js',
-// ...) with stubs that predate these three exports; Bun's module mocks are
+// ...) with stubs that predate these four exports; Bun's module mocks are
 // process-global (not file-scoped) and also hijack same-module internal
 // cross-references (fetchSpcDy1 -> fetchAFDProduct/productUrlFromItem), so a
 // plain import here can silently receive a stale, partially-stubbed module
 // depending on file run order. The query-string suffix sidesteps that by
 // resolving to a fresh, unmocked instance (_utils.js has no module-level
 // state beyond a constant, so double-instantiation is safe).
-import { fetchSevereAlerts, fetchAlertTotals, fetchSpcDy1 } from '../api/_utils.js?real';
+import { fetchSevereAlerts, fetchAlertTotals, fetchSpcDy1, fetchSpcOutlook } from '../api/_utils.js?real';
 import alerts from './fixtures/national/severe-alerts.json';
 import swody1 from './fixtures/national/swody1.json';
 import swody2 from './fixtures/national/swody2.json';
@@ -207,6 +207,43 @@ describe('national fetchers', () => {
     test('fetchAlertTotals returns null on non-OK (soft data)', async () => {
         globalThis.fetch = async () => new Response('nope', { status: 503 });
         expect(await fetchAlertTotals({})).toBeNull();
+    });
+
+    test('fetchSpcOutlook(DY2) hits the DY2 locations endpoint and unwraps text+issuance', async () => {
+        let seen;
+        globalThis.fetch = async (url) => {
+            if (String(url).includes('/products/types/SWO/locations/DY2')) {
+                seen = String(url);
+                return new Response(JSON.stringify({ '@graph': [{ '@id': 'https://api.weather.gov/products/def' }] }), { status: 200 });
+            }
+            return new Response(JSON.stringify({ productText: 'TEXT2', issuanceTime: '2026-08-16T17:34:00+00:00' }), { status: 200 });
+        };
+        const out = await fetchSpcOutlook('DY2', {});
+        expect(seen).toBe('https://api.weather.gov/products/types/SWO/locations/DY2');
+        expect(out.productText).toBe('TEXT2');
+        expect(out.issuanceTime).toContain('2026');
+    });
+
+    test('fetchSpcOutlook rejects an invalid location without fetching', async () => {
+        let called = false;
+        globalThis.fetch = async () => { called = true; throw new Error('must not fetch'); };
+        // Asserts the specific validation message (not just "rejects") — a
+        // tripwire mock that throws on fetch would otherwise satisfy a bare
+        // rejects.toThrow() even if the guard were deleted and fetch ran.
+        await expect(fetchSpcOutlook('EVIL', {})).rejects.toThrow('bad outlook location');
+        expect(called).toBe(false);
+    });
+
+    test('fetchSpcDy1 still resolves through the shared fetchSpcOutlook path', async () => {
+        globalThis.fetch = async (url) => {
+            if (String(url).includes('/products/types/SWO/locations/DY1')) {
+                return new Response(JSON.stringify({ '@graph': [{ '@id': 'https://api.weather.gov/products/abc' }] }), { status: 200 });
+            }
+            return new Response(JSON.stringify({ productText: 'TEXT', issuanceTime: '2026-08-15T19:42:00+00:00' }), { status: 200 });
+        };
+        const out = await fetchSpcDy1({});
+        expect(out.productText).toBe('TEXT');
+        expect(out.issuanceTime).toContain('2026');
     });
 });
 

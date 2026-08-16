@@ -21,6 +21,7 @@ mock.module('../api/_utils.js', () => ({
     fetchSevereAlerts: async () => { if (severeThrows) throw new Error('NWS down'); return mockFeatures; },
     fetchAlertTotals: async () => mockTotals, // soft upstream: never throws
     fetchSpcDy1: async () => { if (spcThrows) throw new Error('SPC down'); return mockSpc; },
+    fetchSpcOutlook: async () => null,
     fetchAFDList: async () => [],
     fetchAFDProduct: async () => ({ productText: '', issuanceTime: null }),
     productUrlFromItem: (item) => item?.id || null,
