@@ -16,8 +16,10 @@ radar map, never a dashboard. All anti-tells apply.
 
 ## URL and navigation
 
-- **v1:** `/national/`, linked from the masthead on every page (a printed running-head
-  entry, same treatment as existing nav).
+- **v1:** `/national/`, linked from the office-index footer on every page (as-built:
+  no masthead nav exists anywhere on the site, so the original "masthead running-head"
+  line here was unimplementable as written — final-review finding). Whether the front
+  page also earns a masthead folio link is an open owner decision.
 - **v2 (explicitly deferred):** flipping `/` so returning readers land on their saved
   local desk and new visitors land on the National Desk. This decision is gated on
   Vercel Web Analytics being enabled and a few weeks of real numbers.
@@ -61,8 +63,9 @@ Clone the proven office-page pattern wholesale:
 - **Fail-safe floor:** on any error the function serves the baked shell, which carries
   the masthead + a typeset index of all 68 desks — still a useful page with zero
   upstream fetches. Same "worst case is a good page" contract as office-page.js.
-- Client JS is progressive enhancement only (local-desk pointer, periodic Wire
-  refresh); the page is complete without it.
+- Client JS is progressive enhancement only (local-desk pointer, AI deck swap); the
+  page is complete without it. Periodic Wire refresh is deferred to v1.1 — behind the
+  600s/1800s CDN cache a client-side refresh adds little (final-review ruling).
 
 ### Geolocation — why it is client-side
 
