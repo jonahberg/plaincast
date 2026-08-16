@@ -170,7 +170,10 @@ presented as Study F in the National Desk Studies artifact. Build starts only af
 8. **Clock line** (from E) — "Next Day 1 outlook expected by HHMM UTC" from the
    fixed SPC issuance schedule (0600/1300/1630/2000/0100 UTC), plus the CDN
    re-ink note. Pure arithmetic, no fetch.
-9. **Local desk slot, office index, colophon** — unchanged.
+9. **Local desk slot, office index, colophon** — unchanged, in their AS-BUILT
+   positions (the local-desk slot sits at the top of <main>, hidden until
+   geolocated — v1 final-review-accepted placement; the shell is untouched in
+   v1.1, so this list's ordering governs only the SSR-rendered sections 2–8).
 
 ### New parsing/logic (all pure, all unit-tested)
 
