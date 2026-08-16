@@ -1050,3 +1050,12 @@ body.view-changelog .section-nav { display: none !important; }
 .wire-more { color: var(--text-muted); font-size: .85rem; padding: .55rem 0; }
 .census { margin: 2.5rem 0; }
 .local-desk { border: 1px solid var(--rule); padding: .6rem .9rem; font-size: .9rem; margin: 1.2rem 0; }
+/* Masthead dateline entry pointing at /national/. Font comes from .dateline;  */
+/* the small-caps pair matches its .dateline-date/.dateline-edition siblings   */
+/* so the row reads as one line. Quiet-link idiom: accent, underline on hover. */
+/* The shell's own dateline omits this — there it would be a self-link.        */
+.dateline-desk {
+    font-variant-caps: all-small-caps; letter-spacing: 0.06em;
+    color: var(--accent); text-decoration: none;
+}
+.dateline-desk:hover { text-decoration: underline; }

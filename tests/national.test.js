@@ -180,4 +180,17 @@ describe('national linkage', () => {
     test('sitemap carries /national/', () => {
         expect(readFileSync('docs/sitemap.xml', 'utf8')).toContain('https://plaincast.live/national/</loc>');
     });
+    // The office-index link sits at the foot of the page; the masthead entry is
+    // what makes the desk reachable above the fold. Exact-match the anchor —
+    // the bare href already appears in the office index, so a substring test on
+    // '/national/' alone would pass without the dateline entry existing.
+    test('homepage masthead dateline carries the National Desk entry', () => {
+        const home = readFileSync('docs/index.html', 'utf8');
+        expect(home).toContain('<a class="dateline-desk" href="/national/">National&nbsp;Desk</a>');
+    });
+    // On the desk itself the same entry would be a self-link, so the shell's
+    // dateline deliberately stays as-is.
+    test('national shell does not self-link in its dateline', () => {
+        expect(readFileSync('api/_national-shell.html', 'utf8')).not.toContain('dateline-desk');
+    });
 });
