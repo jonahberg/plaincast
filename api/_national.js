@@ -123,6 +123,20 @@ const HEADER_LINE = /^\s*\.\.\./;
 // page by hours. Dot count varies in the live products (1-3), hence {1,3}.
 const PREV_DISCUSSION = /^\s*\.{1,3}PREV DISCUSSION/im;
 
+// Reissue housekeeping, not forecast. An update paragraph that OPENS by
+// referring the reader to the previous forecast ("The previous forecast (see
+// below) remains generally on track...") is talking about the outlook process,
+// and its "see below" points at the PREV block we just cut — a dangling
+// reference. Spec: running copy must open with forecast prose directly.
+//
+// Deliberately narrow, and deliberately whole-paragraph. Anchored at the
+// paragraph start and bounded to a short window, so prose that merely mentions
+// a previous forecast mid-sentence survives; and we drop the paragraph rather
+// than trying to salvage the meteorology buried later in it, because
+// sentence-level surgery on forecaster prose is how you publish half a
+// sentence. If that empties the list, the caller's summary fallback covers it.
+const REISSUE_PREAMBLE = /^(?:the )?previous (?:forecast|outlook|discussion)\b.{0,120}?\b(?:remains?|see below|on track|unchanged)\b/i;
+
 // Narrative paragraphs AFTER the ...SUMMARY... block — the standfirst already
 // covers the summary, so the running copy must never repeat it (spec §5).
 export function parseDiscussionBody(productText) {
@@ -152,6 +166,7 @@ export function parseDiscussionBody(productText) {
             .replace(/\s+/g, ' ')
             .trim())
         .filter(p => p.length >= 40 && !/^(ATTN|\.\.\.)/.test(p))
+        .filter(p => !REISSUE_PREAMBLE.test(p))
         .slice(0, 3);
 }
 

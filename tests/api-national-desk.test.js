@@ -42,6 +42,11 @@ const { parseSpcOutlook, parseRiskCategory } = await import('../api/_national.js
 const { OFFICE_NAMES } = await import('../docs/js/offices.js');
 const { default: alerts } = await import('./fixtures/national/severe-alerts.json');
 const { default: swody1 } = await import('./fixtures/national/swody1.json');
+// Fresh issuance (12:44Z, first product of its cycle): no PREV DISCUSSION
+// block and no reissue preamble, so this is the fixture that exercises the
+// deck-plus-discussion-copy path end to end. swody1 (a 20Z reissue) drives
+// the de-dup fallback instead.
+const { default: swody1Fresh } = await import('./fixtures/national/swody1-fresh.json');
 const { default: swody2 } = await import('./fixtures/national/swody2.json');
 const { default: swody3 } = await import('./fixtures/national/swody3.json');
 
@@ -382,7 +387,7 @@ describe('GET /api/national-desk (SSR /national/)', () => {
         mockFeatures = alerts.features;
         mockTotals = { total: 445 };
         mockOutlooks = {
-            DY1: { productText: swody1.productText, issuanceTime: swody1.issuanceTime },
+            DY1: { productText: swody1Fresh.productText, issuanceTime: swody1Fresh.issuanceTime },
             DY2: { productText: swody2.productText, issuanceTime: swody2.issuanceTime },
             DY3: { productText: swody3.productText, issuanceTime: swody3.issuanceTime },
         };
@@ -428,10 +433,12 @@ describe('GET /api/national-desk (SSR /national/)', () => {
         // the risk moment, from the live DY1 headline
         expect(res.body).toContain('>Slight<');
         // deck from the SPC summary, still the client's swap target
-        expect(res.body).toContain('Thunderstorms with severe wind gusts');
-        // running copy: post-SUMMARY narrative, never the summary again
+        expect(res.body).toContain('Thunderstorms with damaging wind gusts');
+        // running copy: post-SUMMARY narrative, opening on the meteorology
         expect(res.body).toContain('class="desk-copy"');
-        expect(res.body).toContain('previous forecast');
+        expect(res.body).toContain('<p>Satellite and regional radar imagery');
+        // ...and never the summary a second time (that is the deck's job here)
+        expect((res.body.match(/Thunderstorms with damaging wind gusts/g) || []).length).toBe(1);
         // the rail: three days
         expect((res.body.match(/desk-rail-day/g) || []).length).toBe(3);
         // the wire: covered offices link out, uncovered ones do not
@@ -550,6 +557,35 @@ describe('GET /api/national-desk (SSR /national/)', () => {
         expect((res.body.match(/Severe wind gusts are possible this evening/g) || []).length).toBe(1);
         // the swap target survives, empty
         expect(res.body).toContain('<p class="desk-deck" id="desk-deck"></p>');
+    });
+
+    // The live 20Z reissue: its only post-summary paragraph is reissue
+    // housekeeping ("The previous forecast (see below) remains…"), which the
+    // parser drops — so a real, unmodified SPC product routes through the
+    // fallback, and the page must be whole on the way out.
+    it('routes a reissued DY1 product into the summary fallback, boilerplate and all', async () => {
+        mockOutlooks.DY1 = { productText: swody1.productText, issuanceTime: swody1.issuanceTime };
+        const res = createRes();
+        await handler(createReq(), res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.headers['cache-control']).toBe('public, s-maxage=600, stale-while-revalidate=1800');
+        // no editorial preamble, and no dangling reference to cut content
+        expect(res.body).not.toContain('previous forecast');
+        expect(res.body).not.toContain('(see below)');
+        // nor any prose from the superseded PREV DISCUSSION block
+        expect(res.body).not.toContain('Modestly strong southwesterly');
+        // the fallback contract: summary runs as copy, deck slot empty
+        expect(res.body).toContain('<p class="desk-deck" id="desk-deck"></p>');
+        expect(res.body).toContain('class="desk-copy"');
+        expect(res.body).toContain('Thunderstorms with severe wind gusts');
+        expect((res.body.match(/Thunderstorms with severe wind gusts/g) || []).length).toBe(1);
+        // the rest of the page is untouched by the fallback
+        expect(res.body).toContain('>Slight<');
+        expect(res.body).toContain('class="desk-rail"');
+        expect(res.body).toContain('class="wire"');
+        expect(res.body).toContain('class="desk-clock"');
+        expect(res.body).not.toContain('Setting the type…');
     });
 
     it('still renders with a quiet wire and no totals (soft data absent)', async () => {

@@ -17,6 +17,7 @@ import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { fetchSevereAlerts, fetchAlertTotals, fetchSpcDy1, fetchSpcOutlook } from '../api/_utils.js?real';
 import alerts from './fixtures/national/severe-alerts.json';
 import swody1 from './fixtures/national/swody1.json';
+import swody1Fresh from './fixtures/national/swody1-fresh.json';
 import swody2 from './fixtures/national/swody2.json';
 import swody3 from './fixtures/national/swody3.json';
 
@@ -123,33 +124,52 @@ describe('parseRiskCategory', () => {
 });
 
 describe('parseDiscussionBody', () => {
-    test('returns post-SUMMARY prose only, from the live DY1 fixture', () => {
-        const paras = parseDiscussionBody(swody1.productText);
+    // The FRESH-issuance fixture (12:44Z, first product of its cycle) is the
+    // one that exercises the running-copy path end to end: no PREV block, no
+    // reissue preamble, discussion prose straight after the summary.
+    test('returns post-SUMMARY prose only, from the live fresh-issuance DY1 fixture', () => {
+        const paras = parseDiscussionBody(swody1Fresh.productText);
         expect(paras.length).toBeGreaterThan(0);
         expect(paras.length).toBeLessThanOrEqual(3);
-        const { summary } = parseSpcOutlook(swody1.productText);
+        const { summary } = parseSpcOutlook(swody1Fresh.productText);
         expect(paras[0]).not.toBe(summary);           // never the summary itself
         for (const p of paras) {
             expect(p).not.toMatch(/^\.\.\./);          // no section-header lines
             expect(p.length).toBeGreaterThanOrEqual(40);
         }
+        // spec: running copy opens with the meteorology, not editorial preamble
+        expect(paras[0]).toMatch(/^Satellite and regional radar imagery/);
     });
     test('empty array when nothing follows the summary', () => {
         expect(parseDiscussionBody('...SUMMARY...\nOnly a summary here with enough length to pass filters.\n$$')).toEqual([]);
         expect(parseDiscussionBody('')).toEqual([]);
     });
 
-    // The live DY1 fixture carries a ".PREV DISCUSSION... /ISSUED 1135 AM/"
-    // block: the SUPERSEDED 11:35 AM discussion, republished verbatim under
-    // the 20Z update. Rendering it as running copy would print this morning's
-    // forecast as this afternoon's news.
-    test('stops at the PREV DISCUSSION marker — superseded prose never becomes current copy', () => {
+    // The 20Z DY1 fixture is a REISSUE: a ".PREV DISCUSSION... /ISSUED 1135
+    // AM/" block republishing the superseded 11:35 AM discussion, and above
+    // it a paragraph of reissue housekeeping ("The previous forecast (see
+    // below) remains generally on track…"). Neither is current forecast
+    // prose: the PREV block is this morning's forecast, and the preamble
+    // points at content we just cut, so "(see below)" would dangle at the
+    // reader. Both go; the product then has no running copy of its own and
+    // falls back to the summary (spec §5).
+    test('a reissued product yields no running copy at all — PREV block and preamble both dropped', () => {
         const paras = parseDiscussionBody(swody1.productText);
+        expect(paras).toEqual([]);
+    });
+
+    test('the reissue preamble is dropped even without a PREV block', () => {
+        const text = '...SUMMARY...\nA summary paragraph long enough to survive the length filter here.\n\n...20Z Update...\nThe previous forecast (see below) remains generally on track, with only minor changes made this hour.\n';
+        expect(parseDiscussionBody(text)).toEqual([]);
+    });
+
+    // Narrow by construction: the preamble pattern must not eat a paragraph
+    // that merely mentions a previous forecast while reporting weather.
+    test('the preamble filter does not swallow genuine prose that mentions a forecast', () => {
+        const text = '...SUMMARY...\nA summary paragraph long enough to survive the length filter here.\n\n...Discussion...\nSevere storms will develop along the dryline this afternoon, and the previous forecast reasoning about storm mode still applies across the warm sector.\n';
+        const paras = parseDiscussionBody(text);
         expect(paras.length).toBe(1);
-        expect(paras[0]).toMatch(/previous forecast/i);
-        const joined = paras.join(' ');
-        expect(joined).not.toMatch(/Modestly strong southwesterly/);   // Front Range block, under .PREV
-        expect(joined).not.toMatch(/Thunderstorms have generally weakened/); // Midwest block, under .PREV
+        expect(paras[0]).toMatch(/^Severe storms will develop/);
     });
 
     test('the PREV marker matches 1-3 dots, any case', () => {
