@@ -130,3 +130,88 @@ Bun tests alongside the existing 351: AWIPS→office extraction and grouping/ran
 fallback, whereami header parsing and gridId mapping, baked-shell marker integrity
 (extend the seo-pages sync-check pattern to `docs/national/`), and fail-safe behavior
 when every upstream fetch throws.
+
+## v1.1 — The Composed Desk (C × A × E)
+
+**Status:** DRAFT — owner voted C + parts of A + parts of E (2026-08-15); synthesis
+presented as Study F in the National Desk Studies artifact. Build starts only after
+(a) owner says "go" on Study F and (b) PR #34 is merged (this layers onto it).
+
+### Page order (replaces the v1 composition between masthead and local desk)
+
+1. **Masthead + dateline** — unchanged from v1.
+2. **Census index strip** (from A + E) — a one-row DM Sans strip under the dateline:
+   national total, top event classes (up to 4), and the quiet-count
+   ("56/68 desks quiet"). Replaces the v1 census ledger section lower down.
+3. **The risk moment** (from C) — the Day-1 categorical risk as a rubricated
+   Fraunces display word (`opsz 144, SOFT 12`), with a small-caps line naming the
+   risk type and outlined regions. **Calm-day face:** when no risk is outlined,
+   no big word — a small "Quiet skies nationally" line in its place.
+4. **Standfirst** — the AI deck (existing `/api/national-lede`, unchanged), centered
+   Fraunces deck; deterministic SSR text first, client swap as today.
+5. **Running copy** (from A) — sourced from the SPC **discussion narrative that
+   FOLLOWS the SUMMARY section** (the `...20Z Update...` / synopsis / regional
+   prose), NEVER the SUMMARY itself — the standfirst already distills the
+   summary, and running the summary again says the same thing twice (owner
+   correction, 2026-08-16). Regex-translated into 1–3 justified paragraphs
+   (skip section-header lines, cap ~3 paragraphs ≥40 chars each) with a 3-line
+   rubricated drop cap. SSR, zero AI. **Fallback:** if no post-summary narrative
+   parses, run the SUMMARY here and suppress the deterministic deck (never both
+   from the same source); the AI deck still swaps in client-side.
+6. **Day rail** (from C) — three cells: Day 1 (highlighted, `--newsprint` ground),
+   Day 2, Day 3. Each: label, categorical word, one-line region note. Day 2/3 from
+   `products/types/SWO/locations/DY2|DY3` (verified live 2026-08-15); each cell
+   soft-fails to "—" independently.
+7. **The Wire, two-line rows** (from E) — row 1 as v1 (office link, event, count,
+   extreme rubric); row 2 small-caps: area digest + expiry
+   ("Otero & Crowley counties · until 730 PM MDT"), from the alert feed's
+   `areaDesc` (digested: first 2 named areas + "…") and `expires`/`ends` in the
+   office's local timezone. Missing fields → row 2 omitted, never blank.
+8. **Clock line** (from E) — "Next Day 1 outlook expected by HHMM UTC" from the
+   fixed SPC issuance schedule (0600/1300/1630/2000/0100 UTC), plus the CDN
+   re-ink note. Pure arithmetic, no fetch.
+9. **Local desk slot, office index, colophon** — unchanged.
+
+### New parsing/logic (all pure, all unit-tested)
+
+- `parseRiskCategory(headline) -> {level, regions}` — maps THERE-IS lines to
+  MARGINAL/SLIGHT/ENHANCED/MODERATE/HIGH; null on no match (calm face).
+- `parseDiscussionBody(productText) -> string[]` — narrative paragraphs AFTER
+  the `...SUMMARY...` block: skip `...SECTION...` header lines and `$$`/sig
+  noise, keep prose paragraphs ≥40 chars, cap at 3. Empty array on no match
+  (triggers the running-copy fallback above). Fixture-tested against a live
+  DY1 capture.
+- `digestArea(areaDesc) -> string` — first two named areas + ellipsis count.
+- `formatExpiry(iso, tz) -> string|null` — office-local, small-caps friendly.
+- `nextOutlookTime(now) -> string` — next slot in the fixed SPC schedule.
+- Day-rail fetchers: `fetchSpcDy2/Dy3` (clone of fetchSpcDy1 with location swap) —
+  or one parameterized `fetchSpcOutlook(day)` refactor, implementation's choice.
+
+### Unchanged invariants (bind as in v1)
+
+Fail-safe baked floor (strip/risk/rail all degrade independently; worst case is
+v1's floor). Zero client input on every endpoint. No new AI surface — the deck
+endpoint remains the only model call. escHtml on every interpolation. Dispatch
+anti-tells. `s-maxage=600, swr=1800` page cache. Suite stays green; new logic
+lands with fixture-driven tests (capture DY2/DY3 + an `areaDesc`-rich alerts
+fixture on build day).
+
+### Explicitly out (unchanged from v1 rulings)
+
+Roster expansion, maps, front-page flip (analytics-gated), periodic client
+refresh beyond the CDN cadence, Gazetteer (B) and Evening Wire (D) — parked as
+future studies, not folded in.
+
+### Visual-review build rules (from the Aug 16 screenshot pass)
+
+- Census strip cells `flex: 1 1 auto; text-align: center` — the row must fill
+  its measure with no trailing empty segment.
+- Running copy is justified with hyphens ONLY ≥640px; below that,
+  `text-align: left` (justify at narrow measure produces rivers — observed).
+- Running copy must open with forecast prose directly (the parser strips any
+  editorial preamble; first paragraph starts with the meteorology).
+- Deck sizes one step below v1's (the risk word owns the hero role);
+  keep `clamp()` responsive sizing from the shipped page.
+- Known, accepted: the risk line ("risk of severe thunderstorms · regions")
+  and the deck's opening words overlap slightly — label vs. sentence, both
+  earn their place; do not "fix."
