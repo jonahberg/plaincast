@@ -24,6 +24,11 @@ tests/             Bun test suite (351 tests)
 - `bun test tests/` — run all tests
 - `cd docs && python3 -m http.server 8765` — local dev (AI summaries need Vercel)
 
+## Release rule
+Any PR that changes files under docs/ MUST bump CACHE_NAME in docs/sw.js —
+the service worker precaches the app shell cache-first, and a stale version
+serves new HTML with old CSS/JS to returning clients.
+
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.
 All font choices, colors, spacing, and aesthetic direction are defined there.
