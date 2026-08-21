@@ -621,3 +621,98 @@ describe('GET /api/national-desk (SSR /national/)', () => {
         expect(res.body).toContain('desk-risk-quiet');
     });
 });
+
+// ─── Content negotiation ────────────────────────────────────────────
+// The National Desk answers `Accept: text/markdown` with the same composed
+// desk as prose. The markdown is built from the same data the HTML builders
+// consume, so these assert the two never disagree.
+describe('GET /national/ with Accept: text/markdown', () => {
+    beforeEach(() => {
+        severeThrows = false;
+        totalsThrows = false;
+        outlookThrows = { DY1: false, DY2: false, DY3: false };
+        mockFeatures = alerts.features;
+        mockTotals = { total: 445 };
+        mockOutlooks = {
+            DY1: { productText: swody1Fresh.productText, issuanceTime: swody1Fresh.issuanceTime },
+            DY2: { productText: swody2.productText, issuanceTime: swody2.issuanceTime },
+            DY3: { productText: swody3.productText, issuanceTime: swody3.issuanceTime },
+        };
+    });
+
+    const md = (accept = 'text/markdown') =>
+        createReq({ headers: { accept } });
+
+    it('serves Markdown from the same URL, with the RFC 7763 media type', async () => {
+        const res = createRes();
+        await handler(md(), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.headers['content-type']).toBe('text/markdown; charset=utf-8');
+        expect(res.body.startsWith('# The National Desk')).toBe(true);
+    });
+
+    it('carries the census, the risk moment, the rail and the Wire', async () => {
+        const res = createRes();
+        await handler(md(), res);
+        expect(res.body).toContain('**Census:**');
+        expect(res.body).toContain('445 active alerts nationally');
+        expect(res.body).toContain('risk of severe thunderstorms');
+        expect(res.body).toContain('## Three-day severe outlook');
+        expect(res.body).toContain('## The Wire');
+        expect(res.body).toContain('Next Day 1 outlook expected by');
+    });
+
+    it('emits no HTML tags — the whole point of the Markdown variant', async () => {
+        const res = createRes();
+        await handler(md(), res);
+        expect(res.body).not.toMatch(/<\/?(?:section|div|span|p|ul|li|h[1-6])\b/);
+        expect(res.body).not.toContain('&nbsp;');
+    });
+
+    it('links covered offices to their desk and leaves uncovered ones unlinked', async () => {
+        const res = createRes();
+        await handler(md(), res);
+        const covered = res.body.match(/\[[^\]]+\]\(https:\/\/plaincast\.live\/o\/[A-Z]{3}\/\)/g) || [];
+        expect(covered.length).toBeGreaterThan(0);
+    });
+
+    it('sets Vary: Accept on BOTH variants', async () => {
+        const html = createRes();
+        await handler(createReq(), html);
+        expect(html.headers.vary).toContain('Accept');
+
+        const mdRes = createRes();
+        await handler(md(), mdRes);
+        expect(mdRes.headers.vary).toContain('Accept');
+    });
+
+    it('a real browser Accept header still gets the page', async () => {
+        const res = createRes();
+        await handler(md('text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'), res);
+        expect(res.headers['content-type']).toBe('text/html; charset=utf-8');
+        expect(res.body).toContain('<!DOCTYPE html>');
+    });
+
+    it('406s an Accept it cannot satisfy, without touching an upstream', async () => {
+        severeThrows = true; // any fetch would throw and change the outcome
+        const res = createRes();
+        await handler(md('application/pdf'), res);
+        expect(res.statusCode).toBe(406);
+        expect(res.headers['cache-control']).toBe('no-store');
+    });
+
+    it('upstream down → the exact baked shell for HTML, an honest empty desk for Markdown', async () => {
+        severeThrows = true;
+        const html = createRes();
+        await handler(createReq(), html);
+        expect(html.statusCode).toBe(200);
+        expect(html.body).toBe(SHELL);
+        expect(html.headers.vary).toContain('Accept');
+
+        const mdRes = createRes();
+        await handler(md(), mdRes);
+        expect(mdRes.statusCode).toBe(200);
+        expect(mdRes.body).toContain('# The National Desk');
+        expect(mdRes.body).toContain('No office is under a severe warning right now');
+    });
+});

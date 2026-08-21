@@ -3,7 +3,13 @@
   "outputDirectory": "docs",
   "functions": {
     "api/office-page.js": {
-      "includeFiles": "docs/index.html"
+      "includeFiles": "api/_home-shell.html"
+    },
+    "api/home.js": {
+      "includeFiles": "api/_home-shell.html"
+    },
+    "api/page.js": {
+      "includeFiles": "api/_page-shell.html"
     },
     "api/og.js": {
       "includeFiles": "api/_og-fonts/**"
@@ -17,7 +23,15 @@
     { "source": "/o/:code", "destination": "/api/office-page?code=:code" },
     { "source": "/o/:code/", "destination": "/api/office-page?code=:code" },
     { "source": "/national", "destination": "/api/national-desk" },
-    { "source": "/national/", "destination": "/api/national-desk" }
+    { "source": "/national/", "destination": "/api/national-desk" },
+    { "source": "/about", "destination": "/api/page?slug=about" },
+    { "source": "/about/", "destination": "/api/page?slug=about" },
+    { "source": "/contact", "destination": "/api/page?slug=contact" },
+    { "source": "/contact/", "destination": "/api/page?slug=contact" },
+    { "source": "/privacy", "destination": "/api/page?slug=privacy" },
+    { "source": "/privacy/", "destination": "/api/page?slug=privacy" },
+    { "source": "/", "destination": "/api/home" },
+    { "source": "/:path((?!_vercel/).*)", "destination": "/api/not-found" }
   ],
   "headers": [
     {

@@ -2,7 +2,7 @@
 // Bump on EVERY release that changes docs/* (HTML/CSS/JS contract): the app
 // shell is precached cache-first, so a stale CACHE_NAME ships new SSR HTML
 // with old CSS to every returning PWA client (v1.1 launch regression).
-const CACHE_NAME = 'plaincast-v10';
+const CACHE_NAME = 'plaincast-v11';
 // Runtime /api/* responses live in their own cache, trimmed FIFO — every
 // office/edition URL is a distinct key, so folding them into the app-shell
 // cache would grow it without bound.

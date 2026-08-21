@@ -282,3 +282,109 @@ describe('office-page helpers', () => {
         expect(pinned).toContain('<link rel="canonical" href="https://plaincast.live/o/LOX/">');
     });
 });
+
+// ─── Content negotiation ────────────────────────────────────────────
+// /o/<CODE>/ is the URL an agent most wants as prose: it IS the decoded
+// discussion. These pin that the Markdown twin carries the same sections as
+// the SSR HTML, and that Vary is set on every path.
+describe('GET /o/<CODE>/ with Accept: text/markdown', () => {
+    beforeEach(() => {
+        mockListThrows = false;
+        // PREV differs from CURR, so the deterministic changelog line renders.
+        setScenario({ prev: PREV });
+    });
+
+    const md = (accept = 'text/markdown', o = {}) =>
+        createReq({ query: { code: 'LOX' }, headers: { accept }, ...o });
+
+    it('serves Markdown from the same URL, with the RFC 7763 media type', async () => {
+        const res = createRes();
+        await handler(md(), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.headers['content-type']).toBe('text/markdown; charset=utf-8');
+        expect(res.body.startsWith('# Los Angeles (LOX)')).toBe(true);
+    });
+
+    it('carries the same sections as the SSR HTML, as headings', async () => {
+        const htmlRes = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), htmlRes);
+        const htmlHeadings = [...htmlRes.body.matchAll(/<h2 class="section-title">([^<]+)<\/h2>/g)].map(m => m[1]);
+
+        const mdRes = createRes();
+        await handler(md(), mdRes);
+        const mdHeadings = [...mdRes.body.matchAll(/^## (.+)$/gm)].map(m => m[1]);
+
+        expect(htmlHeadings.length).toBeGreaterThan(0);
+        for (const h of htmlHeadings) expect(mdHeadings).toContain(h);
+    });
+
+    it('emits no HTML tags and names its canonical URL', async () => {
+        const res = createRes();
+        await handler(md(), res);
+        expect(res.body).not.toMatch(/<\/?(?:article|div|span|p|h[1-6])\b/);
+        expect(res.body).toContain('_Canonical: https://plaincast.live/o/LOX/_');
+    });
+
+    it('never calls AI for the Markdown variant', async () => {
+        // The `ai` module is mocked at the top of this file to throw on use.
+        const res = createRes();
+        await handler(md(), res);
+        expect(res.statusCode).toBe(200);
+    });
+
+    it('carries the deterministic changelog line as prose when there is one', async () => {
+        const res = createRes();
+        await handler(md(), res);
+        // PREV/CURR fixtures differ, so a revision line is expected.
+        expect(res.body).toMatch(/Revised in \d+ passages?/);
+        expect(res.body).toContain('?view=changelog');
+    });
+
+    it('sets Vary: Accept on BOTH variants', async () => {
+        const htmlRes = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), htmlRes);
+        expect(htmlRes.headers.vary).toContain('Accept');
+
+        const mdRes = createRes();
+        await handler(md(), mdRes);
+        expect(mdRes.headers.vary).toContain('Accept');
+    });
+
+    it('a real browser Accept header still gets the baked page', async () => {
+        const res = createRes();
+        await handler(md('text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'), res);
+        expect(res.headers['content-type']).toBe('text/html; charset=utf-8');
+        expect(res.body).toContain('<!DOCTYPE html>');
+    });
+
+    it('406s an Accept it cannot satisfy, without touching NWS', async () => {
+        mockListThrows = true; // any fetch would throw and change the outcome
+        const res = createRes();
+        await handler(md('application/pdf'), res);
+        expect(res.statusCode).toBe(406);
+        expect(res.headers['cache-control']).toBe('no-store');
+        mockListThrows = false;
+    });
+
+    it('NWS down → exact baked page for HTML, a truthful stub for Markdown', async () => {
+        mockListThrows = true;
+        const htmlRes = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), htmlRes);
+        expect(htmlRes.body).toBe(BAKED_LOX);
+        expect(htmlRes.headers.vary).toContain('Accept');
+
+        const mdRes = createRes();
+        await handler(md(), mdRes);
+        expect(mdRes.statusCode).toBe(200);
+        expect(mdRes.body).toContain('# Los Angeles (LOX)');
+        mockListThrows = false;
+    });
+
+    it('an unknown office 404s with the recovery body, not two words', async () => {
+        const res = createRes();
+        await handler(createReq({ query: { code: 'ZZZ' }, headers: { accept: 'text/markdown' } }), res);
+        expect(res.statusCode).toBe(404);
+        expect(res.body).toContain('sitemap.xml');
+        expect(res.body).not.toBe('Not found');
+    });
+});

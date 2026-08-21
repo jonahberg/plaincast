@@ -80,10 +80,17 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 │    ├─ /api/translate    (per-section fallback)  │
 │    ├─ /api/changelog    (what changed, per id)  │
 │    ├─ /api/explain-alert (alert in plain terms) │
+│    ├─ /api/home         (SSR homepage, /)       │
 │    ├─ /api/office-page  (SSR office pages)      │
+│    ├─ /api/national-desk (SSR national front)   │
+│    ├─ /api/page         (about/contact/privacy) │
+│    ├─ /api/not-found    (agent-friendly 404)    │
 │    ├─ /api/feed         (delta RSS per office)  │
 │    ├─ /api/og           (share cards)           │
 │    └─ /api/conditions   (current weather + avg) │
+│                                                 │
+│  Every page above serves HTML to browsers and   │
+│  Markdown to `Accept: text/markdown`, one URL.  │
 │                                                 │
 │  No framework. No build step. ES modules.       │
 └─────────────────────────────────────────────────┘
@@ -104,6 +111,10 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 - **Accessible** - ARIA roles on modals and tooltips, focus trapping, keyboard navigation, severity marks
 - **DST-aware** - Zulu time conversion uses IANA timezones per office
 - **SEO** - WebApplication + FAQPage schema, OG image, llms.txt, AI crawler friendly
+- **Agent-ready** - Every page is server-rendered (readable with no JavaScript) and
+  [acceptmarkdown.com](https://acceptmarkdown.com) compliant: `Accept: text/markdown` returns clean
+  prose from the same URL, with `Vary: Accept`, q-value handling, and `406` for an Accept it cannot
+  satisfy. `llms.txt` carries when-to-use guidance; 404s return a Markdown site map
 
 ---
 

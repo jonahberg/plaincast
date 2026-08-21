@@ -13,16 +13,38 @@ docs/              Static frontend (served as outputDirectory)
   sw.js            Service worker
   manifest.json    PWA manifest
 api/               Vercel serverless functions
+  home.js          SSR homepage for /  (docs/index.html + live AFD digest)
+  office-page.js   SSR /o/<CODE>/
+  national-desk.js SSR /national/
+  page.js          /about, /contact, /privacy (content in _pages.js)
+  not-found.js     catch-all agent-friendly 404
+  _negotiate.js    Accept-header content negotiation (HTML / Markdown / 406)
+  _edition-markdown.js  Markdown twin of an edition
   translate.js     AI translation (AI Gateway + Claude)
   feed.js          RSS per office
   og.js            Dynamic OG images
   conditions.js    Current weather + averages
-tests/             Bun test suite (351 tests)
+tests/             Bun test suite (559 tests)
 ```
+
+## Routing rule
+`vercel.json` rewrites are evaluated AFTER `handle: filesystem`, so any static
+file at a path shadows a rewrite to that path. `docs/index.html` and `docs/o`
+are therefore in `.vercelignore` — they stay committed (local dev, generators,
+tests) and reach the functions via `functions.*.includeFiles`. The 404
+catch-all must stay LAST in the `rewrites` array.
+
+## Content negotiation
+Every HTML-serving function goes through `api/_negotiate.js`. Never `res.send()`
+an HTML body from one of them directly: with two representations behind one URL,
+a response missing `Vary: Accept` poisons the edge cache. The published
+acceptmarkdown.com test vectors live in `tests/negotiate.test.js`.
 
 ## Commands
 - `bun test tests/` — run all tests
-- `cd docs && python3 -m http.server 8765` — local dev (AI summaries need Vercel)
+- `cd docs && python3 -m http.server 8765` — local dev. Note: `/` serves the
+  static shell with an empty `#sections`; the SSR digest, the trust pages and
+  Markdown negotiation are functions, so they need `vercel dev`.
 
 ## Release rule
 Any PR that changes files under docs/ MUST bump CACHE_NAME in docs/sw.js —

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{TITLE}} · Plaincast</title>
+    <meta name="description" content="{{DESCRIPTION}}">
+    <meta name="theme-color" content="#f7f3ea">
+    <meta name="author" content="Jonah Berg">
+    <meta property="og:locale" content="en_US">
+    <meta name="google-site-verification" content="IdNCtGpFPAc0ZPT6T41Z-KgfP-AzHr7qfAn-7asX96Y">
+    <link rel="canonical" href="https://plaincast.live/{{SLUG}}">
+    <!-- The same resource, in Markdown, is at this URL under content
+         negotiation (RFC 8288 rel="alternate"; see api/_negotiate.js). -->
+    <link rel="alternate" type="text/markdown" href="https://plaincast.live/{{SLUG}}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>">
+    <link rel="preload" href="/fonts/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/source-serif-4-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/fonts/fonts.css">
+    <script defer src="/_vercel/insights/script.js"></script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
+    <!-- Pre-paint theme + sky-phase (blocking, no defer/module): must run
+         before first paint. Extracted to a file so the CSP needs no
+         script-src 'unsafe-inline'. -->
+    <script src="/js/theme-init.js"></script>
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://plaincast.live/{{SLUG}}">
+    <meta property="og:title" content="{{TITLE}} · Plaincast">
+    <meta property="og:description" content="{{DESCRIPTION}}">
+    <meta property="og:site_name" content="Plaincast">
+    <meta property="og:image" content="https://plaincast.live/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="The NWS forecast, decoded into plain English">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{TITLE}} · Plaincast">
+    <meta name="twitter:description" content="{{DESCRIPTION}}">
+    <meta name="twitter:image" content="https://plaincast.live/og-image.png">
+    <meta name="twitter:image:alt" content="The NWS forecast, decoded into plain English">
+
+    <!-- Structured Data. Page-specific only: the homepage's WebApplication /
+         FAQPage blocks describe the office reader, not these pages. -->
+{{JSONLD}}
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- Living atmosphere: a fixed, time-of-day-tinted sky behind the paper. Decorative. -->
+<div class="atmosphere" aria-hidden="true">
+    <div class="atmosphere-wash"></div>
+    <div class="atmosphere-glow"></div>
+    <div class="atmosphere-grain"></div>
+</div>
+
+<a class="skip-link" href="#page">Skip to the page</a>
+
+<div class="sheet">
+<!-- Masthead: the nameplate, motto, and dateline -->
+<header class="masthead header">
+    <div class="wrap masthead-inner">
+        <div class="folio folio-left"><a href="/">Plaincast</a></div>
+        <div class="nameplate-block">
+            <h1 class="nameplate">{{TITLE}}</h1>
+        </div>
+        <div class="folio folio-right">{{FOLIO}}</div>
+        <p class="motto">What the forecast actually says</p>
+        <div class="rule-double" role="presentation"></div>
+        <p class="dateline">
+            <span class="dateline-city">PLAINCAST</span>
+            <span class="dateline-sep" aria-hidden="true">·</span>
+            <span class="dateline-date">{{DATELINE}}</span>
+        </p>
+    </div>
+</header>
+
+<main class="wrap main" id="page">
+    <article class="page-prose">
+{{CONTENT}}
+    </article>
+</main>
+
+<footer class="colophon">
+    <div class="wrap colophon-inner">
+        <div class="colophon-rule" role="presentation"></div>
+        <p class="colophon-line">
+            <span class="colophon-mark">❧</span>
+            Reported by the <a href="https://www.weather.gov" target="_blank" rel="noopener noreferrer">National Weather Service</a>.
+            Translated by <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a>.
+        </p>
+        <p class="colophon-line colophon-links">
+            <a href="/">Read your local edition</a>
+            <span class="dot" aria-hidden="true">·</span>
+            <a href="/national/">The National Desk</a>
+            <span class="dot" aria-hidden="true">·</span>
+            <a href="/about">About</a>
+            <span class="dot" aria-hidden="true">·</span>
+            <a href="/contact">Contact</a>
+            <span class="dot" aria-hidden="true">·</span>
+            <a href="/privacy">Privacy</a>
+            <span class="dot" aria-hidden="true">·</span>
+            <a href="https://github.com/jonahberg/plaincast" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
+            <span class="dot" aria-hidden="true">·</span>
+            <span class="colophon-credit">Set by <a href="https://jonahberg.com" target="_blank" rel="noopener noreferrer">Jonah Berg</a></span>
+        </p>
+    </div>
+</footer>
+</div><!-- /.sheet -->
+
+</body>
+</html>

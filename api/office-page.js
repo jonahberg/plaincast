@@ -15,6 +15,13 @@
 // routes evaluated BEFORE the filesystem/rewrites and match the incoming
 // request path, so the sitewide CSP/security headers still apply here.
 //
+// CONTENT NEGOTIATION: this URL serves two representations. `Accept:
+// text/markdown` gets the same decoded sections as prose (api/_edition-markdown.js,
+// still no AI); anything else gets the page. Every response path sets
+// `Vary: Accept` — with two bodies behind one URL, omitting it lets the CDN
+// hand an agent the HTML variant or a browser the Markdown one, whichever
+// landed in the cache first.
+//
 // FAIL-SAFE DESIGN: on ANY error the response degrades to the exact baked
 // page bytes (renderOfficePage(template, ...) — byte-identical to the
 // committed docs/o/<CODE>/index.html, enforced by tests/seo-pages.test.js),
@@ -28,6 +35,10 @@ import { OFFICE_NAMES, OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/office
 import { renderOfficePage, escHtml } from '../scripts/build-offices.mjs';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractSections, regexTranslate } from './_afd-sections.js';
+import { renderEditionMarkdown } from './_edition-markdown.js';
+import {
+    sendNegotiated, send406, setVary, selectRepresentation, acceptHeader, HTML, MARKDOWN,
+} from './_negotiate.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -71,13 +82,21 @@ export function pinEditionMeta(html, code, edition) {
 }
 
 // Lazy template load (never at module scope: a boot-time throw would take
-// down the baked fallback too). Tries the bundled layout first, then cwd.
+// down the baked fallback too).
+//
+// api/_home-shell.html FIRST and docs/index.html only as a local fallback:
+// docs/index.html is in .vercelignore (it would otherwise shadow the `/`
+// rewrite), and an ignored file is absent from the function bundle too — so on
+// Vercel only the api/ copy exists. The two are byte-identical, generated and
+// pinned by scripts/build-offices.mjs + tests/seo-pages.test.js.
 let templateCache = null;
 export function loadTemplate() {
     if (templateCache) return templateCache;
     const candidates = [
-        join(__dirname, '..', 'docs', 'index.html'), // repo + nft bundle layout
-        join(process.cwd(), 'docs', 'index.html'),   // /var/task/docs (includeFiles)
+        join(__dirname, '_home-shell.html'),              // repo + nft bundle layout
+        join(process.cwd(), 'api', '_home-shell.html'),   // /var/task/api (includeFiles)
+        join(__dirname, '..', 'docs', 'index.html'),      // local dev / tests
+        join(process.cwd(), 'docs', 'index.html'),
     ];
     let lastErr = null;
     for (const p of candidates) {
@@ -86,7 +105,7 @@ export function loadTemplate() {
             return templateCache;
         } catch (err) { lastErr = err; }
     }
-    throw lastErr || new Error('office-page: docs/index.html not found');
+    throw lastErr || new Error('office-page: homepage shell not found');
 }
 
 function titleCase(key) {
@@ -143,17 +162,28 @@ function formatIssued(iso, tz) {
     } catch { return null; }
 }
 
+// The decoded edition both representations render from: the picked narrative
+// sections, cleaned into paragraphs. Shape: [{ key, paras: [string] }].
+// One source of truth, so the HTML page and its Markdown twin can never
+// disagree about which sections an edition contains.
+export function editionSections(productText) {
+    const out = [];
+    for (const s of pickSections(extractSections(productText))) {
+        const paras = sectionParagraphs(s.text);
+        if (paras.length === 0) continue;
+        out.push({ key: s.key, paras });
+    }
+    return out;
+}
+
 // Assemble the server-rendered #sections content: dateline, optional
 // deterministic changelog line (no AI), one <article> per narrative section,
 // and a closing line pointing at the interactive experience.
 export function buildSsrHtml(code, city, productText, issuanceTime, changelogHtml) {
-    const picked = pickSections(extractSections(productText));
     const articles = [];
-    for (const s of picked) {
-        const paras = sectionParagraphs(s.text);
-        if (paras.length === 0) continue;
+    for (const s of editionSections(productText)) {
         const name = SECTION_NAMES[s.key] || titleCase(s.key);
-        const body = paras.map(p => `            <p>${escHtml(regexTranslate(p))}</p>`).join('\n');
+        const body = s.paras.map(p => `            <p>${escHtml(regexTranslate(p))}</p>`).join('\n');
         articles.push(
             `        <article class="forecast-section ssr">\n` +
             `            <h2 class="section-title">${escHtml(name)}</h2>\n` +
@@ -178,20 +208,24 @@ export function buildSsrHtml(code, city, productText, issuanceTime, changelogHtm
     return `\n${metaLine}${changelogHtml || ''}${articles.join('\n')}\n${note}\n    `;
 }
 
+// Both representations of the "what changed" line, or neither. Kept as one
+// object so a caller can never render the HTML twin and forget the Markdown one.
+const EMPTY_CHANGELOG = Object.freeze({ html: '', markdown: '' });
+
 // Deterministic "what changed" one-liner — reuses changedParagraphs from
 // api/changelog.js (dynamically imported so its `ai` dependency can never
 // break the baked fallback) but NEVER calls the AI summarizer.
 async function deterministicChangelog(code, items, currText) {
     try {
-        if (!Array.isArray(items) || items.length < 2) return '';
+        if (!Array.isArray(items) || items.length < 2) return EMPTY_CHANGELOG;
         const prevUrl = productUrlFromItem(items[1]);
-        if (!prevUrl) return '';
+        if (!prevUrl) return EMPTY_CHANGELOG;
         const prev = await fetchAFDProduct(prevUrl, { signal: AbortSignal.timeout(5000) });
         const prevText = typeof prev?.productText === 'string' ? prev.productText : '';
-        if (!prevText) return '';
+        if (!prevText) return EMPTY_CHANGELOG;
         const { changedParagraphs } = await import('./changelog.js');
         const n = changedParagraphs(prevText, currText).length;
-        if (n === 0) return '';
+        if (n === 0) return EMPTY_CHANGELOG;
         const tz = OFFICE_TIMEZONES[code] || 'America/Los_Angeles';
         let since = '';
         try {
@@ -201,12 +235,16 @@ async function deterministicChangelog(code, items, currText) {
             }
         } catch { /* omit time */ }
         const passages = n === 1 ? 'passage' : 'passages';
-        const sinceTxt = since ? ` since the ${escHtml(since)} discussion` : ' since the previous discussion';
-        return `        <p class="ssr-changelog">Revised in ${n} ${passages}${sinceTxt}. ` +
-            `<a href="/o/${escHtml(code)}/?view=changelog">See every revision</a>.</p>\n`;
+        const sinceTxt = since ? ` since the ${since} discussion` : ' since the previous discussion';
+        return {
+            html: `        <p class="ssr-changelog">Revised in ${n} ${passages}${escHtml(sinceTxt)}. ` +
+                `<a href="/o/${escHtml(code)}/?view=changelog">See every revision</a>.</p>\n`,
+            markdown: `Revised in ${n} ${passages}${sinceTxt}. ` +
+                `[See every revision](https://plaincast.live/o/${code}/?view=changelog).`,
+        };
     } catch (err) {
         console.warn('office-page: changelog line skipped:', err?.message || err);
-        return '';
+        return EMPTY_CHANGELOG;
     }
 }
 
@@ -215,12 +253,19 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'GET only' });
     }
 
+    // Decide the representation BEFORE any network work: an Accept header
+    // nothing here can satisfy should cost nothing upstream.
+    const accept = acceptHeader(req);
+    const chosen = selectRepresentation(accept, [HTML, MARKDOWN]);
+    if (!chosen) return send406(res, [HTML, MARKDOWN], accept);
+
     const code = String(req.query?.code || '').toUpperCase();
     const city = OFFICE_NAMES[code];
     if (!city) {
-        // Unknown office → same outcome as the static filesystem today: 404.
-        res.setHeader('Cache-Control', 'public, s-maxage=3600');
-        return res.status(404).send('Not found');
+        // Unknown office → still a 404, but with the site map body an agent can
+        // recover from instead of the two words it used to get.
+        const { default: notFound } = await import('./not-found.js');
+        return notFound(req, res);
     }
 
     // Baked page first: this is the guaranteed floor for every response path.
@@ -231,6 +276,7 @@ export default async function handler(req, res) {
         // Template missing from the bundle — cannot reproduce the baked page.
         // Degrade to a redirect into the interactive app rather than an error.
         console.error('office-page: template unavailable:', err);
+        setVary(res);
         res.setHeader('Cache-Control', 'public, s-maxage=60');
         res.setHeader('Location', `/?office=${code}`);
         return res.status(307).send('');
@@ -242,7 +288,6 @@ export default async function handler(req, res) {
     const edition = validEdition(req.query?.edition);
     if (edition) baked = pinEditionMeta(baked, code, edition);
 
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
     try {
         const items = await fetchAFDList(code, { signal: AbortSignal.timeout(8000) });
         const prodUrl = productUrlFromItem(items[0]);
@@ -251,18 +296,37 @@ export default async function handler(req, res) {
         const text = typeof prod?.productText === 'string' ? prod.productText : '';
         if (!text) throw new Error('empty AFD product');
 
-        const changelogHtml = await deterministicChangelog(code, items, text);
-        const ssr = buildSsrHtml(code, city, text, prod?.issuanceTime, changelogHtml);
+        const changelog = await deterministicChangelog(code, items, text);
+        const ssr = buildSsrHtml(code, city, text, prod?.issuanceTime, changelog.html);
         if (!baked.includes(LOADING_DIV)) throw new Error('skeleton marker missing from template');
 
-        res.setHeader('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=3600');
+        const canonical = `https://plaincast.live/o/${code}/`;
+        const markdown = renderEditionMarkdown({
+            code, city,
+            sections: editionSections(text),
+            issued: formatIssued(prod?.issuanceTime, OFFICE_TIMEZONES[code] || 'America/Los_Angeles'),
+            changelogNote: changelog.markdown,
+            canonical,
+            moreHref: canonical,
+        });
+
         // replacer fn: `$`-sequences in forecast text must not be interpreted
-        return res.status(200).send(baked.replace(LOADING_DIV, () => ssr));
+        return sendNegotiated(req, res, {
+            [HTML]: baked.replace(LOADING_DIV, () => ssr),
+            [MARKDOWN]: markdown,
+        }, { cacheControl: 'public, s-maxage=900, stale-while-revalidate=3600' });
     } catch (err) {
         // NWS down, format drift, marker drift, anything: exact baked page,
-        // shorter CDN window so recovery is quick.
+        // shorter CDN window so recovery is quick. Markdown degrades to the
+        // page's own description — an agent still learns what this URL is.
         console.warn('office-page: serving baked fallback:', err?.message || err);
-        res.setHeader('Cache-Control', 'public, s-maxage=300');
-        return res.status(200).send(baked);
+        return sendNegotiated(req, res, {
+            [HTML]: baked,
+            [MARKDOWN]: renderEditionMarkdown({
+                code, city, sections: [], issued: null, changelogNote: '',
+                canonical: `https://plaincast.live/o/${code}/`,
+                moreHref: `https://plaincast.live/o/${code}/`,
+            }),
+        }, { cacheControl: 'public, s-maxage=300' });
     }
 }

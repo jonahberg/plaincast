@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { renderOfficePage, renderSitemap } from '../scripts/build-offices.mjs';
 
-const DOCS = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const DOCS = join(ROOT, 'docs');
 const template = readFileSync(join(DOCS, 'index.html'), 'utf8');
 const codes = Object.keys(OFFICE_NAMES);
 
@@ -17,6 +18,14 @@ describe('per-office SEO pages stay in sync with docs/index.html', () => {
     it('every committed office page matches the generator (else run `bun scripts/build-offices.mjs`)', () => {
         const drifted = codes.filter(code => read(code) !== renderOfficePage(template, code, OFFICE_NAMES[code]));
         expect(drifted).toEqual([]);
+    });
+
+    // api/_home-shell.html is what the deployed functions actually read:
+    // docs/index.html is in .vercelignore (it would shadow the `/` rewrite),
+    // and an ignored file never reaches the function bundle either. If this
+    // drifts, the homepage and every /o/<CODE>/ page serve a stale shell.
+    it('api/_home-shell.html is byte-identical to docs/index.html (else run `bun scripts/build-offices.mjs`)', () => {
+        expect(readFileSync(join(ROOT, 'api', '_home-shell.html'), 'utf8')).toBe(template);
     });
 
     it('sitemap.xml matches the generator', () => {
@@ -32,14 +41,24 @@ describe('per-office SEO pages stay in sync with docs/index.html', () => {
         const committed = readFileSync(join(DOCS, 'sitemap.xml'), 'utf8');
         const locs = [...committed.matchAll(/<loc>/g)].length;
         const stamps = [...committed.matchAll(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/g)].length;
-        expect(locs).toBe(codes.length + 2); // homepage + /national/ + every office
+        expect(locs).toBe(codes.length + 5); // homepage + /national/ + 3 trust pages + every office
         expect(stamps).toBe(locs);
+    });
+
+    it('the sitemap lists the trust-anchor pages', () => {
+        const committed = readFileSync(join(DOCS, 'sitemap.xml'), 'utf8');
+        for (const slug of ['about', 'contact', 'privacy']) {
+            expect(committed).toContain(`<loc>https://plaincast.live/${slug}</loc>`);
+        }
     });
 
     it('each page is self-canonical, de-genericized, and uses absolute asset paths', () => {
         for (const code of codes) {
             const html = read(code);
             expect(html).toContain(`<link rel="canonical" href="https://plaincast.live/o/${code}/">`);
+            // rel="alternate" names THIS office's Markdown twin, not the homepage's
+            expect(html).toContain(`<link rel="alternate" type="text/markdown" href="https://plaincast.live/o/${code}/">`);
+            expect(html).not.toContain('<link rel="alternate" type="text/markdown" href="https://plaincast.live/">');
             expect(html).not.toContain('<title>Plaincast - What the forecast actually says</title>');
             expect(html).toContain('href="/styles.css"');
             expect(html).toContain('src="/js/app.js"');

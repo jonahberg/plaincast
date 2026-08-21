@@ -22,6 +22,11 @@
 // api/_national-shell.html instead (underscore-prefixed, so Vercel does not
 // treat it as an endpoint) and reaches the function via includeFiles.
 //
+// CONTENT NEGOTIATION: this URL serves two representations. `Accept:
+// text/markdown` gets buildDeskMarkdown — the same composed desk, from the
+// same data, as prose. Every response path sets `Vary: Accept`; with two
+// bodies behind one URL, omitting it lets the CDN serve the wrong one.
+//
 // FAIL-SAFE DESIGN: two upstreams are HARD (the severe alert feed and the
 // Day 1 outlook) — either one failing means the exact baked shell bytes,
 // status 200, short CDN window. Everything else is SOFT: national totals and
@@ -41,6 +46,9 @@ import {
     groupDispatches, buildCensus, parseSpcOutlook, parseRiskCategory,
     parseDiscussionBody, digestArea, formatExpiry, nextOutlookTime,
 } from './_national.js';
+import {
+    sendNegotiated, send406, setVary, selectRepresentation, acceptHeader, HTML, MARKDOWN,
+} from './_negotiate.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -281,6 +289,102 @@ export function buildClockHtml(nextTime) {
         ` · this page re-inks every 10 minutes.</p>`;
 }
 
+// The Markdown twin of the composed desk. Same data, same order, same words —
+// only the typography is dropped. Built from the data the HTML builders
+// consume rather than from their output, so there is no HTML to strip and no
+// second parse to drift.
+export function buildDeskMarkdown({
+    census, totals, quiet, risk, summary, copy, rail, rows, issuanceTime, nextTime,
+}) {
+    const lines = [];
+    lines.push('# The National Desk — where the weather is today');
+    lines.push('');
+
+    const issuedAt = formatIssuedUtc(issuanceTime);
+    lines.push(`> The Storm Prediction Center's Day 1 Convective Outlook in plain English, and every `
+        + `National Weather Service forecast office under an active severe warning`
+        + `${issuedAt ? `. Outlook issued ${issuedAt}` : ''}.`);
+    lines.push('');
+
+    // Census strip
+    const strip = [];
+    if (Number.isFinite(totals?.total)) strip.push(`${totals.total} active alerts nationally`);
+    for (const c of (census || []).slice(0, STRIP_MAX)) strip.push(`${c.count} × ${c.event}`);
+    strip.push(`${quiet}/${DESK_COUNT} desks quiet`);
+    lines.push(`**Census:** ${strip.join(' · ')}`);
+    lines.push('');
+
+    // The risk moment
+    if (risk?.level) {
+        const regions = String(risk.regions ?? '').replace(/^THE\s+/i, '').replace(/\s+/g, ' ').trim();
+        lines.push(`## ${sentenceWord(risk.level)} risk of severe thunderstorms`
+            + `${regions ? ` — ${regions}` : ''}`);
+    } else {
+        lines.push('## Quiet skies nationally');
+    }
+    lines.push('');
+    if (summary) {
+        lines.push(regexTranslate(summary));
+        lines.push('');
+    }
+    for (const p of (copy || []).filter(Boolean)) {
+        lines.push(regexTranslate(p));
+        lines.push('');
+    }
+
+    // Three-day rail
+    lines.push('## Three-day severe outlook');
+    lines.push('');
+    for (const r of rail || []) {
+        const level = r?.level ? sentenceWord(r.level) : '—';
+        const note = clipNote(r?.note);
+        lines.push(`- **${r?.label ?? ''}:** ${level}${note ? ` — ${note}` : ''}`);
+    }
+    lines.push('');
+
+    // The Wire
+    lines.push('## The Wire — severe warnings by forecast office');
+    lines.push('');
+    const all = rows || [];
+    const shown = all.slice(0, WIRE_MAX);
+    if (shown.length === 0) {
+        lines.push('No office is under a severe warning right now — a quiet wire is good news.');
+    } else {
+        for (const r of shown) {
+            const name = r.city
+                ? `[${r.city} (${r.code})](https://plaincast.live/o/${r.code}/)`
+                : r.code;
+            const count = r.count > 1 ? ` ×${r.count}` : '';
+            const tz = OFFICE_TIMEZONES[r.code];
+            const detail = [digestArea(r.areaDesc), tz ? formatExpiry(r.expires, tz) : null]
+                .filter(Boolean).join(' · ');
+            lines.push(`- ${name} — ${r.event}${count}${detail ? ` — ${detail}` : ''}`);
+        }
+        const hidden = all.length - shown.length;
+        if (hidden > 0) {
+            lines.push(hidden === 1
+                ? '- …and 1 more office under a severe warning.'
+                : `- …and ${hidden} more offices under severe warnings.`);
+        }
+    }
+    lines.push('');
+    lines.push(`Next Day 1 outlook expected by ${nextTime} · this page re-inks every 10 minutes.`);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+    lines.push('Source: [Storm Prediction Center](https://www.spc.noaa.gov) and the '
+        + '[National Weather Service](https://www.weather.gov). '
+        + 'Your local edition: `https://plaincast.live/o/<CODE>/` — every code is in '
+        + '[/llms.txt](https://plaincast.live/llms.txt).');
+    lines.push('');
+    lines.push('_Canonical: https://plaincast.live/national/_');
+    lines.push('');
+    lines.push('[Home](https://plaincast.live/) · [About](https://plaincast.live/about) · '
+        + '[Contact](https://plaincast.live/contact) · [Privacy](https://plaincast.live/privacy)');
+    lines.push('');
+    return lines.join('\n');
+}
+
 // A soft outlook slot → a rail cell. Rejected, or fulfilled-with-nothing,
 // both mean "we have no product": bare dash, no note. Only a product we
 // actually parsed may say the sky is calm.
@@ -297,6 +401,12 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'GET only' });
     }
 
+    // Decide the representation BEFORE any network work: an Accept header
+    // nothing here can satisfy should cost nothing upstream.
+    const accept = acceptHeader(req);
+    const chosen = selectRepresentation(accept, [HTML, MARKDOWN]);
+    if (!chosen) return send406(res, [HTML, MARKDOWN], accept);
+
     // Baked shell first: this is the guaranteed floor for every response path.
     let baked;
     try {
@@ -307,12 +417,12 @@ export default async function handler(req, res) {
         // into, so the homepage is the only sensible fallback: it is the same
         // forecast data, entered through the reader's local office.
         console.error('national-desk: shell unavailable:', err);
+        setVary(res);
         res.setHeader('Cache-Control', 'public, s-maxage=60');
         res.setHeader('Location', '/');
         return res.status(307).send('');
     }
 
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
     try {
         // SOFT set, started first so it runs alongside the hard set. It is an
         // allSettled, which NEVER rejects — so when the hard await below
@@ -359,8 +469,11 @@ export default async function handler(req, res) {
             railCell('Day 3', dy3R),
         ];
 
+        const census = buildCensus(features);
+        const nextTime = nextOutlookTime(new Date().toISOString());
+
         const ssr = [
-            buildStripHtml(buildCensus(features), totals, quiet),
+            buildStripHtml(census, totals, quiet),
             buildRiskHtml(risk),
             buildLedeHtml({ summary, issuanceTime: outlook?.issuanceTime || null, deckSuppressed }),
             buildCopyHtml(copy),
@@ -369,19 +482,34 @@ export default async function handler(req, res) {
             // Request-time clock. Near a slot boundary a CDN-cached copy can name a
             // slot up to ~30 min past (600s fresh + SWR); "expected by" tolerates it
             // and the next origin render self-corrects. Accepted staleness, not a bug.
-            buildClockHtml(nextOutlookTime(new Date().toISOString())),
+            buildClockHtml(nextTime),
         ].filter(Boolean).join('\n\n    ');
 
         if (!baked.includes(MARKER)) throw new Error('skeleton marker missing from shell');
 
-        res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=1800');
+        const markdown = buildDeskMarkdown({
+            census, totals, quiet, risk, summary, copy, rail, rows,
+            issuanceTime: outlook?.issuanceTime || null, nextTime,
+        });
+
         // replacer fn: `$`-sequences in NWS/SPC text must not be interpreted
-        return res.status(200).send(baked.replace(MARKER, () => ssr));
+        return sendNegotiated(req, res, {
+            [HTML]: baked.replace(MARKER, () => ssr),
+            [MARKDOWN]: markdown,
+        }, { cacheControl: 'public, s-maxage=600, stale-while-revalidate=1800' });
     } catch (err) {
         // NWS down, format drift, marker drift, anything: exact baked shell,
-        // shorter CDN window so recovery is quick.
+        // shorter CDN window so recovery is quick. The Markdown twin has no
+        // baked shell to fall back to, so it degrades to the desk with every
+        // slot empty — still a truthful page about what this URL is.
         console.warn('national-desk: serving baked shell:', err?.message || err);
-        res.setHeader('Cache-Control', 'public, s-maxage=300');
-        return res.status(200).send(baked);
+        return sendNegotiated(req, res, {
+            [HTML]: baked,
+            [MARKDOWN]: buildDeskMarkdown({
+                census: [], totals: null, quiet: DESK_COUNT, risk: null, summary: null,
+                copy: [], rail: [], rows: [], issuanceTime: null,
+                nextTime: nextOutlookTime(new Date().toISOString()),
+            }),
+        }, { cacheControl: 'public, s-maxage=300' });
     }
 }
