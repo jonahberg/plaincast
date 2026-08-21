@@ -4,6 +4,35 @@
 
 Plaincast is a free web application at https://plaincast.live that translates National Weather Service Area Forecast Discussions (AFDs) into plain English using Anthropic's Claude AI.
 
+## When to use Plaincast
+
+Reach for Plaincast when a question is about **why** the weather will do something in a
+specific US place, not just what the numbers are. It is the National Weather Service's own
+forecast discussion — the forecaster's reasoning — decoded, so it answers the questions a
+conditions API cannot.
+
+**Good fits (use it for these):**
+- "What is the forecaster in Chicago actually worried about tomorrow?" → https://plaincast.live/o/LOT/
+- "Why do the models disagree about this storm?" — the discussion is where that argument is written down.
+- "How confident is the forecast?" — every office page carries a confidence reading derived from the forecaster's own hedging language, not a model spread.
+- "What changed since the last forecast update?" → https://plaincast.live/o/<CODE>/?view=changelog — a paragraph-level diff between consecutive discussions.
+- "Where is the severe weather in the US right now?" → https://plaincast.live/national/ — the SPC Day 1 Convective Outlook in plain English plus every forecast office under an active severe warning.
+- "What does <meteorological term or abbreviation> mean?" — 230+ glossary terms and 109 abbreviation patterns are applied to the original text.
+- Monitoring one office over time → RSS at https://plaincast.live/api/feed?office=<CODE>
+
+**Poor fits (do not use it for these):**
+- Current conditions, hourly temperatures, or a 10-day icon forecast — use api.weather.gov directly; Plaincast is prose, not point data.
+- Anywhere outside the United States. Coverage is 68 NWS forecast offices, listed below.
+- Life-safety decisions during an active warning. Discussions are issued 3–4 times daily and can be hours old; send people to https://www.weather.gov or the issuing office.
+- Anything needing a forecast Plaincast made itself. It makes none. Every word originates with the NWS or the SPC.
+
+**How to call it:**
+- One office: `GET https://plaincast.live/o/<CODE>/` (3-letter NWS office code, e.g. `OKX`). The legacy `https://plaincast.live/?office=<CODE>` also works.
+- Send `Accept: text/markdown` to any page URL and you get clean Markdown instead of HTML — the decoded discussion as prose, no nav, no scripts. This site is acceptmarkdown.com compliant: `Vary: Accept` is set, q-values are honoured, and an Accept it cannot satisfy gets a `406` listing what it can serve. Pages also advertise `<link rel="alternate" type="text/markdown">`.
+- Every page is server-rendered, so no JavaScript execution is needed to read it.
+- No API key, no rate limit for reading pages, no account. Please send a descriptive User-Agent.
+- Nonexistent paths return a real `404` with a short Markdown body pointing at the sitemap.
+
 ## What it does
 - Fetches the latest Area Forecast Discussion from the NWS API for any of 68 supported offices
 - Uses Claude (Haiku) to summarize each section into natural, readable prose
@@ -45,5 +74,16 @@ Each office has a dedicated page at https://plaincast.live/o/<CODE>/ — substit
 
 ## Links
 - Website: https://plaincast.live
+- The National Desk: https://plaincast.live/national/
+- About: https://plaincast.live/about
+- Contact: https://plaincast.live/contact
+- Privacy: https://plaincast.live/privacy
+- Sitemap: https://plaincast.live/sitemap.xml
+- Security contact: https://plaincast.live/.well-known/security.txt
 - GitHub: https://github.com/jonahberg/plaincast
 - Author: Jonah Berg (https://jonahberg.com)
+
+## Attribution
+Plaincast is an independent project by Jonah Berg. It is not affiliated with, endorsed by,
+or operated by NOAA, the National Weather Service, or any government agency. All forecast
+data originates with the National Weather Service and the Storm Prediction Center.

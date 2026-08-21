@@ -1,7 +1,19 @@
-// Generates per-office SEO landing pages (docs/o/<CODE>/index.html) + sitemap.xml
-// from docs/index.html. Committed to the repo (no Vercel build step), kept in
-// sync by tests/seo-pages.test.js. Regenerate after editing docs/index.html:
+// Generates per-office SEO landing pages (docs/o/<CODE>/index.html),
+// sitemap.xml, and api/_home-shell.html from docs/index.html. All committed to
+// the repo (no Vercel build step) and kept in sync by tests/seo-pages.test.js.
+// Regenerate after editing docs/index.html:
 //   bun scripts/build-offices.mjs
+//
+// WHY api/_home-shell.html EXISTS: `/` must reach api/home.js, and vercel.json
+// rewrites are evaluated AFTER `handle: filesystem` — so docs/index.html has to
+// stay out of the deployed static root (.vercelignore) or it shadows the
+// rewrite. But `.vercelignore` also removes a file from `includeFiles`
+// (verified on a preview deploy 2026-08-21: both handlers lost their template
+// and 307-looped), so the functions cannot reach the ignored file either. The
+// fix is the convention api/_national-shell.html already uses: keep the shell
+// under api/, underscore-prefixed so Vercel does not treat it as an endpoint,
+// and ship it through includeFiles. docs/index.html remains the file humans
+// edit and the local-dev homepage; this is its committed twin.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -9,6 +21,10 @@ import { OFFICE_NAMES } from '../docs/js/offices.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DOCS = join(__dirname, '..', 'docs');
+const API = join(__dirname, '..', 'api');
+
+// The bundled homepage shell — byte-identical to docs/index.html.
+export const HOME_SHELL = join(API, '_home-shell.html');
 
 // Exact strings from docs/index.html that vary per office.
 const TITLE_TEMPLATE = 'Plaincast - What the forecast actually says';
@@ -77,6 +93,10 @@ export function renderOfficePage(template, code, city) {
     // self-referential canonical + og:url
     html = html.replace('<link rel="canonical" href="https://plaincast.live">',
         `<link rel="canonical" href="https://plaincast.live/o/${code}/">`);
+    // rel="alternate" must follow the canonical: it names the URL that serves
+    // this page's Markdown twin, which is this office's page, not the homepage.
+    html = html.replace('<link rel="alternate" type="text/markdown" href="https://plaincast.live/">',
+        `<link rel="alternate" type="text/markdown" href="https://plaincast.live/o/${code}/">`);
     html = html.replace('<meta property="og:url" content="https://plaincast.live">',
         `<meta property="og:url" content="https://plaincast.live/o/${code}/">`);
     // per-office OG share card: links unfurl with the office's own forecast
@@ -111,6 +131,10 @@ export function renderOfficePage(template, code, city) {
 export function renderSitemap(codes, lastmod = new Date().toISOString().slice(0, 10)) {
     const urls = [`  <url><loc>https://plaincast.live/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`];
     urls.push(`  <url><loc>https://plaincast.live/national/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>`);
+    // Trust anchors: static prose, so they change on deploy rather than daily.
+    for (const slug of ['about', 'contact', 'privacy']) {
+        urls.push(`  <url><loc>https://plaincast.live/${slug}</loc><lastmod>${lastmod}</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>`);
+    }
     for (const code of codes) {
         urls.push(`  <url><loc>https://plaincast.live/o/${code}/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>`);
     }
@@ -130,6 +154,8 @@ export function buildAll() {
         writeFileSync(join(dir, 'index.html'), renderOfficePage(template, code, OFFICE_NAMES[code]));
     }
     writeFileSync(join(DOCS, 'sitemap.xml'), renderSitemap(codes));
+    // The functions' copy of the homepage shell (see the header note).
+    writeFileSync(HOME_SHELL, template);
     return codes.length;
 }
 

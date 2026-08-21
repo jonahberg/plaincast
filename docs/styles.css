@@ -1032,6 +1032,56 @@ body.view-changelog .section-nav { display: none !important; }
 .ssr-changelog { margin: 0 0 1.2rem; }
 .ssr-note { margin: 2rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--rule); }
 
+/* The homepage standfirst (api/home.js). The one paragraph that says what
+   this site IS, set as a lede so it reads as an editorial opener rather than
+   a notice. app.js replaces it along with the rest of #sections on load. */
+.ssr-standfirst {
+    max-width: 62ch; margin: 0 0 1.6rem;
+    font-size: var(--step-1); line-height: 1.6; color: var(--text);
+    padding-bottom: 1.1rem; border-bottom: 1px solid var(--rule);
+    text-wrap: pretty;
+}
+.ssr-standfirst a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--rule-strong); }
+.ssr-standfirst a:hover { border-bottom-color: var(--accent); }
+
+/* ── Prose pages ───────────────────────────────────────────────── */
+/* /about, /contact, /privacy and the 404 (api/page.js, api/not-found.js).
+   Straight running text on the same paper: no cards, no boxes. Reuses
+   .section-title for headings so a prose page and a forecast section are
+   set from the same well. */
+.page-prose { max-width: 68ch; margin: 0 auto; }
+.page-prose > p {
+    font-size: var(--step-0); line-height: 1.75; color: var(--text);
+    margin: 0 0 1.1rem; text-wrap: pretty;
+}
+.page-prose > p:first-child { font-size: var(--step-1); line-height: 1.6; }
+.page-prose .section-title { margin-top: clamp(2.2rem, 4.5vw, 3rem); }
+.page-prose a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--rule-strong); }
+.page-prose a:hover { border-bottom-color: var(--accent); }
+.page-prose code {
+    font-family: var(--font-mono); font-size: 0.86em;
+    font-variant-ligatures: none; color: var(--text-secondary);
+}
+.page-list { margin: 0 0 1.3rem; padding-left: 1.15rem; list-style: none; }
+.page-list li {
+    position: relative; margin-bottom: 0.6rem;
+    font-size: var(--step-0); line-height: 1.7; color: var(--text); text-wrap: pretty;
+}
+/* A rubric hairline instead of a bullet — the same mark the section rules use. */
+.page-list li::before {
+    content: ''; position: absolute; left: -1.15rem; top: 0.85em;
+    width: 0.6rem; height: 1px; background: var(--rubric);
+}
+.page-defs { margin: 0 0 1.3rem; }
+.page-defs dt {
+    font-family: var(--font-mono); font-size: var(--step--1);
+    font-variant-ligatures: none; color: var(--ink); margin-top: 0.9rem;
+}
+.page-defs dd {
+    margin: 0.15rem 0 0; padding-left: 0;
+    font-size: var(--step-0); line-height: 1.7; color: var(--text-secondary);
+}
+
 @media print {
     .office-index { display: none !important; }
 }
