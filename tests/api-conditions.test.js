@@ -46,7 +46,10 @@ describe('GET /api/conditions', () => {
         const res = createRes();
         await handler(createReq({ office: 'ZZZ' }), res);
         expect(res.statusCode).toBe(400);
-        expect(res.body).toEqual({ error: 'Invalid office' });
+        // `error` keeps its exact string (additive change); the machine-readable
+        // siblings are asserted in tests/api-errors.test.js.
+        expect(res.body.error).toBe('Invalid office');
+        expect(res.body.code).toBe('invalid_office');
     });
 
     it('converts Celsius observations to rounded Fahrenheit', async () => {

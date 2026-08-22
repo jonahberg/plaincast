@@ -45,6 +45,11 @@ describe('vercel.json routing invariants', () => {
         expect(vercel.functions['api/page.js'].includeFiles).toBe('api/_page-shell.html');
     });
 
+    it('routes the developer portal', () => {
+        expect(rewrites.find(r => r.source === '/developers')?.destination).toBe('/api/page?slug=developers');
+        expect(rewrites.find(r => r.source === '/developers/')?.destination).toBe('/api/page?slug=developers');
+    });
+
     it('routes every trust page, with and without a trailing slash', () => {
         for (const slug of PAGE_SLUGS) {
             expect(rewrites.find(r => r.source === `/${slug}`)?.destination).toBe(`/api/page?slug=${slug}`);
@@ -113,8 +118,78 @@ describe('llms.txt tells agents when to reach for Plaincast', () => {
         expect(llms).toContain('.well-known/security.txt');
     });
 
+    it('names the developer resources at predictable URLs', () => {
+        expect(llms).toContain('## Developer resources');
+        expect(llms).toContain('https://plaincast.live/developers');
+        expect(llms).toContain('https://plaincast.live/openapi.json');
+        // named with the product in them, for name-based search
+        expect(llms).toContain('**Plaincast developer documentation:**');
+        expect(llms).toContain('**Plaincast OpenAPI specification:**');
+    });
+
+    it('is honest about what does not exist', () => {
+        expect(llms).toContain('no MCP server');
+        expect(llms).toContain('No API keys');
+    });
+
     it('states the NOAA non-affiliation', () => {
         expect(llms).toContain('not affiliated');
+    });
+});
+
+// The Ora audit reported "no H1 tag" against a page whose masthead H1 was right
+// there in the raw HTML. Reproducing their character count pinned the cause: a
+// main-content extractor that strips <header>, <footer> and form controls as
+// boilerplate — which removed the ONLY H1 on every page. Each page now carries a
+// second H1 inside <main> naming that page's own content. This test IS the
+// diagnosis: if the main-content H1 is ever removed, it fails.
+describe('every page keeps an H1 after boilerplate stripping', () => {
+    const strip = (html) => html
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<header[\s\S]*?<\/header>/gi, '')
+        .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+        .replace(/<select[\s\S]*?<\/select>/gi, '')
+        .replace(/<!--[\s\S]*?-->/g, '');
+    const textOf = (html) => strip(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const templates = {
+        'docs/index.html': read('docs', 'index.html'),
+        'docs/o/OKX/index.html': read('docs', 'o', 'OKX', 'index.html'),
+        'api/_national-shell.html': read('api', '_national-shell.html'),
+        'api/_page-shell.html': read('api', '_page-shell.html'),
+    };
+
+    for (const [name, html] of Object.entries(templates)) {
+        it(`${name} still has an H1 once header/footer/select are stripped`, () => {
+            expect(strip(html)).toMatch(/<h1[\s>]/);
+        });
+    }
+
+    it('the surviving H1 sits inside <main>, where the content is', () => {
+        for (const [name, html] of Object.entries(templates)) {
+            const main = html.match(/<main[\s\S]*?>([\s\S]*?)<\/main>/i);
+            expect(main, `${name} has a <main>`).toBeTruthy();
+            expect(main[1]).toMatch(/<h1[\s>]/);
+        }
+    });
+
+    it('names the product, so a name-based search has something to match', () => {
+        for (const [name, html] of Object.entries(templates)) {
+            const h1s = [...html.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/gi)].map(m => m[1]);
+            expect(h1s.join(' ')).toContain('Plaincast');
+        }
+    });
+
+    it('per-office pages name their own office, not the generic homepage text', () => {
+        const okx = read('docs', 'o', 'OKX', 'index.html');
+        expect(okx).toContain('<h1 class="sr-only">New York (OKX)');
+        expect(okx).not.toContain('<h1 class="sr-only">Plaincast — the National Weather Service forecast, decoded');
+    });
+
+    it('the static template alone clears 500+ characters after stripping', () => {
+        // The served page adds the SSR forecast digest on top of this floor.
+        expect(textOf(read('docs', 'index.html')).length).toBeGreaterThan(500);
     });
 });
 

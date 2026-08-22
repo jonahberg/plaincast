@@ -1082,6 +1082,19 @@ body.view-changelog .section-nav { display: none !important; }
     font-size: var(--step-0); line-height: 1.7; color: var(--text-secondary);
 }
 
+/* Code samples on /developers. Set on the cool newsprint stock the AFD
+   facsimile already uses, so a shell block reads as the same "raw material"
+   the original-forecast column does — not as a syntax-highlighted app card. */
+.page-pre {
+    margin: 0 0 1.3rem; padding: 0.9rem 1.1rem;
+    background: var(--newsprint); border-left: 2px solid var(--rule-strong);
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.page-pre code {
+    font-family: var(--font-mono); font-size: var(--step--1); line-height: 1.65;
+    font-variant-ligatures: none; color: var(--text); white-space: pre;
+}
+
 @media print {
     .office-index { display: none !important; }
 }

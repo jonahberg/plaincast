@@ -1,0 +1,10 @@
+# Lint config for docs/openapi.json — `bunx @redocly/cli lint docs/openapi.json`
+extends:
+  - recommended
+rules:
+  # Plaincast's canonical page URLs genuinely carry a trailing slash: /o/OKX/ and
+  # /national/ are what <link rel="canonical">, sitemap.xml and llms.txt all name,
+  # and both are what the vercel.json rewrites treat as primary. Documenting the
+  # slashless variant to satisfy a style rule would put a non-canonical URL in the
+  # spec. The slashless form does resolve; it is just not the one we advertise.
+  no-path-trailing-slash: off

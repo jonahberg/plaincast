@@ -16,15 +16,18 @@ api/               Vercel serverless functions
   home.js          SSR homepage for /  (docs/index.html + live AFD digest)
   office-page.js   SSR /o/<CODE>/
   national-desk.js SSR /national/
-  page.js          /about, /contact, /privacy (content in _pages.js)
-  not-found.js     catch-all agent-friendly 404
+  page.js          /about, /contact, /privacy, /developers (content in _pages.js)
+  not-found.js     catch-all agent-friendly 404 (HTML + Markdown)
+  api-not-found.js JSON 404 for unknown /api/* paths
+  _errors.js       structured JSON errors (code + hint + docs)
   _negotiate.js    Accept-header content negotiation (HTML / Markdown / 406)
   _edition-markdown.js  Markdown twin of an edition
   translate.js     AI translation (AI Gateway + Claude)
   feed.js          RSS per office
   og.js            Dynamic OG images
   conditions.js    Current weather + averages
-tests/             Bun test suite (559 tests)
+docs/openapi.json  OpenAPI 3.1 spec (lint: bunx @redocly/cli lint docs/openapi.json)
+tests/             Bun test suite (598 tests)
 ```
 
 ## Routing rule
@@ -32,7 +35,22 @@ tests/             Bun test suite (559 tests)
 file at a path shadows a rewrite to that path. `docs/index.html` and `docs/o`
 are therefore in `.vercelignore` — they stay committed (local dev, generators,
 tests) and reach the functions via `functions.*.includeFiles`. The 404
-catch-all must stay LAST in the `rewrites` array.
+catch-all must stay LAST in the `rewrites` array, and the `/api/:path*` →
+`/api/api-not-found` rewrite must stay BEFORE it — otherwise `/api/bogus` serves
+an HTML page to an agent probing the API.
+
+## Heading rule
+Every page needs an `<h1>` inside `<main>`, not only the masthead nameplate.
+Main-content extractors strip `<header>` as boilerplate, so a page whose only
+H1 lives there reads as having no heading. `tests/agent-readiness.test.js`
+reproduces that stripping and fails if the main H1 goes away.
+
+## API error rule
+Every `/api/*` failure goes through `sendError` in `api/_errors.js`. `error`
+stays a human string (unchanged contract); `code`, `hint` and `docs` are
+siblings. Codes are a contract — add, never repurpose. `api/explain-alert.js`
+has its own local `sendError(res, e)`, so it imports the shared one as
+`sendJsonError`.
 
 ## Content negotiation
 Every HTML-serving function goes through `api/_negotiate.js`. Never `res.send()`

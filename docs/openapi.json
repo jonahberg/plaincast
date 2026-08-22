@@ -1,0 +1,946 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Plaincast",
+    "version": "1.0.0",
+    "summary": "National Weather Service Area Forecast Discussions, decoded into plain English.",
+    "description": "Plaincast (https://plaincast.live) translates the National Weather Service's Area Forecast Discussion \u2014 the narrative forecast a meteorologist writes 3 to 4 times a day \u2014 into plain English, for 68 US forecast offices.\n\n**No API key, no account, no quota to request.** Everything here is free and read-only.\n\n**Most of Plaincast is pages, not endpoints.** The primary programmatic interface is content negotiation: request any page URL with `Accept: text/markdown` and you get the decoded forecast as clean prose instead of HTML. The site is acceptmarkdown.com compliant. The JSON endpoints below cover only the data that is not a page.\n\n**Not documented here, on purpose:** `/api/translate`, `/api/translate-issuance`, `/api/changelog`, `/api/explain-alert` and `/api/national-lede` are this site's own AI backend. They spend model budget per call, are rate-limited per IP, and are not supported for third-party use. The AI summary they produce is already served inside the pages.\n\nAll forecast data originates with NOAA and is public domain. Plaincast is an independent project and is not affiliated with NOAA or the National Weather Service.",
+    "contact": {
+      "name": "Jonah Berg",
+      "url": "https://jonahberg.com"
+    },
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "termsOfService": "https://plaincast.live/about"
+  },
+  "externalDocs": {
+    "description": "Developer documentation",
+    "url": "https://plaincast.live/developers"
+  },
+  "servers": [
+    {
+      "url": "https://plaincast.live",
+      "description": "Production. The only environment; there is no sandbox."
+    }
+  ],
+  "security": [],
+  "tags": [
+    {
+      "name": "Pages",
+      "description": "Server-rendered pages that also serve text/markdown from the same URL."
+    },
+    {
+      "name": "Data",
+      "description": "Read-only JSON, RSS and image endpoints."
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "getHome",
+        "summary": "Site overview and the current edition",
+        "description": "Plaincast's homepage. Send `Accept: text/markdown` for the decoded forecast as prose, or anything else for the typeset page. `Vary: Accept` is set on every response.",
+        "tags": [
+          "Pages"
+        ],
+        "parameters": [
+          {
+            "name": "office",
+            "in": "query",
+            "required": false,
+            "description": "Render this office's edition instead of the default (LOX).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OKX",
+                "BOX",
+                "PHI",
+                "LWX",
+                "PBZ",
+                "BUF",
+                "RAH",
+                "CHS",
+                "FFC",
+                "MFL",
+                "JAX",
+                "TBW",
+                "BMX",
+                "OHX",
+                "MRX",
+                "JAN",
+                "LOT",
+                "DTX",
+                "IND",
+                "CLE",
+                "ILN",
+                "MKX",
+                "GRR",
+                "LSX",
+                "EAX",
+                "DMX",
+                "MPX",
+                "DLH",
+                "FSD",
+                "BIS",
+                "OAX",
+                "FGF",
+                "FWD",
+                "HGX",
+                "EWX",
+                "OUN",
+                "TSA",
+                "LZK",
+                "LIX",
+                "SHV",
+                "LCH",
+                "BOU",
+                "PUB",
+                "GJT",
+                "SLC",
+                "BOI",
+                "BYZ",
+                "MSO",
+                "RIW",
+                "PSR",
+                "VEF",
+                "TWC",
+                "FGZ",
+                "ABQ",
+                "EPZ",
+                "LOX",
+                "SGX",
+                "MTR",
+                "STO",
+                "HNX",
+                "EKA",
+                "SEW",
+                "PQR",
+                "MFR",
+                "OTX",
+                "AFC",
+                "AFG",
+                "HFO"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The page.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "# New York (OKX) \u2014 the NWS forecast in plain English\n\n> Area Forecast Discussion ...\n"
+              }
+            }
+          },
+          "404": {
+            "description": "No such endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "No acceptable representation for the Accept header.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/o/{code}/": {
+      "get": {
+        "operationId": "getOfficeEdition",
+        "summary": "One office's decoded Area Forecast Discussion",
+        "description": "The full discussion for one NWS office, shorthand expanded. Add `?view=changelog` for a paragraph-level diff against the previous issuance. Send `Accept: text/markdown` for the decoded forecast as prose, or anything else for the typeset page. `Vary: Accept` is set on every response.",
+        "tags": [
+          "Pages"
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "description": "3-letter NWS forecast office code.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OKX",
+                "BOX",
+                "PHI",
+                "LWX",
+                "PBZ",
+                "BUF",
+                "RAH",
+                "CHS",
+                "FFC",
+                "MFL",
+                "JAX",
+                "TBW",
+                "BMX",
+                "OHX",
+                "MRX",
+                "JAN",
+                "LOT",
+                "DTX",
+                "IND",
+                "CLE",
+                "ILN",
+                "MKX",
+                "GRR",
+                "LSX",
+                "EAX",
+                "DMX",
+                "MPX",
+                "DLH",
+                "FSD",
+                "BIS",
+                "OAX",
+                "FGF",
+                "FWD",
+                "HGX",
+                "EWX",
+                "OUN",
+                "TSA",
+                "LZK",
+                "LIX",
+                "SHV",
+                "LCH",
+                "BOU",
+                "PUB",
+                "GJT",
+                "SLC",
+                "BOI",
+                "BYZ",
+                "MSO",
+                "RIW",
+                "PSR",
+                "VEF",
+                "TWC",
+                "FGZ",
+                "ABQ",
+                "EPZ",
+                "LOX",
+                "SGX",
+                "MTR",
+                "STO",
+                "HNX",
+                "EKA",
+                "SEW",
+                "PQR",
+                "MFR",
+                "OTX",
+                "AFC",
+                "AFG",
+                "HFO"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The page.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "# New York (OKX) \u2014 the NWS forecast in plain English\n\n> Area Forecast Discussion ...\n"
+              }
+            }
+          },
+          "404": {
+            "description": "No such endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "No acceptable representation for the Accept header.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/national/": {
+      "get": {
+        "operationId": "getNationalDesk",
+        "summary": "The National Desk",
+        "description": "Where the weather is today: the SPC Day 1 Convective Outlook in plain English, a national alert census, and every forecast office under an active severe warning. Send `Accept: text/markdown` for the decoded forecast as prose, or anything else for the typeset page. `Vary: Accept` is set on every response.",
+        "tags": [
+          "Pages"
+        ],
+        "responses": {
+          "200": {
+            "description": "The page.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "# New York (OKX) \u2014 the NWS forecast in plain English\n\n> Area Forecast Discussion ...\n"
+              }
+            }
+          },
+          "404": {
+            "description": "No such endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "No acceptable representation for the Accept header.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/feed": {
+      "get": {
+        "operationId": "getOfficeFeed",
+        "summary": "RSS feed for one office",
+        "tags": [
+          "Data"
+        ],
+        "description": "RSS 2.0. One item per issuance, carrying what changed since the previous one.",
+        "parameters": [
+          {
+            "name": "office",
+            "in": "query",
+            "required": true,
+            "description": "3-letter NWS forecast office code.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OKX",
+                "BOX",
+                "PHI",
+                "LWX",
+                "PBZ",
+                "BUF",
+                "RAH",
+                "CHS",
+                "FFC",
+                "MFL",
+                "JAX",
+                "TBW",
+                "BMX",
+                "OHX",
+                "MRX",
+                "JAN",
+                "LOT",
+                "DTX",
+                "IND",
+                "CLE",
+                "ILN",
+                "MKX",
+                "GRR",
+                "LSX",
+                "EAX",
+                "DMX",
+                "MPX",
+                "DLH",
+                "FSD",
+                "BIS",
+                "OAX",
+                "FGF",
+                "FWD",
+                "HGX",
+                "EWX",
+                "OUN",
+                "TSA",
+                "LZK",
+                "LIX",
+                "SHV",
+                "LCH",
+                "BOU",
+                "PUB",
+                "GJT",
+                "SLC",
+                "BOI",
+                "BYZ",
+                "MSO",
+                "RIW",
+                "PSR",
+                "VEF",
+                "TWC",
+                "FGZ",
+                "ABQ",
+                "EPZ",
+                "LOX",
+                "SGX",
+                "MTR",
+                "STO",
+                "HNX",
+                "EKA",
+                "SEW",
+                "PQR",
+                "MFR",
+                "OTX",
+                "AFC",
+                "AFG",
+                "HFO"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "RSS 2.0 feed.",
+            "content": {
+              "application/rss+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream NWS failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conditions": {
+      "get": {
+        "operationId": "getConditions",
+        "summary": "Current temperature and seasonal normal",
+        "tags": [
+          "Data"
+        ],
+        "description": "Soft-failing by design: on any upstream problem it returns 200 with null fields rather than an error, because it decorates a page that must still render.",
+        "parameters": [
+          {
+            "name": "office",
+            "in": "query",
+            "required": true,
+            "description": "3-letter NWS forecast office code.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OKX",
+                "BOX",
+                "PHI",
+                "LWX",
+                "PBZ",
+                "BUF",
+                "RAH",
+                "CHS",
+                "FFC",
+                "MFL",
+                "JAX",
+                "TBW",
+                "BMX",
+                "OHX",
+                "MRX",
+                "JAN",
+                "LOT",
+                "DTX",
+                "IND",
+                "CLE",
+                "ILN",
+                "MKX",
+                "GRR",
+                "LSX",
+                "EAX",
+                "DMX",
+                "MPX",
+                "DLH",
+                "FSD",
+                "BIS",
+                "OAX",
+                "FGF",
+                "FWD",
+                "HGX",
+                "EWX",
+                "OUN",
+                "TSA",
+                "LZK",
+                "LIX",
+                "SHV",
+                "LCH",
+                "BOU",
+                "PUB",
+                "GJT",
+                "SLC",
+                "BOI",
+                "BYZ",
+                "MSO",
+                "RIW",
+                "PSR",
+                "VEF",
+                "TWC",
+                "FGZ",
+                "ABQ",
+                "EPZ",
+                "LOX",
+                "SGX",
+                "MTR",
+                "STO",
+                "HNX",
+                "EKA",
+                "SEW",
+                "PQR",
+                "MFR",
+                "OTX",
+                "AFC",
+                "AFG",
+                "HFO"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conditions. Fields are null when unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "temp": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "Current temperature, \u00b0F."
+                    },
+                    "normal": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "Seasonal normal high, \u00b0F."
+                    },
+                    "delta": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "temp \u2212 normal."
+                    }
+                  },
+                  "example": {
+                    "temp": 72,
+                    "normal": 75,
+                    "delta": -3
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/og": {
+      "get": {
+        "operationId": "getOgCard",
+        "summary": "Share card for one office",
+        "tags": [
+          "Data"
+        ],
+        "description": "A 1200\u00d7630 PNG of the office's current edition, used for link unfurls.",
+        "parameters": [
+          {
+            "name": "office",
+            "in": "query",
+            "required": true,
+            "description": "3-letter NWS forecast office code.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OKX",
+                "BOX",
+                "PHI",
+                "LWX",
+                "PBZ",
+                "BUF",
+                "RAH",
+                "CHS",
+                "FFC",
+                "MFL",
+                "JAX",
+                "TBW",
+                "BMX",
+                "OHX",
+                "MRX",
+                "JAN",
+                "LOT",
+                "DTX",
+                "IND",
+                "CLE",
+                "ILN",
+                "MKX",
+                "GRR",
+                "LSX",
+                "EAX",
+                "DMX",
+                "MPX",
+                "DLH",
+                "FSD",
+                "BIS",
+                "OAX",
+                "FGF",
+                "FWD",
+                "HGX",
+                "EWX",
+                "OUN",
+                "TSA",
+                "LZK",
+                "LIX",
+                "SHV",
+                "LCH",
+                "BOU",
+                "PUB",
+                "GJT",
+                "SLC",
+                "BOI",
+                "BYZ",
+                "MSO",
+                "RIW",
+                "PSR",
+                "VEF",
+                "TWC",
+                "FGZ",
+                "ABQ",
+                "EPZ",
+                "LOX",
+                "SGX",
+                "MTR",
+                "STO",
+                "HNX",
+                "EKA",
+                "SEW",
+                "PQR",
+                "MFR",
+                "OTX",
+                "AFC",
+                "AFG",
+                "HFO"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "description": "Pin the card to a specific issuance id.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PNG share card.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/whereami": {
+      "get": {
+        "operationId": "getNearestOffice",
+        "summary": "Nearest covered office for the caller's IP",
+        "tags": [
+          "Data"
+        ],
+        "description": "Uses the edge's approximate city-level IP geolocation. No permission prompt, no device location, never cached. Returns 204 when the caller is outside the 68 covered offices.",
+        "responses": {
+          "200": {
+            "description": "The nearest covered office.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "office",
+                    "city"
+                  ],
+                  "properties": {
+                    "office": {
+                      "type": "string",
+                      "enum": [
+                        "OKX",
+                        "BOX",
+                        "PHI",
+                        "LWX",
+                        "PBZ",
+                        "BUF",
+                        "RAH",
+                        "CHS",
+                        "FFC",
+                        "MFL",
+                        "JAX",
+                        "TBW",
+                        "BMX",
+                        "OHX",
+                        "MRX",
+                        "JAN",
+                        "LOT",
+                        "DTX",
+                        "IND",
+                        "CLE",
+                        "ILN",
+                        "MKX",
+                        "GRR",
+                        "LSX",
+                        "EAX",
+                        "DMX",
+                        "MPX",
+                        "DLH",
+                        "FSD",
+                        "BIS",
+                        "OAX",
+                        "FGF",
+                        "FWD",
+                        "HGX",
+                        "EWX",
+                        "OUN",
+                        "TSA",
+                        "LZK",
+                        "LIX",
+                        "SHV",
+                        "LCH",
+                        "BOU",
+                        "PUB",
+                        "GJT",
+                        "SLC",
+                        "BOI",
+                        "BYZ",
+                        "MSO",
+                        "RIW",
+                        "PSR",
+                        "VEF",
+                        "TWC",
+                        "FGZ",
+                        "ABQ",
+                        "EPZ",
+                        "LOX",
+                        "SGX",
+                        "MTR",
+                        "STO",
+                        "HNX",
+                        "EKA",
+                        "SEW",
+                        "PQR",
+                        "MFR",
+                        "OTX",
+                        "AFC",
+                        "AFG",
+                        "HFO"
+                      ]
+                    },
+                    "city": {
+                      "type": "string"
+                    }
+                  },
+                  "example": {
+                    "office": "LOT",
+                    "city": "Chicago"
+                  }
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No covered office for this location."
+          },
+          "405": {
+            "description": "Method not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error",
+          "code",
+          "hint",
+          "docs"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable message. Do not branch on this."
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable machine code. Branch on this.",
+            "enum": [
+              "invalid_office",
+              "invalid_id",
+              "invalid_request",
+              "method_not_allowed",
+              "not_found",
+              "rate_limited",
+              "upstream_error",
+              "timeout",
+              "forbidden",
+              "internal_error"
+            ]
+          },
+          "hint": {
+            "type": "string",
+            "description": "What to change to make the request succeed."
+          },
+          "docs": {
+            "type": "string",
+            "format": "uri",
+            "description": "Developer documentation."
+          }
+        },
+        "example": {
+          "error": "Invalid office",
+          "code": "invalid_office",
+          "hint": "Pass ?office=<CODE> with a 3-letter NWS office code, e.g. ?office=LOX. All 68 codes are listed at https://plaincast.live/llms.txt",
+          "docs": "https://plaincast.live/developers"
+        }
+      }
+    }
+  }
+}

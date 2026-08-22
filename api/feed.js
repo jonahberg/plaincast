@@ -6,6 +6,7 @@ import { BASIC_ABBREVIATIONS } from '../docs/js/abbreviations.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractLede, sectionHealth, stripWmoHeader } from './_afd-sections.js';
 import { changedParagraphs } from './changelog.js';
+import { sendError } from './_errors.js';
 
 const VALID_OFFICES = new Set(Object.keys(OFFICE_NAMES));
 
@@ -64,11 +65,11 @@ function buildDelta(prevText, currText) {
 }
 
 export default async function handler(req, res) {
-    if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+    if (req.method !== 'GET') return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
 
     const office = (req.query.office || '').toUpperCase();
     if (!office || !VALID_OFFICES.has(office)) {
-        return res.status(400).json({ error: 'Invalid office. Use ?office=LOX (3-letter NWS code)' });
+        return sendError(res, 400, 'invalid_office', 'Invalid office. Use ?office=LOX (3-letter NWS code)');
     }
 
     try {
@@ -143,6 +144,6 @@ ${rssItems}  </channel>
         return res.status(200).send(rss);
     } catch (err) {
         console.error('Feed error:', err);
-        return res.status(502).json({ error: 'Failed to generate feed' });
+        return sendError(res, 502, 'upstream_error', 'Failed to generate feed');
     }
 }

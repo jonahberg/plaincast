@@ -41,13 +41,13 @@ describe('per-office SEO pages stay in sync with docs/index.html', () => {
         const committed = readFileSync(join(DOCS, 'sitemap.xml'), 'utf8');
         const locs = [...committed.matchAll(/<loc>/g)].length;
         const stamps = [...committed.matchAll(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/g)].length;
-        expect(locs).toBe(codes.length + 5); // homepage + /national/ + 3 trust pages + every office
+        expect(locs).toBe(codes.length + 6); // homepage + /national/ + 4 prose pages + every office
         expect(stamps).toBe(locs);
     });
 
-    it('the sitemap lists the trust-anchor pages', () => {
+    it('the sitemap lists the trust-anchor pages and the developer portal', () => {
         const committed = readFileSync(join(DOCS, 'sitemap.xml'), 'utf8');
-        for (const slug of ['about', 'contact', 'privacy']) {
+        for (const slug of ['about', 'contact', 'developers', 'privacy']) {
             expect(committed).toContain(`<loc>https://plaincast.live/${slug}</loc>`);
         }
     });

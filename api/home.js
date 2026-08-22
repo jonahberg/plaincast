@@ -30,6 +30,7 @@ import { regexTranslate } from './_afd-sections.js';
 import { loadTemplate, editionSections as fullEdition } from './office-page.js';
 import { renderHomeMarkdown } from './_edition-markdown.js';
 import { sendNegotiated, HTML, MARKDOWN, send406, setVary, selectRepresentation, acceptHeader } from './_negotiate.js';
+import { sendError } from './_errors.js';
 
 // Exact skeleton markup in docs/index.html that the SSR content replaces.
 // If the template drifts and this marker disappears, we throw → baked page.
@@ -139,7 +140,7 @@ export function minimalHtml(markdown) {
 
 export default async function handler(req, res) {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-        return res.status(405).json({ error: 'GET only' });
+        return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET', 'HEAD'] });
     }
 
     // Decide the representation BEFORE any network work: an unsatisfiable

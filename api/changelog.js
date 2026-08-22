@@ -5,6 +5,7 @@
 import { generateText } from 'ai';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
+import { sendError } from './_errors.js';
 
 // currentProductId -> { changelog, since, updated, time }
 const cache = new Map();
@@ -80,21 +81,21 @@ const LATEST_CACHE = 'public, s-maxage=900, stale-while-revalidate=3600';
 const PINNED_CACHE = 'public, s-maxage=86400, stale-while-revalidate=604800';
 
 export default async function handler(req, res) {
-    if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+    if (req.method !== 'GET') return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
 
     const office = (req.query.office || '').toUpperCase();
-    if (!OFFICE_NAMES[office]) return res.status(400).json({ error: 'Invalid office' });
+    if (!OFFICE_NAMES[office]) return sendError(res, 400, 'invalid_office', 'Invalid office');
 
     // Optional: pin the summary to a specific issuance (?id=<productId>) so the
     // changelog timeline can label every retained edition, not just the latest.
     const pinnedId = typeof req.query.id === 'string' ? req.query.id.trim() : '';
     if (pinnedId && (pinnedId.length > 64 || !/^[\w.:-]+$/.test(pinnedId))) {
-        return res.status(400).json({ error: 'Invalid id' });
+        return sendError(res, 400, 'invalid_id', 'Invalid id');
     }
 
     const clientIp = req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
     if (!checkRateLimit(clientIp)) {
-        return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+        return sendError(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
     }
 
     if (!pinnedId) {

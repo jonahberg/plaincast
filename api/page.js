@@ -28,6 +28,7 @@ import {
     PAGES, escHtml, renderBlocksHtml, renderPageMarkdown,
 } from './_pages.js';
 import { sendNegotiated, HTML, MARKDOWN } from './_negotiate.js';
+import { sendError } from './_errors.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -96,7 +97,7 @@ export function renderPageHtml(shell, page) {
 
 export default async function handler(req, res) {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-        return res.status(405).json({ error: 'GET only' });
+        return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET', 'HEAD'] });
     }
 
     const slug = String(req.query?.slug || '').toLowerCase();

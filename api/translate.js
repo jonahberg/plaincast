@@ -4,6 +4,7 @@
 import { generateText } from 'ai';
 import { OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
+import { sendError } from './_errors.js';
 
 // Translation cache: keyed on hash(text + canonical section + office), 4-hour TTL
 // Fluid Compute shares instances across concurrent requests, so this persists.
@@ -291,16 +292,16 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') return res.status(200).end();
-    if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+    if (req.method !== 'POST') return sendError(res, 405, 'method_not_allowed', 'POST only', { allow: ['POST'] });
 
     // Rate limiting
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
     if (!checkRateLimit(clientIp)) {
-        return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+        return sendError(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
     }
 
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
-        return res.status(400).json({ error: 'Invalid request body' });
+        return sendError(res, 400, 'invalid_request', 'Invalid request body');
     }
 
     const { text, section, office, issuanceTime } = req.body;
@@ -308,22 +309,22 @@ export default async function handler(req, res) {
     const hasSection = section !== undefined && section !== null && section !== '';
     const hasOffice = office !== undefined && office !== null && office !== '';
     const sectionLabel = typeof section === 'string' ? section.trim().replace(/[ \t]+/g, ' ') : section;
-    if (typeof text !== 'string' || text.length < 20) return res.status(400).json({ error: 'Text too short' });
-    if (text.length > 10000) return res.status(400).json({ error: 'Text too long' });
+    if (typeof text !== 'string' || text.length < 20) return sendError(res, 400, 'invalid_request', 'Text too short');
+    if (text.length > 10000) return sendError(res, 400, 'invalid_request', 'Text too long');
 
     // Validate section and office to prevent prompt injection via system prompt
     if (hasSection && (typeof section !== 'string' || !sectionLabel || sectionLabel.length > 100 || /[\r\n\u0000-\u001F\u007F]/.test(section))) {
-        return res.status(400).json({ error: 'Invalid section' });
+        return sendError(res, 400, 'invalid_request', 'Invalid section');
     }
     if (hasOffice && (typeof office !== 'string' || !OFFICE_TIMEZONES[officeCode])) {
-        return res.status(400).json({ error: 'Invalid office' });
+        return sendError(res, 400, 'invalid_office', 'Invalid office');
     }
     // Office is required — it's the key for AFD-source verification below.
     if (!hasOffice) {
-        return res.status(400).json({ error: 'Office required' });
+        return sendError(res, 400, 'invalid_office', 'Office required');
     }
     if (issuanceTime !== undefined && (typeof issuanceTime !== 'string' || issuanceTime.length > 50)) {
-        return res.status(400).json({ error: 'Invalid issuanceTime' });
+        return sendError(res, 400, 'invalid_request', 'Invalid issuanceTime');
     }
 
     // Check translation cache first
@@ -343,7 +344,7 @@ export default async function handler(req, res) {
     if (!degraded) {
         matchedProduct = findMatchingAFD(text, afdProducts);
         if (!matchedProduct) {
-            return res.status(403).json({ error: 'Text does not match a current forecast' });
+            return sendError(res, 403, 'forbidden', 'Text does not match a current forecast');
         }
     } else {
         console.warn(`[translate] degraded mode (AFD source unavailable): office=${officeCode}`);

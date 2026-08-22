@@ -4,6 +4,7 @@
 // pointer is fetched from here with no-store. IP-level only — no permission
 // prompt, no client input trusted: coordinates come from Vercel's headers.
 import { OFFICE_NAMES } from '../docs/js/offices.js';
+import { sendError } from './_errors.js';
 
 const NWS_USER_AGENT = 'Plaincast/1.0 (plaincast.live)';
 
@@ -14,7 +15,7 @@ function coord(raw, min, max) {
 
 export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
-    if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+    if (req.method !== 'GET') return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
     const lat = coord(req.headers['x-vercel-ip-latitude'], -90, 90);
     const lon = coord(req.headers['x-vercel-ip-longitude'], -180, 180);
     if (!lat || !lon) return res.status(204).end();

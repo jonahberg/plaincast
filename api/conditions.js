@@ -1,5 +1,6 @@
 // Vercel serverless function: current weather conditions + seasonal context
 import { OFFICE_NAMES } from '../docs/js/offices.js';
+import { sendError } from './_errors.js';
 
 // NWS observation station closest to each office (approximate)
 const OFFICE_STATIONS = {
@@ -45,7 +46,7 @@ const CLIMATE_NORMALS = {
 export default async function handler(req, res) {
     const office = (req.query.office || '').toUpperCase();
     if (!OFFICE_NAMES[office]) {
-        return res.status(400).json({ error: 'Invalid office' });
+        return sendError(res, 400, 'invalid_office', 'Invalid office');
     }
 
     const station = OFFICE_STATIONS[office];
