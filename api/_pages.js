@@ -20,8 +20,9 @@
 //   { dl: [['term', 'definition'], ...] } → definition list
 //   { pre: 'shell text' }                → preformatted block (fenced in Markdown)
 //
-// Inline markup is written as Markdown links — [text](href) — and converted
-// for the HTML rendering. Keep it to links; anything richer belongs in prose.
+// Inline markup is Markdown links — [text](href) — and inline code spans —
+// `like this` — converted for the HTML rendering. Keep it to those two;
+// anything richer belongs in prose or a { pre: ... } block.
 
 export const PAGES = {
     about: {
@@ -192,11 +193,16 @@ export function escHtml(s) {
 // carry markup out of the content module. External links get rel/target to
 // match the colophon links already in the shells.
 function inlineHtml(text) {
-    return escHtml(text).replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, href) => {
-        const external = /^https?:\/\//.test(href);
-        const attrs = external ? ' target="_blank" rel="noopener noreferrer"' : '';
-        return `<a href="${href}"${attrs}>${label}</a>`;
-    });
+    return escHtml(text)
+        .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, href) => {
+            const external = /^https?:\/\//.test(href);
+            const attrs = external ? ' target="_blank" rel="noopener noreferrer"' : '';
+            return `<a href="${href}"${attrs}>${label}</a>`;
+        })
+        // `code` → <code>. Runs AFTER escaping, so the span can only ever wrap
+        // already-escaped text — and after links, so a backtick inside a label
+        // cannot swallow the anchor.
+        .replace(/`([^`\n]+)`/g, '<code>$1</code>');
 }
 
 // [text](href) → text (href). Markdown keeps its links as-is, except that

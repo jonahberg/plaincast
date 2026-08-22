@@ -151,3 +151,49 @@ describe('page handler', () => {
         expect(res.code).toBe(405);
     });
 });
+
+describe('inline prose markup', () => {
+    it('renders `code` spans as <code>, leaving no stray backticks', () => {
+        const html = renderPageHtml(loadShell(), PAGES.developers);
+        expect(html).toContain('<code>Accept: text/markdown</code>');
+        // the shell itself carries no backticks, so any survivor came from content
+        expect(html.split('<body>')[1]).not.toContain('`');
+    });
+
+    it('keeps backticks intact in the Markdown representation', () => {
+        expect(renderPageMarkdown(PAGES.developers)).toContain('`Accept: text/markdown`');
+    });
+
+    it('escapes before wrapping, so content can never inject markup', () => {
+        const evil = { ...PAGES.about, blocks: [{ p: '`<img src=x onerror=1>`' }] };
+        const html = renderPageHtml(loadShell(), evil);
+        expect(html).toContain('<code>&lt;img src=x onerror=1&gt;</code>');
+        expect(html).not.toContain('<img src=x');
+    });
+});
+
+describe('the developer portal', () => {
+    it('documents the endpoints, the Markdown contract and the error codes', () => {
+        const md = renderPageMarkdown(PAGES.developers);
+        for (const bit of ['/api/feed', '/api/conditions', '/api/og', '/api/whereami',
+                           'Accept: text/markdown', 'invalid_office', '/openapi.json']) {
+            expect(md).toContain(bit);
+        }
+    });
+
+    it('is honest that there are no keys, no sandbox and no MCP server', () => {
+        const md = renderPageMarkdown(PAGES.developers);
+        for (const bit of ['no API keys', 'no sandbox', 'no MCP server']) {
+            expect(md).toContain(bit);
+        }
+    });
+
+    it('does not advertise the AI backend as a third-party API', () => {
+        expect(renderPageMarkdown(PAGES.developers)).toContain('not supported for third-party use');
+    });
+
+    it('ships a runnable curl quickstart', () => {
+        expect(renderPageMarkdown(PAGES.developers)).toContain('```bash');
+        expect(renderPageHtml(loadShell(), PAGES.developers)).toContain('<pre class="page-pre">');
+    });
+});
