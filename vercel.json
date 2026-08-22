@@ -20,6 +20,9 @@
   },
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/api", "destination": "/api/api-not-found" },
+    { "source": "/api/", "destination": "/api/api-not-found" },
+    { "source": "/api/:path*", "destination": "/api/api-not-found" },
     { "source": "/o/:code", "destination": "/api/office-page?code=:code" },
     { "source": "/o/:code/", "destination": "/api/office-page?code=:code" },
     { "source": "/national", "destination": "/api/national-desk" },
@@ -30,6 +33,8 @@
     { "source": "/contact/", "destination": "/api/page?slug=contact" },
     { "source": "/privacy", "destination": "/api/page?slug=privacy" },
     { "source": "/privacy/", "destination": "/api/page?slug=privacy" },
+    { "source": "/developers", "destination": "/api/page?slug=developers" },
+    { "source": "/developers/", "destination": "/api/page?slug=developers" },
     { "source": "/", "destination": "/api/home" },
     { "source": "/:path((?!_vercel/).*)", "destination": "/api/not-found" }
   ],

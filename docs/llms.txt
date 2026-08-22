@@ -43,6 +43,36 @@ conditions API cannot.
 - Dedicated page per office at https://plaincast.live/o/<CODE>/ (canonical form, e.g. https://plaincast.live/o/OKX/); the legacy query form https://plaincast.live/?office=OKX also works
 - Forecast Changelog view per office showing what changed between consecutive discussions: https://plaincast.live/o/<CODE>/?view=changelog (e.g. https://plaincast.live/o/OKX/?view=changelog)
 
+## Developer resources
+
+Plaincast publishes its developer surface at predictable URLs. Everything is free and
+read-only; there is no API key, no account, and no sandbox (production is the only
+environment and is safe to call from a test).
+
+- **Plaincast developer documentation:** https://plaincast.live/developers — endpoint reference, the Accept: text/markdown contract, error codes, rate limits
+- **Plaincast OpenAPI specification:** https://plaincast.live/openapi.json — OpenAPI 3.1, machine-readable, covers every documented endpoint
+- **Plaincast sitemap:** https://plaincast.live/sitemap.xml
+- **Plaincast source code:** https://github.com/jonahberg/plaincast
+- **Plaincast security contact:** https://plaincast.live/.well-known/security.txt
+
+No API keys, no OAuth, no accounts, no webhooks, no write endpoints, and no MCP server —
+stated so you do not go looking for them.
+
+JSON endpoints (all GET, all keyless):
+- `GET https://plaincast.live/api/feed?office=<CODE>` — RSS 2.0 per office
+- `GET https://plaincast.live/api/conditions?office=<CODE>` — current temperature + seasonal normal
+- `GET https://plaincast.live/api/og?office=<CODE>` — 1200x630 PNG share card
+- `GET https://plaincast.live/api/whereami` — nearest covered office for the caller's IP
+
+Every `/api/*` error is JSON with a stable machine `code`, a human `error` string, a `hint`
+naming the fix, and a `docs` URL. An unknown `/api/*` path returns a JSON 404 listing the
+endpoints that exist. Branch on `code`, never on the prose.
+
+The AI endpoints (`/api/translate`, `/api/translate-issuance`, `/api/changelog`,
+`/api/explain-alert`, `/api/national-lede`) are Plaincast's own backend: they spend model
+budget per call, are rate-limited per IP, and are not supported for third-party use. The
+summaries they produce are already served inside the pages.
+
 ## Supported NWS Offices (68, organized by region)
 
 Each office has a dedicated page at https://plaincast.live/o/<CODE>/ — substitute the 3-letter code below (e.g. https://plaincast.live/o/LOX/ for Los Angeles). All 68 are listed in https://plaincast.live/sitemap.xml.
@@ -75,6 +105,8 @@ Each office has a dedicated page at https://plaincast.live/o/<CODE>/ — substit
 ## Links
 - Website: https://plaincast.live
 - The National Desk: https://plaincast.live/national/
+- Developers (API docs): https://plaincast.live/developers
+- OpenAPI spec: https://plaincast.live/openapi.json
 - About: https://plaincast.live/about
 - Contact: https://plaincast.live/contact
 - Privacy: https://plaincast.live/privacy

@@ -8,6 +8,7 @@
 import { generateText } from 'ai';
 import { fetchSpcDy1 } from './_utils.js';
 import { parseSpcOutlook } from './_national.js';
+import { sendError } from './_errors.js';
 
 // issuanceTime -> { deck, time }
 const cache = new Map();
@@ -61,11 +62,11 @@ const TRANSIENT_CACHE = 'public, s-maxage=60';
 const TRANSIENT = { status: 200, cacheHeader: TRANSIENT_CACHE, body: { deck: null, transient: true } };
 
 export default async function handler(req, res) {
-    if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+    if (req.method !== 'GET') return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
 
     const clientIp = req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
     if (!checkRateLimit(clientIp)) {
-        return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+        return sendError(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
     }
 
     const pending = inFlight.get(FLIGHT_KEY);

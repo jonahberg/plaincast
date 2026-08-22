@@ -18,6 +18,7 @@
 //   { h: 'Heading' }                    → <h2> / '## '
 //   { ul: ['item', ...] }               → list
 //   { dl: [['term', 'definition'], ...] } → definition list
+//   { pre: 'shell text' }                → preformatted block (fenced in Markdown)
 //
 // Inline markup is written as Markdown links — [text](href) — and converted
 // for the HTML rendering. Keep it to links; anything richer belongs in prose.
@@ -82,6 +83,62 @@ export const PAGES = {
             { h: 'Everything else' },
             { p: 'For anything that is not about the site itself — writing, work, or the other projects — [jonahberg.com](https://jonahberg.com) is the front door.' },
             { p: 'Two things Plaincast cannot help with. It cannot answer "what is the weather going to do" — read your local edition, or ask the National Weather Service. And it cannot change a forecast: every word on this site is the NWS\'s, and corrections to a forecast belong with the office that issued it.' },
+        ],
+    },
+
+    developers: {
+        slug: 'developers',
+        title: 'Plaincast for developers',
+        folio: 'Developers',
+        dateline: 'The API, the Markdown contract, and the machine-readable index',
+        description: 'Plaincast developer documentation: the read-only NWS API endpoints, the Accept: text/markdown contract every page honours, the OpenAPI spec, and the rate limits. No API key, no signup.',
+        blocks: [
+            { p: 'Plaincast is a reading layer over the National Weather Service. Everything below is free, needs no API key and no account, and returns data that originates with NOAA. If you are an AI agent deciding how to call this site, start with the Markdown contract — it is the part of Plaincast most worth calling.' },
+            { ul: [
+                'Machine-readable spec: [/openapi.json](/openapi.json) (OpenAPI 3.1)',
+                'Agent guidance and every office code: [/llms.txt](/llms.txt)',
+                'Every page on the site: [/sitemap.xml](/sitemap.xml)',
+                'Source: [github.com/jonahberg/plaincast](https://github.com/jonahberg/plaincast)',
+            ] },
+
+            { h: 'The Markdown contract' },
+            { p: 'Every page on Plaincast serves two representations from one URL. Send `Accept: text/markdown` and you get the decoded forecast as clean prose — no nav, no scripts, no DOM. This is the fastest way to read Plaincast programmatically, and it needs no endpoint at all: request the page URL you already know.' },
+            { pre: 'curl -H "Accept: text/markdown" https://plaincast.live/o/OKX/' },
+            { p: 'The site is [acceptmarkdown.com](https://acceptmarkdown.com) compliant: `Vary: Accept` is set on every response, q-values are honoured, and an `Accept` that cannot be satisfied returns `406` listing what is available. Pages also advertise `<link rel="alternate" type="text/markdown">`. Every page is server-rendered, so no JavaScript execution is required either way.' },
+            { dl: [
+                ['https://plaincast.live/', 'Site overview plus the current edition for the default office.'],
+                ['https://plaincast.live/o/<CODE>/', 'One office\'s Area Forecast Discussion, decoded. 3-letter NWS code.'],
+                ['https://plaincast.live/national/', 'The National Desk: SPC Day 1 outlook and every office under a severe warning.'],
+                ['https://plaincast.live/about', 'These trust pages serve Markdown too.'],
+            ] },
+
+            { h: 'JSON endpoints' },
+            { p: 'A small read-only surface for the data that is not a page. All are `GET`, all are CDN-cached, none need a key.' },
+            { dl: [
+                ['GET /api/feed?office=<CODE>', 'RSS 2.0 for one office — a new item per issuance, with the delta.'],
+                ['GET /api/conditions?office=<CODE>', 'Current temperature and the seasonal normal. JSON.'],
+                ['GET /api/og?office=<CODE>', 'The office\'s share card as a 1200×630 PNG.'],
+                ['GET /api/whereami', 'The nearest covered office for the caller\'s IP, or 204 if none. JSON, never cached.'],
+            ] },
+            { pre: 'curl https://plaincast.live/api/conditions?office=LOX\n{"temp":72,"normal":75,"delta":-3}' },
+            { p: 'The AI-backed endpoints (`/api/translate`, `/api/translate-issuance`, `/api/changelog`, `/api/explain-alert`, `/api/national-lede`) are this site\'s own backend. They spend model budget per call and are rate-limited per IP, so they are deliberately left out of the spec and are not supported for third-party use. If you want the AI summary, read the page — it is already in there.' },
+
+            { h: 'Errors' },
+            { p: 'Every `/api/*` failure returns JSON with a stable machine `code`, a human `error` string, a `hint` naming the fix, and a `docs` link. Branch on `code`, never on the prose.' },
+            { pre: 'curl -i https://plaincast.live/api/conditions?office=ZZZ\n\nHTTP/2 400\ncontent-type: application/json; charset=utf-8\n\n{\n  "error": "Invalid office",\n  "code": "invalid_office",\n  "hint": "Pass ?office=<CODE> with a 3-letter NWS office code, e.g. ?office=LOX...",\n  "docs": "https://plaincast.live/developers"\n}' },
+            { p: 'Codes in use: `invalid_office`, `invalid_id`, `invalid_request`, `method_not_allowed`, `not_found`, `rate_limited`, `upstream_error`, `timeout`, `forbidden`, `internal_error`. They are a contract — new codes get added, existing ones are never repurposed. An unknown `/api/*` path returns `404` as JSON, listing the endpoints that do exist.' },
+
+            { h: 'Rate limits and etiquette' },
+            { ul: [
+                'No key, no signup, no quota to request. The limit is per IP: 30 requests a minute on the AI endpoints, and no fixed limit on the page and feed URLs beyond what the CDN absorbs.',
+                'Send a descriptive `User-Agent` naming your project. Anonymous floods are the only thing that would force a key.',
+                'Responses are CDN-cached and carry real `Cache-Control`. Honour it rather than polling — Area Forecast Discussions are reissued 3 to 4 times a day, not continuously.',
+                'Data is the National Weather Service\'s and is public domain. Plaincast adds the decoding, not the forecast. Attribute NOAA, and say the plain English came from a machine.',
+            ] },
+
+            { h: 'What Plaincast does not have' },
+            { p: 'Stated plainly so you do not go looking: there are no API keys, no OAuth, no accounts, no sandbox or staging environment, no webhooks, no write endpoints, and no MCP server. Nothing here is gated, so there is nothing to provision — the production URLs above are the only environment, and they are safe to call from a test.' },
+            { p: 'If you need something that is missing, open an issue at [github.com/jonahberg/plaincast/issues](https://github.com/jonahberg/plaincast/issues). See also [/about](/about), [/contact](/contact) and [/privacy](/privacy).' },
         ],
     },
 
@@ -158,6 +215,9 @@ export function renderBlocksHtml(blocks) {
             out.push('        <ul class="page-list">');
             for (const li of b.ul) out.push(`            <li>${inlineHtml(li)}</li>`);
             out.push('        </ul>');
+        } else if (b.pre) {
+            // Not inlineHtml: a code sample is literal text, never markup or links.
+            out.push(`        <pre class="page-pre"><code>${escHtml(b.pre)}</code></pre>`);
         } else if (b.dl) {
             out.push('        <dl class="page-defs">');
             for (const [term, def] of b.dl) {
@@ -175,6 +235,7 @@ export function renderBlocksMarkdown(blocks) {
     for (const b of blocks) {
         if (b.h) out.push(`## ${b.h}`);
         else if (b.p) out.push(inlineMarkdown(b.p));
+        else if (b.pre) out.push('```bash\n' + b.pre + '\n```');
         else if (b.ul) out.push(b.ul.map(li => `- ${inlineMarkdown(li)}`).join('\n'));
         else if (b.dl) out.push(b.dl.map(([t, d]) => `- **${t}** — ${inlineMarkdown(d)}`).join('\n'));
     }

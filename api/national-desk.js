@@ -49,6 +49,7 @@ import {
 import {
     sendNegotiated, send406, setVary, selectRepresentation, acceptHeader, HTML, MARKDOWN,
 } from './_negotiate.js';
+import { sendError } from './_errors.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -398,7 +399,7 @@ function railCell(label, settled) {
 
 export default async function handler(req, res) {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-        return res.status(405).json({ error: 'GET only' });
+        return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET', 'HEAD'] });
     }
 
     // Decide the representation BEFORE any network work: an Accept header

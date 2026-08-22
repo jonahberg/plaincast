@@ -7,6 +7,7 @@
 // content is effectively immutable.
 import { generateText } from 'ai';
 import { fetchAlertById } from './_utils.js';
+import { sendError as sendJsonError } from './_errors.js';
 
 const cache = new Map(); // alert id -> { explanation, time }
 const CACHE_TTL = 4 * 60 * 60 * 1000;
@@ -60,27 +61,34 @@ const SYSTEM = `You translate National Weather Service alerts into calm, plain E
 function sendError(res, e) {
     if (e?.statusCode) {
         if (e.cacheHeader) res.setHeader('Cache-Control', e.cacheHeader);
-        return res.status(e.statusCode).json({ error: e.publicMessage, ...(e.reason ? { reason: e.reason } : {}) });
+        // Map the thrown status onto a machine code; `error` and `reason` keep
+        // the exact values this endpoint has always returned.
+        const code = e.statusCode === 429 ? 'rate_limited'
+            : e.statusCode === 404 ? 'not_found'
+            : e.statusCode >= 500 ? 'upstream_error'
+            : 'invalid_request';
+        return sendJsonError(res, e.statusCode, code, e.publicMessage,
+            e.reason ? { reason: e.reason } : {});
     }
     if (e?.name === 'AbortError' || e?.name === 'TimeoutError') {
-        return res.status(504).json({ error: 'Explanation timed out' });
+        return sendJsonError(res, 504, 'timeout', 'Explanation timed out');
     }
     console.error('Explain-alert error:', e);
-    return res.status(500).json({ error: 'Internal error' });
+    return sendJsonError(res, 500, 'internal_error', 'Internal error');
 }
 
 export default async function handler(req, res) {
-    if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+    if (req.method !== 'GET') return sendJsonError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
 
     const id = typeof req.query.id === 'string' ? req.query.id.trim() : '';
     // NWS alert ids are URNs like urn:oid:2.49.0.1.840.0.<digits>...
     if (!id || id.length > 300 || !/^urn:oid:[\w.:,-]+$/.test(id)) {
-        return res.status(400).json({ error: 'Invalid alert id' });
+        return sendJsonError(res, 400, 'invalid_id', 'Invalid alert id');
     }
 
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
     if (!checkRateLimit(clientIp)) {
-        return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+        return sendJsonError(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
     }
 
     const hit = cache.get(id);

@@ -97,6 +97,9 @@ export function renderOfficePage(template, code, city) {
     // this page's Markdown twin, which is this office's page, not the homepage.
     html = html.replace('<link rel="alternate" type="text/markdown" href="https://plaincast.live/">',
         `<link rel="alternate" type="text/markdown" href="https://plaincast.live/o/${code}/">`);
+    // The main-content <h1> names THIS office, not the site (see docs/index.html).
+    html = html.replace('<h1 class="sr-only">Plaincast — the National Weather Service forecast, decoded into plain English</h1>',
+        `<h1 class="sr-only">${escHtml(city)} (${code}) — the National Weather Service forecast in plain English · Plaincast</h1>`);
     html = html.replace('<meta property="og:url" content="https://plaincast.live">',
         `<meta property="og:url" content="https://plaincast.live/o/${code}/">`);
     // per-office OG share card: links unfurl with the office's own forecast
@@ -132,7 +135,7 @@ export function renderSitemap(codes, lastmod = new Date().toISOString().slice(0,
     const urls = [`  <url><loc>https://plaincast.live/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`];
     urls.push(`  <url><loc>https://plaincast.live/national/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>`);
     // Trust anchors: static prose, so they change on deploy rather than daily.
-    for (const slug of ['about', 'contact', 'privacy']) {
+    for (const slug of ['about', 'contact', 'developers', 'privacy']) {
         urls.push(`  <url><loc>https://plaincast.live/${slug}</loc><lastmod>${lastmod}</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>`);
     }
     for (const code of codes) {

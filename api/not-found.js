@@ -36,11 +36,13 @@ That path does not exist. Plaincast is a small site; here is all of it.
 - [/sitemap.xml](https://plaincast.live/sitemap.xml) — every page on the site
 - [/llms.txt](https://plaincast.live/llms.txt) — what Plaincast is for, when to use it, and every supported office code
 - [/robots.txt](https://plaincast.live/robots.txt)
+- [/openapi.json](https://plaincast.live/openapi.json) — the OpenAPI 3.1 spec for the JSON endpoints
+- [/developers](https://plaincast.live/developers) — API docs, the Markdown contract, rate limits
 - RSS per office: \`https://plaincast.live/api/feed?office=<CODE>\`
 
 Every page above also serves Markdown to \`Accept: text/markdown\`.
 
-[About](https://plaincast.live/about) · [Contact](https://plaincast.live/contact) · [Privacy](https://plaincast.live/privacy)
+[Developers](https://plaincast.live/developers) · [About](https://plaincast.live/about) · [Contact](https://plaincast.live/contact) · [Privacy](https://plaincast.live/privacy)
 `;
 
 // The HTML twin. Standalone and dependency-free on purpose: a 404 must not be
@@ -96,6 +98,8 @@ export const HTML_BODY = `<!DOCTYPE html>
             <li><a href="/sitemap.xml">/sitemap.xml</a> — every page on the site</li>
             <li><a href="/llms.txt">/llms.txt</a> — what Plaincast is for, when to use it, and every supported office code</li>
             <li><a href="/robots.txt">/robots.txt</a></li>
+            <li><a href="/openapi.json">/openapi.json</a> — the OpenAPI 3.1 spec for the JSON endpoints</li>
+            <li><a href="/developers">/developers</a> — API docs, the Markdown contract, rate limits</li>
             <li>RSS per office: <code>/api/feed?office=&lt;CODE&gt;</code></li>
         </ul>
         <p class="ssr-note">Every page above also serves Markdown to <code>Accept: text/markdown</code>.</p>
@@ -108,6 +112,8 @@ export const HTML_BODY = `<!DOCTYPE html>
             <a href="/">Home</a>
             <span class="dot" aria-hidden="true">·</span>
             <a href="/national/">The National Desk</a>
+            <span class="dot" aria-hidden="true">·</span>
+            <a href="/developers">Developers</a>
             <span class="dot" aria-hidden="true">·</span>
             <a href="/about">About</a>
             <span class="dot" aria-hidden="true">·</span>

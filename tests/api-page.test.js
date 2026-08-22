@@ -17,8 +17,8 @@ const get = (slug, accept) => ({
 });
 
 describe('trust anchor pages exist and are substantial', () => {
-    it('ships /about, /contact and /privacy', () => {
-        expect(PAGE_SLUGS.sort()).toEqual(['about', 'contact', 'privacy']);
+    it('ships /about, /contact, /developers and /privacy', () => {
+        expect(PAGE_SLUGS.sort()).toEqual(['about', 'contact', 'developers', 'privacy']);
     });
 
     // The audit bar: "at least 500 characters of content each". Measured on

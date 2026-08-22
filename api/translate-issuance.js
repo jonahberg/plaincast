@@ -9,6 +9,7 @@ import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractSections } from './_afd-sections.js';
 import { buildSystemPrompt } from './translate.js';
 import { getSnapshot, putSnapshot } from './_snapshots.js';
+import { sendError } from './_errors.js';
 
 // `${office}|${id}` -> { payload, time }. A completed issuance is immutable,
 // so the TTL exists only to bound memory, not for freshness.
@@ -65,19 +66,19 @@ const MAX_SECTION_CHARS = 10000;
 const MAX_SECTIONS = 10;
 
 export default async function handler(req, res) {
-    if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+    if (req.method !== 'GET') return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
 
     const office = (req.query.office || '').toUpperCase();
-    if (!OFFICE_NAMES[office]) return res.status(400).json({ error: 'Invalid office' });
+    if (!OFFICE_NAMES[office]) return sendError(res, 400, 'invalid_office', 'Invalid office');
 
     const id = typeof req.query.id === 'string' ? req.query.id.trim() : '';
     if (!id || id.length > 64 || !/^[\w.:-]+$/.test(id)) {
-        return res.status(400).json({ error: 'Invalid id' });
+        return sendError(res, 400, 'invalid_id', 'Invalid id');
     }
 
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
     if (!checkRateLimit(clientIp)) {
-        return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+        return sendError(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
     }
 
     const cacheKey = `${office}|${id}`;
@@ -193,9 +194,9 @@ export default async function handler(req, res) {
             return res.status(err.statusCode).json({ error: err.publicMessage || 'Error' });
         }
         if (err.name === 'AbortError' || err.name === 'TimeoutError') {
-            return res.status(504).json({ error: 'Translation timed out' });
+            return sendError(res, 504, 'timeout', 'Translation timed out');
         }
         console.error('Issuance translation error:', err);
-        return res.status(500).json({ error: 'Internal error' });
+        return sendError(res, 500, 'internal_error', 'Internal error');
     }
 }

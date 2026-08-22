@@ -85,6 +85,7 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 │    ├─ /api/national-desk (SSR national front)   │
 │    ├─ /api/page         (about/contact/privacy) │
 │    ├─ /api/not-found    (agent-friendly 404)    │
+│    ├─ /api/api-not-found (JSON 404 for /api/*)  │
 │    ├─ /api/feed         (delta RSS per office)  │
 │    ├─ /api/og           (share cards)           │
 │    └─ /api/conditions   (current weather + avg) │
@@ -111,6 +112,9 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 - **Accessible** - ARIA roles on modals and tooltips, focus trapping, keyboard navigation, severity marks
 - **DST-aware** - Zulu time conversion uses IANA timezones per office
 - **SEO** - WebApplication + FAQPage schema, OG image, llms.txt, AI crawler friendly
+- **Documented API** - OpenAPI 3.1 at [/openapi.json](https://plaincast.live/openapi.json), developer docs at
+  [/developers](https://plaincast.live/developers). No key, no signup. Every `/api/*` error is JSON with a stable
+  machine `code`, a `hint` naming the fix, and a `docs` link
 - **Agent-ready** - Every page is server-rendered (readable with no JavaScript) and
   [acceptmarkdown.com](https://acceptmarkdown.com) compliant: `Accept: text/markdown` returns clean
   prose from the same URL, with `Vary: Accept`, q-value handling, and `406` for an Accept it cannot
