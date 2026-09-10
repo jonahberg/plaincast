@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, WifiOff, X } from 'lucide-react';
 
 import { OFFICE_NAMES, OFFICE_TIMEZONES } from '@data/offices.js';
@@ -94,6 +94,13 @@ export default function App() {
     const renderedRoute = useRef(currentRoute());
 
     const announce = useCallback((msg) => setAnnouncement(msg), []);
+
+    // The served page carries a server-rendered digest (#ssr-root in
+    // index.html) for crawlers and no-JS readers; the app supersedes it.
+    // Layout effect: gone before the first painted frame with both.
+    useLayoutEffect(() => {
+        document.getElementById('ssr-root')?.remove();
+    }, []);
 
     const load = useCallback(async (code, targetEditionId = null) => {
         const gen = ++generation.current;

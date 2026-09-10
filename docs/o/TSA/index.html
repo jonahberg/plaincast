@@ -3,40 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- The exact strings below (title, description, canonical, alternate,
+         og:*, twitter:*, the sr-only H1, the #loading div, and the office
+         index links) are TEMPLATE MARKERS: scripts/build-offices.mjs
+         string-replaces them to bake api/_home-shell.html and every
+         docs/o/<CODE>/ page, and api/home.js + api/office-page.js inject the
+         server-rendered digest at the #loading marker. Change them only
+         together with scripts/build-offices.mjs, then regenerate
+         (bun scripts/build-offices.mjs). -->
     <title>Tulsa NWS Forecast in Plain English · Plaincast</title>
     <meta name="description" content="The latest National Weather Service Area Forecast Discussion for Tulsa (TSA), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.">
-    <meta name="keywords" content="NWS, weather forecast, Area Forecast Discussion, AFD, plain English, meteorology, National Weather Service, weather translation, jargon decoder">
-    <meta name="theme-color" content="#f7f3ea">
+    <meta name="theme-color" content="#ffffff">
     <meta name="author" content="Jonah Berg">
-    <meta property="og:locale" content="en_US">
-    <meta name="google-site-verification" content="IdNCtGpFPAc0ZPT6T41Z-KgfP-AzHr7qfAn-7asX96Y">
     <link rel="canonical" href="https://plaincast.live/o/TSA/">
-    <!-- The same resource, in Markdown, is at this URL under content
-         negotiation (api/_negotiate.js). Advertised per RFC 8288 for the
-         agents that look for rel="alternate" instead of sending Accept. -->
+    <!-- The same resource, in Markdown, under content negotiation
+         (api/_negotiate.js). Advertised per RFC 8288 for agents that look for
+         rel="alternate" instead of sending Accept. -->
     <link rel="alternate" type="text/markdown" href="https://plaincast.live/o/TSA/">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="alternate" type="application/rss+xml" title="Plaincast RSS" href="/api/feed?office=TSA">
     <!-- api.weather.gov gates all forecast content; warm the connection early -->
     <link rel="preconnect" href="https://api.weather.gov" crossorigin>
-    <link rel="modulepreload" href="/js/app.js">
-    <link rel="modulepreload" href="/js/glossary.js">
-    <link rel="modulepreload" href="/js/offices.js">
-    <link rel="modulepreload" href="/js/abbreviations.js">
-    <link rel="modulepreload" href="/js/diff.js">
-    <link rel="modulepreload" href="/js/timeline.js">
-    <link rel="preload" href="/fonts/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="/fonts/source-serif-4-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/fonts/fonts.css">
-    <script defer src="/_vercel/insights/script.js"></script>
-    <script defer src="/_vercel/speed-insights/script.js"></script>
-    <!-- Pre-paint theme + sky-phase (blocking, no defer/module): must run
-         before first paint. Extracted to a file so the CSP needs no
-         script-src 'unsafe-inline'. -->
-    <script src="/js/theme-init.js"></script>
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
+    <meta property="og:locale" content="en_US">
     <meta property="og:url" content="https://plaincast.live/o/TSA/">
     <meta property="og:title" content="Tulsa NWS Forecast in Plain English · Plaincast">
     <meta property="og:description" content="The latest National Weather Service Area Forecast Discussion for Tulsa (TSA), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.">
@@ -61,43 +53,23 @@
         "@type": "WebApplication",
         "name": "Plaincast",
         "url": "https://plaincast.live",
-        "description": "NWS Area Forecast Discussions decoded into plain English with side-by-side translation, 230+ term jargon glossary, forecaster confidence indicators, and smart abbreviation expansion.",
+        "description": "NWS Area Forecast Discussions decoded into plain English with side-by-side translation, 230+ term jargon glossary, forecaster confidence indicators, edition history and per-edition diffs.",
         "applicationCategory": "WeatherApplication",
         "operatingSystem": "Any",
         "browserRequirements": "Requires JavaScript",
-        "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "USD"
-        },
-        "author": {
-            "@type": "Person",
-            "name": "Jonah Berg",
-            "url": "https://jonahberg.com"
-        },
-        "sourceOrganization": {
-            "@type": "GovernmentOrganization",
-            "name": "National Weather Service",
-            "url": "https://www.weather.gov"
-        },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Jonah Berg", "url": "https://jonahberg.com" },
+        "sourceOrganization": { "@type": "GovernmentOrganization", "name": "National Weather Service", "url": "https://www.weather.gov" },
         "featureList": [
             "AI-powered plain English summaries via Claude",
             "Side-by-side translation with annotated original",
             "230+ term meteorological jargon glossary",
             "Forecaster confidence indicator",
-            "Zulu to local time conversion (DST-aware)",
-            "Active weather alerts as a plain-English hazard ledger",
-            "68 NWS forecast offices",
-            "Key takeaway extraction"
+            "Edition history with per-section diffs",
+            "Active weather alerts with plain-English leads",
+            "68 NWS forecast offices"
         ],
-        "sameAs": [
-            "https://github.com/jonahberg/plaincast"
-        ],
-        "potentialAction": {
-            "@type": "ViewAction",
-            "target": "https://plaincast.live",
-            "name": "Read Forecast"
-        }
+        "sameAs": ["https://github.com/jonahberg/plaincast"]
     }
     </script>
     <script type="application/ld+json">
@@ -136,14 +108,6 @@
                     "@type": "Answer",
                     "text": "Yes, Plaincast is completely free and open source. It uses the NWS public API for forecast data and Anthropic's Claude for AI summaries. No account or API key required."
                 }
-            },
-            {
-                "@type": "Question",
-                "name": "How often are forecasts updated?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "NWS meteorologists issue new Area Forecast Discussions 3-4 times per day, typically around 4 AM, 10 AM, 4 PM, and 10 PM local time. Plaincast automatically fetches the latest discussion when you load the page."
-                }
             }
         ]
     }
@@ -158,29 +122,32 @@
             {
                 "@type": "HowToStep",
                 "name": "Select your NWS office",
-                "text": "Choose your local NWS forecast office from the dropdown menu. Plaincast supports 68 offices across the United States."
+                "text": "Choose your local NWS forecast office from the picker. Plaincast supports 68 offices across the United States, or can find your nearest one from your location."
             },
             {
                 "@type": "HowToStep",
                 "name": "Read the AI summary",
-                "text": "The left column shows a plain English summary of each forecast section, translated by Claude AI. Key details like temperatures, wind speeds, and dates are highlighted in bold."
+                "text": "Each forecast section opens on a plain English summary translated by Claude AI. Key details like temperatures, wind speeds, and dates are highlighted in bold."
             },
             {
                 "@type": "HowToStep",
                 "name": "Check the original with annotations",
-                "text": "The right column shows the original forecast text with 230+ meteorological jargon terms highlighted. Hover or tap any highlighted term to see its definition."
+                "text": "Switch to the Original tab to see the forecaster's own text with 230+ meteorological jargon terms highlighted. Hover or tap any highlighted term to see its definition."
             },
             {
                 "@type": "HowToStep",
-                "name": "Review the key takeaway and confidence",
-                "text": "The key takeaway at the top summarizes the most important point. The confidence indicator shows how certain the forecaster is based on their language."
+                "name": "Review the takeaway, confidence, and what changed",
+                "text": "The key takeaway at the top summarizes the most important point, the confidence indicator reads the forecaster's own certainty language, and the What Changed tab shows what this edition revised."
             }
         ]
     }
     </script>
-    <link rel="alternate" type="application/rss+xml" title="Plaincast RSS" id="rss-link" href="/api/feed?office=TSA">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="stylesheet" href="/styles.css">
+
+    <!-- Pre-paint theme (blocking, external file: the CSP has no
+         script-src 'unsafe-inline'): must run before first paint. -->
+    <script src="/theme-init.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/app.css">
+    <link rel="modulepreload" crossorigin href="/assets/vendor.js">
 <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -222,320 +189,108 @@
     </script>
 </head>
 <body>
+    <div id="root"></div>
 
-<!-- Living atmosphere: a fixed, time-of-day-tinted sky behind the paper. Decorative. -->
-<div class="atmosphere" aria-hidden="true">
-    <div class="atmosphere-wash"></div>
-    <div class="atmosphere-glow"></div>
-    <div class="atmosphere-grain"></div>
-</div>
+    <!-- Server-rendered / no-JS content. api/home.js and api/office-page.js
+         replace the #loading div below with the decoded forecast digest;
+         the React app removes this whole region the moment it mounts
+         (src/App.jsx), so for browsers it is pure progressive enhancement. -->
+    <div id="ssr-root">
+        <main class="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+            <h1 class="sr-only">Tulsa (TSA) — the National Weather Service forecast in plain English · Plaincast</h1>
+            <p class="text-3xl font-semibold tracking-tight">Plaincast</p>
+            <p class="mt-1 text-sm text-muted-foreground">What the forecast actually says — NWS Area Forecast Discussions, decoded into plain English.</p>
 
-<a href="#sections" class="skip-link">Skip to forecast</a>
-<div id="sr-status" class="sr-only" role="status" aria-live="polite"></div>
+            <div id="sections-ssr" class="mt-4">
+                <div class="loading" id="loading">Setting the type…</div>
+            </div>
 
-<div class="sheet">
-<!-- Utility bar: office picker + reading controls -->
-<div class="utility-bar">
-    <div class="wrap utility-inner">
-        <label class="office-field">
-            <span class="office-field-label">Forecast office</span>
-            <select id="office-select" aria-label="NWS forecast office">
-                <optgroup label="Northeast">
-                    <option value="OKX">New York (OKX)</option>
-                    <option value="BOX">Boston (BOX)</option>
-                    <option value="PHI">Philadelphia (PHI)</option>
-                    <option value="LWX">Washington, DC (LWX)</option>
-                    <option value="PBZ">Pittsburgh (PBZ)</option>
-                    <option value="BUF">Buffalo (BUF)</option>
-                    <option value="RAH">Raleigh (RAH)</option>
-                    <option value="CHS">Charleston, SC (CHS)</option>
-                </optgroup>
-                <optgroup label="Southeast">
-                    <option value="FFC">Atlanta (FFC)</option>
-                    <option value="MFL">Miami (MFL)</option>
-                    <option value="JAX">Jacksonville (JAX)</option>
-                    <option value="TBW">Tampa Bay (TBW)</option>
-                    <option value="BMX">Birmingham (BMX)</option>
-                    <option value="OHX">Nashville (OHX)</option>
-                    <option value="MRX">Morristown (MRX)</option>
-                    <option value="JAN">Jackson, MS (JAN)</option>
-                </optgroup>
-                <optgroup label="Midwest">
-                    <option value="LOT">Chicago (LOT)</option>
-                    <option value="DTX">Detroit (DTX)</option>
-                    <option value="IND">Indianapolis (IND)</option>
-                    <option value="CLE">Cleveland (CLE)</option>
-                    <option value="ILN">Cincinnati (ILN)</option>
-                    <option value="MKX">Milwaukee (MKX)</option>
-                    <option value="GRR">Grand Rapids (GRR)</option>
-                    <option value="LSX">St. Louis (LSX)</option>
-                    <option value="EAX">Kansas City (EAX)</option>
-                    <option value="DMX">Des Moines (DMX)</option>
-                </optgroup>
-                <optgroup label="Northern Plains">
-                    <option value="MPX">Minneapolis / Twin Cities (MPX)</option>
-                    <option value="DLH">Duluth (DLH)</option>
-                    <option value="FSD">Sioux Falls (FSD)</option>
-                    <option value="BIS">Bismarck (BIS)</option>
-                    <option value="OAX">Omaha (OAX)</option>
-                    <option value="FGF">Grand Forks (FGF)</option>
-                </optgroup>
-                <optgroup label="South Central">
-                    <option value="FWD">Dallas / Fort Worth (FWD)</option>
-                    <option value="HGX">Houston (HGX)</option>
-                    <option value="EWX">San Antonio (EWX)</option>
-                    <option value="OUN">Oklahoma City (OUN)</option>
-                    <option value="TSA">Tulsa (TSA)</option>
-                    <option value="LZK">Little Rock (LZK)</option>
-                    <option value="LIX">New Orleans (LIX)</option>
-                    <option value="SHV">Shreveport (SHV)</option>
-                    <option value="LCH">Lake Charles (LCH)</option>
-                </optgroup>
-                <optgroup label="Rockies &amp; Mountain West">
-                    <option value="BOU">Denver (BOU)</option>
-                    <option value="PUB">Pueblo (PUB)</option>
-                    <option value="GJT">Grand Junction (GJT)</option>
-                    <option value="SLC">Salt Lake City (SLC)</option>
-                    <option value="BOI">Boise (BOI)</option>
-                    <option value="BYZ">Billings (BYZ)</option>
-                    <option value="MSO">Missoula (MSO)</option>
-                    <option value="RIW">Riverton (RIW)</option>
-                </optgroup>
-                <optgroup label="Southwest">
-                    <option value="PSR">Phoenix (PSR)</option>
-                    <option value="VEF">Las Vegas (VEF)</option>
-                    <option value="TWC">Tucson (TWC)</option>
-                    <option value="FGZ">Flagstaff (FGZ)</option>
-                    <option value="ABQ">Albuquerque (ABQ)</option>
-                    <option value="EPZ">El Paso (EPZ)</option>
-                </optgroup>
-                <optgroup label="Pacific">
-                    <option value="LOX">Los Angeles (LOX)</option>
-                    <option value="SGX">San Diego (SGX)</option>
-                    <option value="MTR">San Francisco (MTR)</option>
-                    <option value="STO">Sacramento (STO)</option>
-                    <option value="HNX">Central CA / Hanford (HNX)</option>
-                    <option value="EKA">Eureka (EKA)</option>
-                    <option value="SEW">Seattle (SEW)</option>
-                    <option value="PQR">Portland (PQR)</option>
-                    <option value="MFR">Medford (MFR)</option>
-                    <option value="OTX">Spokane (OTX)</option>
-                </optgroup>
-                <optgroup label="Alaska &amp; Pacific Islands">
-                    <option value="AFC">Anchorage (AFC)</option>
-                    <option value="AFG">Fairbanks (AFG)</option>
-                    <option value="HFO">Honolulu (HFO)</option>
-                </optgroup>
-            </select>
-        </label>
-        <div class="utility-tools">
-            <button class="share-btn" id="share-btn" aria-label="Share forecast link">Share</button>
-            <span class="share-toast" id="share-toast">Link copied</span>
-            <button class="kbd-hint" id="kbd-hint" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">?</button>
-            <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode"><svg id="theme-icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg><svg id="theme-icon-moon" viewBox="0 0 24 24" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
-        </div>
+            <nav class="mt-10" aria-label="All Plaincast forecast offices">
+                <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">The forecast, office by office</h2>
+                <p class="mt-2 text-sm"><a href="/national/">The National Desk — where the weather is today →</a></p>
+                <ul class="office-index-list mt-3 list-none columns-2 gap-6 text-sm leading-6 sm:columns-3 md:columns-4">
+                <li><a href="/o/OKX/">New York (OKX)</a></li>
+                <li><a href="/o/BOX/">Boston (BOX)</a></li>
+                <li><a href="/o/PHI/">Philadelphia (PHI)</a></li>
+                <li><a href="/o/LWX/">Washington DC (LWX)</a></li>
+                <li><a href="/o/PBZ/">Pittsburgh (PBZ)</a></li>
+                <li><a href="/o/BUF/">Buffalo (BUF)</a></li>
+                <li><a href="/o/RAH/">Raleigh (RAH)</a></li>
+                <li><a href="/o/CHS/">Charleston SC (CHS)</a></li>
+                <li><a href="/o/FFC/">Atlanta (FFC)</a></li>
+                <li><a href="/o/MFL/">Miami (MFL)</a></li>
+                <li><a href="/o/JAX/">Jacksonville (JAX)</a></li>
+                <li><a href="/o/TBW/">Tampa Bay (TBW)</a></li>
+                <li><a href="/o/BMX/">Birmingham (BMX)</a></li>
+                <li><a href="/o/OHX/">Nashville (OHX)</a></li>
+                <li><a href="/o/MRX/">Morristown (MRX)</a></li>
+                <li><a href="/o/JAN/">Jackson MS (JAN)</a></li>
+                <li><a href="/o/LOT/">Chicago (LOT)</a></li>
+                <li><a href="/o/DTX/">Detroit (DTX)</a></li>
+                <li><a href="/o/IND/">Indianapolis (IND)</a></li>
+                <li><a href="/o/CLE/">Cleveland (CLE)</a></li>
+                <li><a href="/o/ILN/">Cincinnati (ILN)</a></li>
+                <li><a href="/o/MKX/">Milwaukee (MKX)</a></li>
+                <li><a href="/o/GRR/">Grand Rapids (GRR)</a></li>
+                <li><a href="/o/LSX/">St. Louis (LSX)</a></li>
+                <li><a href="/o/EAX/">Kansas City (EAX)</a></li>
+                <li><a href="/o/DMX/">Des Moines (DMX)</a></li>
+                <li><a href="/o/MPX/">Minneapolis (MPX)</a></li>
+                <li><a href="/o/DLH/">Duluth (DLH)</a></li>
+                <li><a href="/o/FSD/">Sioux Falls (FSD)</a></li>
+                <li><a href="/o/BIS/">Bismarck (BIS)</a></li>
+                <li><a href="/o/OAX/">Omaha (OAX)</a></li>
+                <li><a href="/o/FGF/">Grand Forks (FGF)</a></li>
+                <li><a href="/o/FWD/">Dallas/Fort Worth (FWD)</a></li>
+                <li><a href="/o/HGX/">Houston (HGX)</a></li>
+                <li><a href="/o/EWX/">San Antonio (EWX)</a></li>
+                <li><a href="/o/OUN/">Oklahoma City (OUN)</a></li>
+                <li><a href="/o/TSA/" aria-current="page">Tulsa (TSA)</a></li>
+                <li><a href="/o/LZK/">Little Rock (LZK)</a></li>
+                <li><a href="/o/LIX/">New Orleans (LIX)</a></li>
+                <li><a href="/o/SHV/">Shreveport (SHV)</a></li>
+                <li><a href="/o/LCH/">Lake Charles (LCH)</a></li>
+                <li><a href="/o/BOU/">Denver (BOU)</a></li>
+                <li><a href="/o/PUB/">Pueblo (PUB)</a></li>
+                <li><a href="/o/GJT/">Grand Junction (GJT)</a></li>
+                <li><a href="/o/SLC/">Salt Lake City (SLC)</a></li>
+                <li><a href="/o/BOI/">Boise (BOI)</a></li>
+                <li><a href="/o/BYZ/">Billings (BYZ)</a></li>
+                <li><a href="/o/MSO/">Missoula (MSO)</a></li>
+                <li><a href="/o/RIW/">Riverton (RIW)</a></li>
+                <li><a href="/o/PSR/">Phoenix (PSR)</a></li>
+                <li><a href="/o/VEF/">Las Vegas (VEF)</a></li>
+                <li><a href="/o/TWC/">Tucson (TWC)</a></li>
+                <li><a href="/o/FGZ/">Flagstaff (FGZ)</a></li>
+                <li><a href="/o/ABQ/">Albuquerque (ABQ)</a></li>
+                <li><a href="/o/EPZ/">El Paso (EPZ)</a></li>
+                <li><a href="/o/LOX/">Los Angeles (LOX)</a></li>
+                <li><a href="/o/SGX/">San Diego (SGX)</a></li>
+                <li><a href="/o/MTR/">San Francisco (MTR)</a></li>
+                <li><a href="/o/STO/">Sacramento (STO)</a></li>
+                <li><a href="/o/HNX/">Central California (HNX)</a></li>
+                <li><a href="/o/EKA/">Eureka (EKA)</a></li>
+                <li><a href="/o/SEW/">Seattle (SEW)</a></li>
+                <li><a href="/o/PQR/">Portland (PQR)</a></li>
+                <li><a href="/o/MFR/">Medford (MFR)</a></li>
+                <li><a href="/o/OTX/">Spokane (OTX)</a></li>
+                <li><a href="/o/AFC/">Anchorage (AFC)</a></li>
+                <li><a href="/o/AFG/">Fairbanks (AFG)</a></li>
+                <li><a href="/o/HFO/">Honolulu (HFO)</a></li>
+                </ul>
+            </nav>
+
+            <p class="mt-10 text-xs text-muted-foreground">
+                Data from the <a href="https://www.weather.gov">National Weather Service</a>.
+                Translated by <a href="https://www.anthropic.com/claude/haiku">Claude</a>.
+                <a href="/about">About</a> ·
+                <a href="/developers">For developers &amp; agents</a> ·
+                <a href="/api/feed?office=TSA">Subscribe: RSS feed for this office</a> ·
+                <a href="https://github.com/jonahberg/plaincast">Source on GitHub</a>
+            </p>
+        </main>
     </div>
-</div>
 
-<!-- Masthead: the nameplate, motto, and dateline -->
-<header class="masthead header">
-    <div class="wrap masthead-inner">
-        <div class="folio folio-left" id="folio-date"></div>
-        <div class="nameplate-block">
-            <h1 class="nameplate">Plaincast</h1>
-        </div>
-        <div class="folio folio-right" id="folio-office"></div>
-        <p class="motto">What the forecast actually says</p>
-        <div class="rule-double" role="presentation"></div>
-        <p class="dateline">
-            <span class="dateline-city" id="dateline-city">Loading…</span>
-            <span class="dateline-sep" aria-hidden="true">·</span>
-            <span class="dateline-date" id="dateline-date"></span>
-            <span class="dateline-sep" aria-hidden="true">·</span>
-            <span class="dateline-edition" id="dateline-edition"></span>
-            <span class="dateline-sep" aria-hidden="true">·</span>
-            <a class="dateline-desk" href="/national/">National&nbsp;Desk</a>
-        </p>
-        <dl class="ledger" id="ledger" aria-label="Current conditions and almanac"></dl>
-    </div>
-</header>
-
-<div class="banner" id="refresh-banner" style="display:none" role="status" aria-live="polite">
-    <div class="wrap"><div class="banner-box banner-blue">
-        <span>A newer edition has been issued</span>
-        <button class="banner-action" id="refresh-load">Read it</button>
-        <button class="banner-dismiss" id="refresh-dismiss" aria-label="Dismiss">&times;</button>
-    </div></div>
-</div>
-
-<div class="banner" id="offline-banner" style="display:none" role="alert">
-    <div class="wrap"><div class="banner-box banner-amber">
-        <span id="offline-text">Offline — showing the last edition you read</span>
-    </div></div>
-</div>
-
-<main class="wrap main">
-    <!-- The heading for THIS page's content. The masthead nameplate above is
-         the SITE name and lives in <header>, which main-content extractors
-         strip as boilerplate — a page whose only <h1> sits there reads as
-         having no heading at all to a crawler. Visually hidden because the
-         masthead already carries the title on screen; the text is the same
-         thing the page says, never keyword padding. -->
-    <h1 class="sr-only">Tulsa (TSA) — the National Weather Service forecast in plain English · Plaincast</h1>
-
-    <section class="lede" id="takeaway-container" style="display:none">
-        <div class="lede-kicker">The Lede</div>
-        <div class="takeaway-box">
-            <div class="takeaway-label">Key Takeaway</div>
-            <div class="takeaway-text" id="takeaway-text"></div>
-        </div>
-        <p class="byline" id="byline"></p>
-        <p class="lede-meta">
-            <span class="issue-time" id="issue-time"></span>
-            <span class="confidence" id="confidence-container" style="display:none">
-                <span class="confidence-sep" aria-hidden="true">·</span>
-                <span class="confidence-label">Forecaster's confidence</span>
-                <span class="confidence-bar-wrap"><span class="confidence-bar" id="confidence-bar"></span></span>
-                <span class="confidence-text" id="confidence-text"></span>
-            </span>
-        </p>
-    </section>
-
-    <details class="explainer">
-        <summary>What is an Area Forecast Discussion?</summary>
-        <p>Area Forecast Discussions are the real forecasts, written 3 to 4 times daily by NWS meteorologists reading the models and interpreting what they mean for your area. They offer far deeper insight than any weather app, but they're written in dense meteorological shorthand. Plaincast uses Anthropic's Claude to summarize them into plain English, side by side with the annotated original.</p>
-    </details>
-
-    <nav class="section-nav" id="section-nav" aria-label="Sections in this discussion"></nav>
-
-    <div class="sections" id="sections">
-        <div class="loading" id="loading">Setting the type…</div>
-    </div>
-</main>
-
-<footer class="colophon">
-    <div class="wrap colophon-inner">
-        <div class="colophon-rule" role="presentation"></div>
-        <p class="colophon-line colophon-editions" id="editions-line" style="display:none">
-            <span class="editions-label">Earlier editions</span>
-            <span id="editions-slot"></span>
-        </p>
-        <p class="colophon-line">
-            <span class="colophon-mark">❧</span>
-            Reported by the <a href="https://www.weather.gov" target="_blank" rel="noopener noreferrer">National Weather Service, <span id="footer-office">LOX</span></a>.
-            Translated by <a href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a>.
-        </p>
-        <p class="colophon-line colophon-links">
-            <a href="" id="raw-link" target="_blank" rel="noopener noreferrer">Read the original discussion</a>
-            <span class="dot" aria-hidden="true">·</span>
-            <a href="/api/feed?office=TSA" id="rss-colophon-link">Subscribe: RSS feed for this office</a>
-            <span class="dot" aria-hidden="true">·</span>
-            <a href="https://github.com/jonahberg/plaincast" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
-            <span class="dot" aria-hidden="true">·</span>
-            <span class="colophon-credit">Set by <a href="https://jonahberg.com" target="_blank" rel="noopener noreferrer">Jonah Berg</a></span>
-        </p>
-    </div>
-</footer>
-
-<!-- Office index: internal links to every per-office edition. Lives in the
-     template so scripts/build-offices.mjs bakes it into all 68 /o/<CODE>/
-     pages as well as the homepage. Keep in sync with OFFICE_NAMES in
-     docs/js/offices.js (tests/seo-pages.test.js enforces the pairing). -->
-<nav class="office-index" aria-label="All Plaincast forecast offices">
-    <div class="wrap office-index-inner">
-        <div class="office-index-rule" role="presentation"></div>
-        <h2 class="office-index-label">The forecast, office by office</h2>
-        <p class="office-index-national"><a href="/national/">The National Desk — where the weather is today →</a></p>
-        <ul class="office-index-list">
-            <li><a href="/o/OKX/">New York (OKX)</a></li>
-            <li><a href="/o/BOX/">Boston (BOX)</a></li>
-            <li><a href="/o/PHI/">Philadelphia (PHI)</a></li>
-            <li><a href="/o/LWX/">Washington DC (LWX)</a></li>
-            <li><a href="/o/PBZ/">Pittsburgh (PBZ)</a></li>
-            <li><a href="/o/BUF/">Buffalo (BUF)</a></li>
-            <li><a href="/o/RAH/">Raleigh (RAH)</a></li>
-            <li><a href="/o/CHS/">Charleston SC (CHS)</a></li>
-            <li><a href="/o/FFC/">Atlanta (FFC)</a></li>
-            <li><a href="/o/MFL/">Miami (MFL)</a></li>
-            <li><a href="/o/JAX/">Jacksonville (JAX)</a></li>
-            <li><a href="/o/TBW/">Tampa Bay (TBW)</a></li>
-            <li><a href="/o/BMX/">Birmingham (BMX)</a></li>
-            <li><a href="/o/OHX/">Nashville (OHX)</a></li>
-            <li><a href="/o/MRX/">Morristown (MRX)</a></li>
-            <li><a href="/o/JAN/">Jackson MS (JAN)</a></li>
-            <li><a href="/o/LOT/">Chicago (LOT)</a></li>
-            <li><a href="/o/DTX/">Detroit (DTX)</a></li>
-            <li><a href="/o/IND/">Indianapolis (IND)</a></li>
-            <li><a href="/o/CLE/">Cleveland (CLE)</a></li>
-            <li><a href="/o/ILN/">Cincinnati (ILN)</a></li>
-            <li><a href="/o/MKX/">Milwaukee (MKX)</a></li>
-            <li><a href="/o/GRR/">Grand Rapids (GRR)</a></li>
-            <li><a href="/o/LSX/">St. Louis (LSX)</a></li>
-            <li><a href="/o/EAX/">Kansas City (EAX)</a></li>
-            <li><a href="/o/DMX/">Des Moines (DMX)</a></li>
-            <li><a href="/o/MPX/">Minneapolis (MPX)</a></li>
-            <li><a href="/o/DLH/">Duluth (DLH)</a></li>
-            <li><a href="/o/FSD/">Sioux Falls (FSD)</a></li>
-            <li><a href="/o/BIS/">Bismarck (BIS)</a></li>
-            <li><a href="/o/OAX/">Omaha (OAX)</a></li>
-            <li><a href="/o/FGF/">Grand Forks (FGF)</a></li>
-            <li><a href="/o/FWD/">Dallas/Fort Worth (FWD)</a></li>
-            <li><a href="/o/HGX/">Houston (HGX)</a></li>
-            <li><a href="/o/EWX/">San Antonio (EWX)</a></li>
-            <li><a href="/o/OUN/">Oklahoma City (OUN)</a></li>
-            <li><a href="/o/TSA/" aria-current="page">Tulsa (TSA)</a></li>
-            <li><a href="/o/LZK/">Little Rock (LZK)</a></li>
-            <li><a href="/o/LIX/">New Orleans (LIX)</a></li>
-            <li><a href="/o/SHV/">Shreveport (SHV)</a></li>
-            <li><a href="/o/LCH/">Lake Charles (LCH)</a></li>
-            <li><a href="/o/BOU/">Denver (BOU)</a></li>
-            <li><a href="/o/PUB/">Pueblo (PUB)</a></li>
-            <li><a href="/o/GJT/">Grand Junction (GJT)</a></li>
-            <li><a href="/o/SLC/">Salt Lake City (SLC)</a></li>
-            <li><a href="/o/BOI/">Boise (BOI)</a></li>
-            <li><a href="/o/BYZ/">Billings (BYZ)</a></li>
-            <li><a href="/o/MSO/">Missoula (MSO)</a></li>
-            <li><a href="/o/RIW/">Riverton (RIW)</a></li>
-            <li><a href="/o/PSR/">Phoenix (PSR)</a></li>
-            <li><a href="/o/VEF/">Las Vegas (VEF)</a></li>
-            <li><a href="/o/TWC/">Tucson (TWC)</a></li>
-            <li><a href="/o/FGZ/">Flagstaff (FGZ)</a></li>
-            <li><a href="/o/ABQ/">Albuquerque (ABQ)</a></li>
-            <li><a href="/o/EPZ/">El Paso (EPZ)</a></li>
-            <li><a href="/o/LOX/">Los Angeles (LOX)</a></li>
-            <li><a href="/o/SGX/">San Diego (SGX)</a></li>
-            <li><a href="/o/MTR/">San Francisco (MTR)</a></li>
-            <li><a href="/o/STO/">Sacramento (STO)</a></li>
-            <li><a href="/o/HNX/">Central California (HNX)</a></li>
-            <li><a href="/o/EKA/">Eureka (EKA)</a></li>
-            <li><a href="/o/SEW/">Seattle (SEW)</a></li>
-            <li><a href="/o/PQR/">Portland (PQR)</a></li>
-            <li><a href="/o/MFR/">Medford (MFR)</a></li>
-            <li><a href="/o/OTX/">Spokane (OTX)</a></li>
-            <li><a href="/o/AFC/">Anchorage (AFC)</a></li>
-            <li><a href="/o/AFG/">Fairbanks (AFG)</a></li>
-            <li><a href="/o/HFO/">Honolulu (HFO)</a></li>
-        </ul>
-    </div>
-</nav>
-</div><!-- /.sheet -->
-
-<script type="module" src="/js/app.js"></script>
-
-<!-- Keyboard shortcuts overlay -->
-<div class="alert-modal-overlay" id="kbd-overlay">
-    <div class="alert-modal" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
-        <button class="alert-modal-close" id="kbd-close" aria-label="Close">&times;</button>
-        <h3 class="modal-title">Keyboard Shortcuts</h3>
-        <div class="kbd-list">
-            <div><kbd>j</kbd> Next section</div>
-            <div><kbd>k</kbd> Previous section</div>
-            <div><kbd>/</kbd> Search offices</div>
-            <div><kbd>?</kbd> Show this help</div>
-            <div><kbd>Esc</kbd> Close overlay</div>
-        </div>
-    </div>
-</div>
-
+    <script type="module" crossorigin src="/assets/app.js"></script>
 </body>
 </html>

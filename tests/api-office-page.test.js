@@ -39,8 +39,10 @@ const { default: handler, buildSsrHtml, pickSections, sectionParagraphs, validEd
 const { renderOfficePage } = await import('../scripts/build-offices.mjs');
 const { extractSections } = await import('../api/_afd-sections.js');
 
-const DOCS = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs');
-const template = readFileSync(join(DOCS, 'index.html'), 'utf8');
+// The production shell is the shadcn app shell (scripts/app-shell.mjs) —
+// the same bytes committed as api/_home-shell.html.
+const { buildAppShell } = await import('../scripts/app-shell.mjs');
+const template = buildAppShell();
 const BAKED_LOX = renderOfficePage(template, 'LOX', 'Los Angeles');
 
 function createRes() {
@@ -143,7 +145,7 @@ describe('GET /api/office-page (SSR /o/<CODE>/ pages)', () => {
         expect(res.body).not.toContain('Setting the type…');
         // still the baked per-office document (canonical + JS bootstrap intact)
         expect(res.body).toContain('<link rel="canonical" href="https://plaincast.live/o/LOX/">');
-        expect(res.body).toContain('src="/js/app.js"');
+        expect(res.body).toContain('src="/assets/app.js"');
         // links back into the interactive experience
         expect(res.body).toContain('/o/LOX/?view=changelog');
         expect(res.body).toContain('/?office=LOX');

@@ -1,7 +1,7 @@
 # Plaincast — shadcn/ui edition
 
-A React rebuild of Plaincast with [shadcn/ui](https://ui.shadcn.com), Vite, and
-Tailwind CSS v4: the stock shadcn look (default neutral theme, system font
+**The production frontend of plaincast.live** — a React rebuild with
+[shadcn/ui](https://ui.shadcn.com), Vite, and Tailwind CSS v4: the stock shadcn look (default neutral theme, system font
 stack, cards and tabs), not the editorial "Dispatch" design system from
 DESIGN.md — that redo was explicitly requested.
 
@@ -68,6 +68,18 @@ bun run build    # production build to dist/
 bun test tests/  # from the repo root — includes the shadcn suites
 ```
 
-Note: this is still a client-rendered SPA — `index.html` carries meta,
-JSON-LD, and a noscript office index for crawlers, but real SSR/markdown
-negotiation remains the deployed original's territory (`api/` + `docs/`).
+## Deployment & the agent/SEO surface
+
+This app IS the deployed frontend: the Vercel buildCommand runs `vite build`
+plus `scripts/prepare-deploy.mjs` (deletes `dist/index.html` so the `/`
+rewrite reaches api/home.js, copies the docs/ static surface in), and
+`outputDirectory` is `shadcn/dist`. `index.html` here is the TEMPLATE for the
+whole SSR pipeline — `scripts/build-offices.mjs` transforms it (built asset
+refs via `scripts/app-shell.mjs`) into the committed `api/_home-shell.html`
+that api/home.js and api/office-page.js inject the server-rendered digest
+into, and into every baked `docs/o/<CODE>/` page. Its `#ssr-root` region is
+what crawlers, agents, and no-JS readers see; the app removes it on mount.
+Markdown content negotiation, per-office canonicals/OG/JSON-LD, sitemap,
+llms.txt, and the JSON API surface all continue to work unchanged. Edit the
+marker strings in `index.html` only together with the generator, then run
+`bun scripts/build-offices.mjs` and commit.

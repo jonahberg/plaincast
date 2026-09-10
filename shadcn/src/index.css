@@ -112,6 +112,36 @@
         @apply mt-5 mb-2 text-base font-semibold tracking-tight;
     }
 
+    /* Server-rendered digest (#ssr-root): classes emitted by api/home.js and
+       api/office-page.js buildSsrHtml — plain rules, since Tailwind cannot
+       scan the api/ template strings. The React app removes this region on
+       mount; these styles are for crawlers, no-JS readers, and first paint. */
+    #ssr-root .loading {
+        @apply mt-2 text-sm text-muted-foreground;
+    }
+    #ssr-root .ssr-standfirst {
+        @apply mt-5 text-[15px] leading-7;
+    }
+    #ssr-root .ssr-meta {
+        @apply mt-4 text-sm text-muted-foreground;
+    }
+    #ssr-root .forecast-section.ssr {
+        @apply mt-8 border-t pt-6;
+    }
+    #ssr-root .forecast-section.ssr .section-title {
+        @apply text-lg font-semibold tracking-tight;
+    }
+    #ssr-root .forecast-section.ssr p {
+        @apply mt-3 text-[15px] leading-7;
+    }
+    #ssr-root .ssr-note,
+    #ssr-root .ssr-changelog {
+        @apply mt-6 text-sm text-muted-foreground;
+    }
+    #ssr-root a {
+        @apply underline underline-offset-4 hover:text-foreground;
+    }
+
     /* "What changed" diff view (lib renderDiffHTML classes) */
     .diff-prose p {
         @apply mb-3 rounded-sm px-2 py-1 last:mb-0;

@@ -33,8 +33,10 @@ mock.module('../api/_utils.js', () => ({
 const { default: handler, resolveOffice, editionSections, buildHomeSsr } = await import('../api/home.js');
 const { VARY } = await import('../api/_negotiate.js');
 
-const DOCS = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs');
-const TEMPLATE = readFileSync(join(DOCS, 'index.html'), 'utf8');
+// The production shell is the shadcn app shell (scripts/app-shell.mjs) —
+// the same bytes committed as api/_home-shell.html.
+const { buildAppShell } = await import('../scripts/app-shell.mjs');
+const TEMPLATE = buildAppShell();
 
 function mockRes() {
     const res = { headers: {}, code: 200, body: null };
@@ -120,7 +122,7 @@ describe('the homepage is readable without JavaScript', () => {
     it('clears the raw-HTML content bar: an H1 and well over 500 characters of text', async () => {
         const res = mockRes();
         await handler(get(), res);
-        expect(res.body).toMatch(/<h1[^>]*>\s*Plaincast\s*<\/h1>/);
+        expect(res.body).toMatch(/<h1[^>]*>\s*Plaincast/);
         const text = res.body
             .replace(/<script[\s\S]*?<\/script>/gi, '')
             .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -192,7 +194,7 @@ describe('the homepage negotiates Markdown', () => {
 });
 
 describe('fail-safe: the homepage is never worse than today', () => {
-    it('NWS down → the exact committed docs/index.html bytes, status 200', async () => {
+    it('NWS down → the exact committed app-shell bytes, status 200', async () => {
         mockListThrows = true;
         const res = mockRes();
         await handler(get(), res);

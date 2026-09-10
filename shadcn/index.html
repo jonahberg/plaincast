@@ -3,91 +3,252 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plaincast — What the forecast actually says</title>
+    <!-- The exact strings below (title, description, canonical, alternate,
+         og:*, twitter:*, the sr-only H1, the #loading div, and the office
+         index links) are TEMPLATE MARKERS: scripts/build-offices.mjs
+         string-replaces them to bake api/_home-shell.html and every
+         docs/o/<CODE>/ page, and api/home.js + api/office-page.js inject the
+         server-rendered digest at the #loading marker. Change them only
+         together with scripts/build-offices.mjs, then regenerate
+         (bun scripts/build-offices.mjs). -->
+    <title>Plaincast - What the forecast actually says</title>
     <meta name="description" content="NWS meteorologists write the real forecasts 3-4x daily, but in dense shorthand. Plaincast uses AI to translate them into plain English anyone can read.">
     <meta name="theme-color" content="#ffffff">
+    <meta name="author" content="Jonah Berg">
+    <link rel="canonical" href="https://plaincast.live">
+    <!-- The same resource, in Markdown, under content negotiation
+         (api/_negotiate.js). Advertised per RFC 8288 for agents that look for
+         rel="alternate" instead of sending Accept. -->
+    <link rel="alternate" type="text/markdown" href="https://plaincast.live/">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="alternate" type="application/rss+xml" title="Plaincast RSS" href="/api/feed?office=LOX">
+    <!-- api.weather.gov gates all forecast content; warm the connection early -->
     <link rel="preconnect" href="https://api.weather.gov" crossorigin>
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Plaincast — What the forecast actually says">
-    <meta property="og:description" content="NWS Area Forecast Discussions decoded into plain English — side-by-side translation, 230+ term jargon glossary, forecaster confidence, edition history.">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:url" content="https://plaincast.live">
+    <meta property="og:title" content="Plaincast - What the forecast actually says">
+    <meta property="og:description" content="NWS meteorologists write the real forecasts 3-4x daily, but in dense shorthand. Plaincast uses AI to translate them into plain English anyone can read.">
     <meta property="og:site_name" content="Plaincast">
-    <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="Plaincast — What the forecast actually says">
-    <meta name="twitter:description" content="NWS Area Forecast Discussions decoded into plain English.">
+    <meta property="og:image" content="https://plaincast.live/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="The NWS forecast, decoded into plain English">
 
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Plaincast - What the forecast actually says">
+    <meta name="twitter:description" content="NWS meteorologists write the real forecasts 3-4x daily, but in dense shorthand. Plaincast uses AI to translate them into plain English anyone can read.">
+    <meta name="twitter:image" content="https://plaincast.live/og-image.png">
+    <meta name="twitter:image:alt" content="The NWS forecast, decoded into plain English">
+
+    <!-- Structured Data -->
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
         "@type": "WebApplication",
-        "name": "Plaincast (shadcn edition)",
-        "description": "NWS Area Forecast Discussions decoded into plain English with side-by-side translation, a 230+ term jargon glossary, forecaster confidence indicators, edition history, and per-edition diffs.",
+        "name": "Plaincast",
+        "url": "https://plaincast.live",
+        "description": "NWS Area Forecast Discussions decoded into plain English with side-by-side translation, 230+ term jargon glossary, forecaster confidence indicators, edition history and per-edition diffs.",
         "applicationCategory": "WeatherApplication",
         "operatingSystem": "Any",
         "browserRequirements": "Requires JavaScript",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
         "author": { "@type": "Person", "name": "Jonah Berg", "url": "https://jonahberg.com" },
-        "sourceOrganization": { "@type": "GovernmentOrganization", "name": "National Weather Service", "url": "https://www.weather.gov" }
+        "sourceOrganization": { "@type": "GovernmentOrganization", "name": "National Weather Service", "url": "https://www.weather.gov" },
+        "featureList": [
+            "AI-powered plain English summaries via Claude",
+            "Side-by-side translation with annotated original",
+            "230+ term meteorological jargon glossary",
+            "Forecaster confidence indicator",
+            "Edition history with per-section diffs",
+            "Active weather alerts with plain-English leads",
+            "68 NWS forecast offices"
+        ],
+        "sameAs": ["https://github.com/jonahberg/plaincast"]
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": "What is an Area Forecast Discussion (AFD)?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "An Area Forecast Discussion is a detailed narrative forecast written 3-4 times daily by National Weather Service meteorologists. Unlike weather apps that show icons and numbers, AFDs explain the reasoning behind the forecast - why models disagree, what forecasters are watching, and where uncertainty exists."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "How does Plaincast translate NWS forecasts?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Plaincast uses Anthropic's Claude AI to summarize each forecast section into natural, readable prose. It also annotates the original text with a 230+ term jargon glossary, converts Zulu (UTC) times to local time zones, and highlights key information for quick scanning."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Which NWS offices does Plaincast support?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Plaincast supports 68 NWS forecast offices across all US regions including Los Angeles (LOX), New York (OKX), Chicago (LOT), Houston (HGX), Phoenix (PSR), San Francisco (MTR), Miami (MFL), Seattle (SEW), Denver (BOU), and many more."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Is Plaincast free?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Yes, Plaincast is completely free and open source. It uses the NWS public API for forecast data and Anthropic's Claude for AI summaries. No account or API key required."
+                }
+            }
+        ]
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "name": "How to Read an NWS Area Forecast Discussion",
+        "description": "Learn how to read and understand the detailed weather forecasts written by National Weather Service meteorologists using Plaincast's AI translation.",
+        "step": [
+            {
+                "@type": "HowToStep",
+                "name": "Select your NWS office",
+                "text": "Choose your local NWS forecast office from the picker. Plaincast supports 68 offices across the United States, or can find your nearest one from your location."
+            },
+            {
+                "@type": "HowToStep",
+                "name": "Read the AI summary",
+                "text": "Each forecast section opens on a plain English summary translated by Claude AI. Key details like temperatures, wind speeds, and dates are highlighted in bold."
+            },
+            {
+                "@type": "HowToStep",
+                "name": "Check the original with annotations",
+                "text": "Switch to the Original tab to see the forecaster's own text with 230+ meteorological jargon terms highlighted. Hover or tap any highlighted term to see its definition."
+            },
+            {
+                "@type": "HowToStep",
+                "name": "Review the takeaway, confidence, and what changed",
+                "text": "The key takeaway at the top summarizes the most important point, the confidence indicator reads the forecaster's own certainty language, and the What Changed tab shows what this edition revised."
+            }
+        ]
     }
     </script>
 
-    <script>
-        // Pre-paint theme: follow a stored explicit choice, else the OS.
-        // Must run before first paint to avoid a flash.
-        (function () {
-            try {
-                var t = localStorage.getItem('plaincast-theme');
-                if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) {
-                    document.documentElement.classList.add('dark');
-                }
-            } catch (e) { /* first paint stays light */ }
-        })();
-    </script>
+    <!-- Pre-paint theme (blocking, external file: the CSP has no
+         script-src 'unsafe-inline'): must run before first paint. -->
+    <script src="/theme-init.js"></script>
+    <!--app-css-->
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- For crawlers, agents and no-JS readers: what this page is and where
-         every office edition lives. The React app replaces none of this — it
-         mounts into #root above. -->
-    <noscript>
-        <main style="max-width:640px;margin:2rem auto;padding:0 1rem;font-family:system-ui,sans-serif">
-            <h1>Plaincast — the National Weather Service forecast, decoded into plain English</h1>
-            <p>NWS meteorologists write Area Forecast Discussions 3–4 times daily — the real
-            forecasts, in dense shorthand. Plaincast translates them into plain English. This
-            edition of the app requires JavaScript; the server-rendered original lives at
-            <a href="https://plaincast.live">plaincast.live</a>, readable by anything.</p>
-            <h2>The forecast, office by office</h2>
-            <p>
-                <a href="/o/OKX/">New York</a> · <a href="/o/BOX/">Boston</a> · <a href="/o/PHI/">Philadelphia</a> ·
-                <a href="/o/LWX/">Washington DC</a> · <a href="/o/PBZ/">Pittsburgh</a> · <a href="/o/BUF/">Buffalo</a> ·
-                <a href="/o/RAH/">Raleigh</a> · <a href="/o/CHS/">Charleston SC</a> · <a href="/o/FFC/">Atlanta</a> ·
-                <a href="/o/MFL/">Miami</a> · <a href="/o/JAX/">Jacksonville</a> · <a href="/o/TBW/">Tampa Bay</a> ·
-                <a href="/o/BMX/">Birmingham</a> · <a href="/o/OHX/">Nashville</a> · <a href="/o/MRX/">Morristown</a> ·
-                <a href="/o/JAN/">Jackson MS</a> · <a href="/o/LOT/">Chicago</a> · <a href="/o/DTX/">Detroit</a> ·
-                <a href="/o/IND/">Indianapolis</a> · <a href="/o/CLE/">Cleveland</a> · <a href="/o/ILN/">Cincinnati</a> ·
-                <a href="/o/MKX/">Milwaukee</a> · <a href="/o/GRR/">Grand Rapids</a> · <a href="/o/LSX/">St. Louis</a> ·
-                <a href="/o/EAX/">Kansas City</a> · <a href="/o/DMX/">Des Moines</a> · <a href="/o/MPX/">Minneapolis</a> ·
-                <a href="/o/DLH/">Duluth</a> · <a href="/o/FSD/">Sioux Falls</a> · <a href="/o/BIS/">Bismarck</a> ·
-                <a href="/o/OAX/">Omaha</a> · <a href="/o/FGF/">Grand Forks</a> · <a href="/o/FWD/">Dallas/Fort Worth</a> ·
-                <a href="/o/HGX/">Houston</a> · <a href="/o/EWX/">San Antonio</a> · <a href="/o/OUN/">Oklahoma City</a> ·
-                <a href="/o/TSA/">Tulsa</a> · <a href="/o/LZK/">Little Rock</a> · <a href="/o/LIX/">New Orleans</a> ·
-                <a href="/o/SHV/">Shreveport</a> · <a href="/o/LCH/">Lake Charles</a> · <a href="/o/BOU/">Denver</a> ·
-                <a href="/o/PUB/">Pueblo</a> · <a href="/o/GJT/">Grand Junction</a> · <a href="/o/SLC/">Salt Lake City</a> ·
-                <a href="/o/BOI/">Boise</a> · <a href="/o/BYZ/">Billings</a> · <a href="/o/MSO/">Missoula</a> ·
-                <a href="/o/RIW/">Riverton</a> · <a href="/o/PSR/">Phoenix</a> · <a href="/o/VEF/">Las Vegas</a> ·
-                <a href="/o/TWC/">Tucson</a> · <a href="/o/FGZ/">Flagstaff</a> · <a href="/o/ABQ/">Albuquerque</a> ·
-                <a href="/o/EPZ/">El Paso</a> · <a href="/o/LOX/">Los Angeles</a> · <a href="/o/SGX/">San Diego</a> ·
-                <a href="/o/MTR/">San Francisco</a> · <a href="/o/STO/">Sacramento</a> · <a href="/o/HNX/">Central California</a> ·
-                <a href="/o/EKA/">Eureka</a> · <a href="/o/SEW/">Seattle</a> · <a href="/o/PQR/">Portland</a> ·
-                <a href="/o/MFR/">Medford</a> · <a href="/o/OTX/">Spokane</a> · <a href="/o/AFC/">Anchorage</a> ·
-                <a href="/o/AFG/">Fairbanks</a> · <a href="/o/HFO/">Honolulu</a>
+    <!-- Server-rendered / no-JS content. api/home.js and api/office-page.js
+         replace the #loading div below with the decoded forecast digest;
+         the React app removes this whole region the moment it mounts
+         (src/App.jsx), so for browsers it is pure progressive enhancement. -->
+    <div id="ssr-root">
+        <main class="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+            <h1 class="sr-only">Plaincast — the National Weather Service forecast, decoded into plain English</h1>
+            <p class="text-3xl font-semibold tracking-tight">Plaincast</p>
+            <p class="mt-1 text-sm text-muted-foreground">What the forecast actually says — NWS Area Forecast Discussions, decoded into plain English.</p>
+
+            <div id="sections-ssr" class="mt-4">
+                <div class="loading" id="loading">Setting the type…</div>
+            </div>
+
+            <nav class="mt-10" aria-label="All Plaincast forecast offices">
+                <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">The forecast, office by office</h2>
+                <p class="mt-2 text-sm"><a href="/national/">The National Desk — where the weather is today →</a></p>
+                <ul class="office-index-list mt-3 list-none columns-2 gap-6 text-sm leading-6 sm:columns-3 md:columns-4">
+                <li><a href="/o/OKX/">New York (OKX)</a></li>
+                <li><a href="/o/BOX/">Boston (BOX)</a></li>
+                <li><a href="/o/PHI/">Philadelphia (PHI)</a></li>
+                <li><a href="/o/LWX/">Washington DC (LWX)</a></li>
+                <li><a href="/o/PBZ/">Pittsburgh (PBZ)</a></li>
+                <li><a href="/o/BUF/">Buffalo (BUF)</a></li>
+                <li><a href="/o/RAH/">Raleigh (RAH)</a></li>
+                <li><a href="/o/CHS/">Charleston SC (CHS)</a></li>
+                <li><a href="/o/FFC/">Atlanta (FFC)</a></li>
+                <li><a href="/o/MFL/">Miami (MFL)</a></li>
+                <li><a href="/o/JAX/">Jacksonville (JAX)</a></li>
+                <li><a href="/o/TBW/">Tampa Bay (TBW)</a></li>
+                <li><a href="/o/BMX/">Birmingham (BMX)</a></li>
+                <li><a href="/o/OHX/">Nashville (OHX)</a></li>
+                <li><a href="/o/MRX/">Morristown (MRX)</a></li>
+                <li><a href="/o/JAN/">Jackson MS (JAN)</a></li>
+                <li><a href="/o/LOT/">Chicago (LOT)</a></li>
+                <li><a href="/o/DTX/">Detroit (DTX)</a></li>
+                <li><a href="/o/IND/">Indianapolis (IND)</a></li>
+                <li><a href="/o/CLE/">Cleveland (CLE)</a></li>
+                <li><a href="/o/ILN/">Cincinnati (ILN)</a></li>
+                <li><a href="/o/MKX/">Milwaukee (MKX)</a></li>
+                <li><a href="/o/GRR/">Grand Rapids (GRR)</a></li>
+                <li><a href="/o/LSX/">St. Louis (LSX)</a></li>
+                <li><a href="/o/EAX/">Kansas City (EAX)</a></li>
+                <li><a href="/o/DMX/">Des Moines (DMX)</a></li>
+                <li><a href="/o/MPX/">Minneapolis (MPX)</a></li>
+                <li><a href="/o/DLH/">Duluth (DLH)</a></li>
+                <li><a href="/o/FSD/">Sioux Falls (FSD)</a></li>
+                <li><a href="/o/BIS/">Bismarck (BIS)</a></li>
+                <li><a href="/o/OAX/">Omaha (OAX)</a></li>
+                <li><a href="/o/FGF/">Grand Forks (FGF)</a></li>
+                <li><a href="/o/FWD/">Dallas/Fort Worth (FWD)</a></li>
+                <li><a href="/o/HGX/">Houston (HGX)</a></li>
+                <li><a href="/o/EWX/">San Antonio (EWX)</a></li>
+                <li><a href="/o/OUN/">Oklahoma City (OUN)</a></li>
+                <li><a href="/o/TSA/">Tulsa (TSA)</a></li>
+                <li><a href="/o/LZK/">Little Rock (LZK)</a></li>
+                <li><a href="/o/LIX/">New Orleans (LIX)</a></li>
+                <li><a href="/o/SHV/">Shreveport (SHV)</a></li>
+                <li><a href="/o/LCH/">Lake Charles (LCH)</a></li>
+                <li><a href="/o/BOU/">Denver (BOU)</a></li>
+                <li><a href="/o/PUB/">Pueblo (PUB)</a></li>
+                <li><a href="/o/GJT/">Grand Junction (GJT)</a></li>
+                <li><a href="/o/SLC/">Salt Lake City (SLC)</a></li>
+                <li><a href="/o/BOI/">Boise (BOI)</a></li>
+                <li><a href="/o/BYZ/">Billings (BYZ)</a></li>
+                <li><a href="/o/MSO/">Missoula (MSO)</a></li>
+                <li><a href="/o/RIW/">Riverton (RIW)</a></li>
+                <li><a href="/o/PSR/">Phoenix (PSR)</a></li>
+                <li><a href="/o/VEF/">Las Vegas (VEF)</a></li>
+                <li><a href="/o/TWC/">Tucson (TWC)</a></li>
+                <li><a href="/o/FGZ/">Flagstaff (FGZ)</a></li>
+                <li><a href="/o/ABQ/">Albuquerque (ABQ)</a></li>
+                <li><a href="/o/EPZ/">El Paso (EPZ)</a></li>
+                <li><a href="/o/LOX/">Los Angeles (LOX)</a></li>
+                <li><a href="/o/SGX/">San Diego (SGX)</a></li>
+                <li><a href="/o/MTR/">San Francisco (MTR)</a></li>
+                <li><a href="/o/STO/">Sacramento (STO)</a></li>
+                <li><a href="/o/HNX/">Central California (HNX)</a></li>
+                <li><a href="/o/EKA/">Eureka (EKA)</a></li>
+                <li><a href="/o/SEW/">Seattle (SEW)</a></li>
+                <li><a href="/o/PQR/">Portland (PQR)</a></li>
+                <li><a href="/o/MFR/">Medford (MFR)</a></li>
+                <li><a href="/o/OTX/">Spokane (OTX)</a></li>
+                <li><a href="/o/AFC/">Anchorage (AFC)</a></li>
+                <li><a href="/o/AFG/">Fairbanks (AFG)</a></li>
+                <li><a href="/o/HFO/">Honolulu (HFO)</a></li>
+                </ul>
+            </nav>
+
+            <p class="mt-10 text-xs text-muted-foreground">
+                Data from the <a href="https://www.weather.gov">National Weather Service</a>.
+                Translated by <a href="https://www.anthropic.com/claude/haiku">Claude</a>.
+                <a href="/about">About</a> ·
+                <a href="/developers">For developers &amp; agents</a> ·
+                <a href="/api/feed?office=LOX">Subscribe: RSS feed for this office</a> ·
+                <a href="https://github.com/jonahberg/plaincast">Source on GitHub</a>
             </p>
         </main>
-    </noscript>
+    </div>
 
     <script type="module" src="/src/main.jsx"></script>
 </body>

@@ -7,14 +7,17 @@ import { renderOfficePage, renderSitemap } from '../scripts/build-offices.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DOCS = join(ROOT, 'docs');
-const template = readFileSync(join(DOCS, 'index.html'), 'utf8');
+// The generator's template is the production app shell (shadcn/index.html
+// + built asset refs), not the legacy docs/index.html.
+const { buildAppShell } = await import('../scripts/build-offices.mjs').then(() => import('../scripts/app-shell.mjs'));
+const template = buildAppShell();
 const codes = Object.keys(OFFICE_NAMES);
 
 function read(code) {
     try { return readFileSync(join(DOCS, 'o', code, 'index.html'), 'utf8'); } catch (e) { return null; }
 }
 
-describe('per-office SEO pages stay in sync with docs/index.html', () => {
+describe('per-office SEO pages stay in sync with the app shell (shadcn/index.html)', () => {
     it('every committed office page matches the generator (else run `bun scripts/build-offices.mjs`)', () => {
         const drifted = codes.filter(code => read(code) !== renderOfficePage(template, code, OFFICE_NAMES[code]));
         expect(drifted).toEqual([]);
@@ -24,7 +27,7 @@ describe('per-office SEO pages stay in sync with docs/index.html', () => {
     // docs/index.html is in .vercelignore (it would shadow the `/` rewrite),
     // and an ignored file never reaches the function bundle either. If this
     // drifts, the homepage and every /o/<CODE>/ page serve a stale shell.
-    it('api/_home-shell.html is byte-identical to docs/index.html (else run `bun scripts/build-offices.mjs`)', () => {
+    it('api/_home-shell.html is byte-identical to the app shell (else run `bun scripts/build-offices.mjs`)', () => {
         expect(readFileSync(join(ROOT, 'api', '_home-shell.html'), 'utf8')).toBe(template);
     });
 
@@ -60,8 +63,8 @@ describe('per-office SEO pages stay in sync with docs/index.html', () => {
             expect(html).toContain(`<link rel="alternate" type="text/markdown" href="https://plaincast.live/o/${code}/">`);
             expect(html).not.toContain('<link rel="alternate" type="text/markdown" href="https://plaincast.live/">');
             expect(html).not.toContain('<title>Plaincast - What the forecast actually says</title>');
-            expect(html).toContain('href="/styles.css"');
-            expect(html).toContain('src="/js/app.js"');
+            expect(html).toContain('href="/assets/app.css"');
+            expect(html).toContain('src="/assets/app.js"');
             expect(html).toContain(`href="/api/feed?office=${code}"`);
         }
     });

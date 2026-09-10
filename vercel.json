@@ -1,6 +1,6 @@
 {
-  "buildCommand": null,
-  "outputDirectory": "docs",
+  "buildCommand": "cd shadcn && bun install && bun run build && cd .. && node scripts/prepare-deploy.mjs",
+  "outputDirectory": "shadcn/dist",
   "functions": {
     "api/office-page.js": {
       "includeFiles": "api/_home-shell.html"
@@ -50,6 +50,12 @@
     },
     {
       "source": "/js/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
