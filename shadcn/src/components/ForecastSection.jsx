@@ -2,23 +2,23 @@ import { memo, useMemo } from 'react';
 
 import { OFFICE_TIMEZONES } from '@data/offices.js';
 import { annotateSegments, translateToPlainEnglish } from '@/lib/afd';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-// Annotated AFD facsimile: raw text with glossary terms wrapped in shadcn
-// Tooltips (the vanilla client's amber-underlined .jargon spans).
+// Annotated AFD original: raw text with glossary terms underlined and
+// wrapped in Tooltips.
 function AnnotatedText({ text }) {
     const segments = useMemo(() => annotateSegments(text), [text]);
     return (
-        <pre className="whitespace-pre-wrap break-words font-mono text-[0.82rem] leading-[1.65] text-text-secondary">
+        <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-4 font-mono text-xs leading-6">
             {segments.map((seg, i) =>
                 seg.type === 'jargon' ? (
                     <Tooltip key={i}>
                         <TooltipTrigger asChild>
                             <span
                                 tabIndex={0}
-                                className="cursor-help rounded-xs bg-amber/12 border-b border-dashed border-amber text-foreground"
+                                className="cursor-help underline decoration-dotted underline-offset-4"
                             >
                                 {seg.text}
                             </span>
@@ -41,32 +41,38 @@ export const ForecastSection = memo(function ForecastSection({ section, office, 
     );
 
     return (
-        <section ref={sectionRef} id={`section-${section.key.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} className="mb-12 scroll-mt-16">
-            <h2 className="mb-4 font-display text-2xl font-normal tracking-[-0.02em]">
-                {section.key}
-            </h2>
-            <div className="grid gap-6 md:grid-cols-2 md:gap-10">
-                <div>
-                    <div className="mb-2 font-sans text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                        In plain English
-                    </div>
-                    <div
-                        className="plain-prose font-serif"
-                        dangerouslySetInnerHTML={{ __html: plainHTML }}
-                    />
-                </div>
-                <Card className="gap-3 bg-secondary py-4 shadow-none">
-                    <CardHeader className="px-4">
-                        <CardTitle className="font-sans text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                            The original — hover the highlights
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4">
-                        <AnnotatedText text={section.text} />
-                    </CardContent>
-                </Card>
-            </div>
-            <Separator className="mt-12" />
+        <section
+            ref={sectionRef}
+            id={`section-${section.key.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+            className="scroll-mt-20"
+        >
+            <Card>
+                <CardHeader>
+                    <CardTitle>{section.key}</CardTitle>
+                    <CardDescription>
+                        Translated automatically — switch tabs for the original NWS text with the jargon explained.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Tabs defaultValue="plain">
+                        <TabsList>
+                            <TabsTrigger value="plain">Plain English</TabsTrigger>
+                            <TabsTrigger value="original">Original</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="plain">
+                            <div
+                                className="plain-prose pt-2"
+                                dangerouslySetInnerHTML={{ __html: plainHTML }}
+                            />
+                        </TabsContent>
+                        <TabsContent value="original">
+                            <div className="pt-2">
+                                <AnnotatedText text={section.text} />
+                            </div>
+                        </TabsContent>
+                    </Tabs>
+                </CardContent>
+            </Card>
         </section>
     );
 });

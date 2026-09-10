@@ -1,22 +1,29 @@
 # Plaincast — shadcn/ui edition
 
-A React port of the Plaincast reader built with [shadcn/ui](https://ui.shadcn.com),
-Vite, and Tailwind CSS v4. It renders the same product as the vanilla client in
-`docs/`: the latest NWS Area Forecast Discussion, translated into plain English
-side by side with the annotated original.
+A React rebuild of Plaincast with [shadcn/ui](https://ui.shadcn.com), Vite, and
+Tailwind CSS v4. Same product as the vanilla client in `docs/` — the latest NWS
+Area Forecast Discussion translated into plain English — but a full redesign:
+the stock shadcn look (default neutral theme, system font stack, cards and
+tabs), not the editorial "Dispatch" design system from DESIGN.md.
 
-## What's shadcn here
+## Layout
 
-Hand-vendored shadcn components (JSX, `new-york` style) live in
-`src/components/ui/`: Button, Badge, Card, Alert, Select, Dialog, Tooltip,
-Accordion, Progress, Separator, Skeleton. `components.json` is configured so
+- Sticky app header: wordmark, grouped office Select (all 68 offices), share,
+  keyboard-shortcuts Dialog, GitHub link, theme toggle
+- Page intro: office title, issue time, forecaster, confidence Progress +
+  Badge, and the key takeaway as an Alert
+- One Card per AFD section with **Plain English / Original** Tabs — the
+  original shows the raw NWS text with every glossary term as a Tooltip
+- Active alerts as an Accordion in a Card, with severity Badges
+- Section nav buttons with scrollspy, j/k//? keyboard shortcuts, Skeleton
+  loading states, light/dark theme
+
+## Components
+
+Hand-vendored shadcn components (JSX, `new-york` style, neutral base) live in
+`src/components/ui/`: Accordion, Alert, Badge, Button, Card, Dialog, Progress,
+Select, Separator, Skeleton, Tabs, Tooltip. `components.json` is configured so
 `npx shadcn@latest add <component>` drops new ones into the same tree.
-
-The Plaincast design system (DESIGN.md at the repo root) is mapped onto
-shadcn's CSS variables in `src/index.css` — cream paper `--background`, deep
-teal `--primary`, amber jargon highlights, and the Fraunces / Source Serif 4 /
-DM Sans / JetBrains Mono stacks — so the components are stock shadcn but the
-page still reads as Plaincast.
 
 ## Single source of truth
 
@@ -29,7 +36,7 @@ arrays rendered as shadcn Tooltips instead of HTML strings.
 
 Forecast data comes client-side from the public `api.weather.gov` endpoints
 (products + active alerts), same as the vanilla client. The AI translation
-endpoints (`/api/translate`) are not wired up here — the plain-English column
+endpoints (`/api/translate`) are not wired up here — the plain-English tab
 uses the same regex/abbreviation translator the vanilla client falls back to.
 
 ## Run it

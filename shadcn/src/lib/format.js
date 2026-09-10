@@ -11,22 +11,6 @@ export function timeAgo(date) {
     return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-export function localHour(date, tz) {
-    try {
-        return parseInt(date.toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: tz }));
-    } catch (e) {
-        return date.getHours();
-    }
-}
-
-// AFDs are issued ~4x daily; name the edition by local issue hour.
-export function editionName(hour) {
-    if (hour >= 3 && hour < 9) return 'Morning Edition';
-    if (hour >= 9 && hour < 14) return 'Midday Edition';
-    if (hour >= 14 && hour < 20) return 'Evening Edition';
-    return 'Overnight Edition';
-}
-
 export function formatIssueTime(date, tz) {
     try {
         return date.toLocaleString('en-US', {

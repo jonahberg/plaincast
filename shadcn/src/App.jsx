@@ -11,15 +11,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { UtilityBar } from '@/components/UtilityBar';
-import { Masthead } from '@/components/Masthead';
-import { Lede } from '@/components/Lede';
+import { Header } from '@/components/Header';
+import { PageIntro } from '@/components/PageIntro';
 import { Explainer } from '@/components/Explainer';
 import { SectionNav } from '@/components/SectionNav';
 import { ForecastSection } from '@/components/ForecastSection';
 import { AlertsSection } from '@/components/AlertsSection';
-import { OfficeIndex } from '@/components/OfficeIndex';
-import { Colophon } from '@/components/Colophon';
+import { Footer } from '@/components/Footer';
 import { KbdDialog } from '@/components/KbdDialog';
 
 const OFFICE_KEY = 'plaincast-office';
@@ -36,20 +34,15 @@ function initialOffice() {
 
 function LoadingSkeleton() {
     return (
-        <div aria-busy="true" aria-label="Setting the type…">
-            <Skeleton className="mx-auto mb-3 h-6 w-2/3" />
-            <Skeleton className="mx-auto mb-10 h-6 w-1/2" />
+        <div aria-busy="true" aria-label="Loading the forecast…" className="space-y-6">
+            <div className="space-y-2">
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-4 w-96 max-w-full" />
+                <Skeleton className="h-4 w-72" />
+            </div>
+            <Skeleton className="h-24 w-full" />
             {[0, 1].map(i => (
-                <div key={i} className="mb-12 grid gap-6 md:grid-cols-2 md:gap-10">
-                    <div className="space-y-3">
-                        <Skeleton className="h-7 w-40" />
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-5/6" />
-                        <Skeleton className="h-4 w-2/3" />
-                    </div>
-                    <Skeleton className="h-48 w-full" />
-                </div>
+                <Skeleton key={i} className="h-64 w-full" />
             ))}
         </div>
     );
@@ -130,7 +123,7 @@ export default function App() {
         sectionRefs.current.get(key)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, []);
 
-    // Scrollspy for the section nav pills
+    // Scrollspy for the section nav
     useEffect(() => {
         if (!ready) return;
         const observer = new IntersectionObserver(
@@ -187,67 +180,69 @@ export default function App() {
 
     return (
         <TooltipProvider delayDuration={200}>
-            <a
-                href="#sections"
-                className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-card focus:p-3 focus:font-sans focus:text-sm"
-            >
-                Skip to forecast
-            </a>
-            <UtilityBar
-                office={office}
-                onOfficeChange={changeOffice}
-                onShowKbd={() => setKbdOpen(true)}
-                theme={theme}
-                onToggleTheme={toggle}
-                selectRef={selectRef}
-            />
-            <Masthead office={office} issuedAt={ready ? state.issuedAt : null} />
+            <div className="flex min-h-svh flex-col">
+                <a
+                    href="#sections"
+                    className="sr-only focus:not-sr-only focus:absolute focus:z-[60] focus:bg-background focus:p-3 focus:text-sm"
+                >
+                    Skip to forecast
+                </a>
+                <Header
+                    office={office}
+                    onOfficeChange={changeOffice}
+                    onShowKbd={() => setKbdOpen(true)}
+                    theme={theme}
+                    onToggleTheme={toggle}
+                    selectRef={selectRef}
+                />
 
-            <main id="sections" className="mx-auto max-w-[1100px] px-5 sm:px-8">
-                {state.status === 'loading' && <LoadingSkeleton />}
+                <main id="sections" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
+                    {state.status === 'loading' && <LoadingSkeleton />}
 
-                {state.status === 'error' && (
-                    <Alert variant="destructive" className="mx-auto max-w-xl">
-                        <AlertTitle>Couldn't fetch the forecast</AlertTitle>
-                        <AlertDescription>
-                            <p>{state.message}</p>
-                            <Button variant="outline" size="sm" className="mt-2" onClick={() => load(office)}>
-                                Try again
-                            </Button>
-                        </AlertDescription>
-                    </Alert>
-                )}
+                    {state.status === 'error' && (
+                        <Alert variant="destructive">
+                            <AlertTitle>Couldn't fetch the forecast</AlertTitle>
+                            <AlertDescription>
+                                <p>{state.message}</p>
+                                <Button variant="outline" size="sm" className="mt-2" onClick={() => load(office)}>
+                                    Try again
+                                </Button>
+                            </AlertDescription>
+                        </Alert>
+                    )}
 
-                {ready && (
-                    <>
-                        <Lede
-                            takeawayHTML={takeawayHTML}
-                            forecaster={state.forecaster}
-                            issueLine={issueLine}
-                            fullText={state.fullText}
-                        />
-                        <Explainer />
-                        <SectionNav sections={navSections} activeKey={activeKey} onJump={jumpTo} />
-                        <AlertsSection
-                            alerts={alerts}
-                            office={office}
-                            sectionRef={setSectionRef('Active Alerts')}
-                        />
-                        {displaySections.map(section => (
-                            <ForecastSection
-                                key={section.key}
-                                section={section}
+                    {ready && (
+                        <>
+                            <PageIntro
                                 office={office}
-                                sectionRef={setSectionRef(section.key)}
+                                takeawayHTML={takeawayHTML}
+                                forecaster={state.forecaster}
+                                issueLine={issueLine}
+                                fullText={state.fullText}
                             />
-                        ))}
-                    </>
-                )}
+                            <Explainer />
+                            <SectionNav sections={navSections} activeKey={activeKey} onJump={jumpTo} />
+                            <div className="space-y-6">
+                                <AlertsSection
+                                    alerts={alerts}
+                                    office={office}
+                                    sectionRef={setSectionRef('Active Alerts')}
+                                />
+                                {displaySections.map(section => (
+                                    <ForecastSection
+                                        key={section.key}
+                                        section={section}
+                                        office={office}
+                                        sectionRef={setSectionRef(section.key)}
+                                    />
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </main>
 
-                <OfficeIndex office={office} onOfficeChange={changeOffice} />
-            </main>
-
-            <Colophon office={office} rawUrl={ready ? state.rawUrl : null} />
+                <Footer office={office} rawUrl={ready ? state.rawUrl : null} />
+            </div>
             <KbdDialog open={kbdOpen} onOpenChange={setKbdOpen} />
         </TooltipProvider>
     );
