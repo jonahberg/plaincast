@@ -21,7 +21,7 @@ docs/o
 # edit, the local-dev homepage, and the generator's input.
 docs/index.html
 
-# The shadcn/ui edition is a standalone Vite app (shadcn/README.md); it is
-# not part of the Vercel deploy (outputDirectory is docs/), so keep its
-# sources out of the upload entirely.
-shadcn
+# The shadcn/ui edition is the production frontend (built by the
+# buildCommand into shadcn/dist, the outputDirectory) — its sources must
+# upload. Only its local install stays out.
+shadcn/node_modules

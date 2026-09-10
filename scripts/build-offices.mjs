@@ -1,8 +1,13 @@
 // Generates per-office SEO landing pages (docs/o/<CODE>/index.html),
-// sitemap.xml, and api/_home-shell.html from docs/index.html. All committed to
-// the repo (no Vercel build step) and kept in sync by tests/seo-pages.test.js.
-// Regenerate after editing docs/index.html:
+// sitemap.xml, and api/_home-shell.html from the PRODUCTION APP SHELL —
+// shadcn/index.html transformed to reference the built assets
+// (scripts/app-shell.mjs). All committed to the repo and kept in sync by
+// tests/seo-pages.test.js. Regenerate after editing shadcn/index.html:
 //   bun scripts/build-offices.mjs
+//
+// docs/index.html is the LEGACY vanilla client's page — still committed and
+// runnable locally, but since the shadcn edition became the production
+// frontend it is no longer this generator's template.
 //
 // WHY api/_home-shell.html EXISTS: `/` must reach api/home.js, and vercel.json
 // rewrites are evaluated AFTER `handle: filesystem` — so docs/index.html has to
@@ -18,6 +23,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
+import { buildAppShell } from './app-shell.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DOCS = join(__dirname, '..', 'docs');
@@ -149,7 +155,7 @@ ${urls.join('\n')}
 }
 
 export function buildAll() {
-    const template = readFileSync(join(DOCS, 'index.html'), 'utf8');
+    const template = buildAppShell();
     const codes = Object.keys(OFFICE_NAMES);
     for (const code of codes) {
         const dir = join(DOCS, 'o', code);

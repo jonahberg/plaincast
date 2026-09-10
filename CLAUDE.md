@@ -2,15 +2,25 @@
 
 ## Project Structure
 ```
-docs/              Static frontend (served as outputDirectory)
-  index.html       Markup (~360 loc)
-  styles.css       All CSS
-  js/app.js        Main app logic
-  js/glossary.js   230+ term glossary
-  js/offices.js    68 NWS office data
-  js/abbreviations.js  109 abbreviation patterns
-  js/diff.js       Forecast diff engine
-  sw.js            Service worker
+shadcn/            PRODUCTION FRONTEND: shadcn/ui + Vite + React SPA.
+  index.html       The app shell — carries the TEMPLATE MARKERS that
+                   scripts/build-offices.mjs and the SSR functions key on
+                   (edit markers only with the generator, then regenerate)
+  public/sw.js     The deployed /sw.js (takes over old registrations)
+  src/lib/afd.js   Ported pure logic — parity-locked to docs/js/app.js by
+                   tests/shadcn-parity.test.js
+  dist/            Build output = Vercel outputDirectory (buildCommand runs
+                   vite build + scripts/prepare-deploy.mjs, which deletes
+                   dist/index.html and copies docs/ statics in)
+docs/              LEGACY vanilla client (no longer deployed as the frontend)
+                   + the canonical data modules and the deployed static
+                   surface (copied into dist at build)
+  js/app.js        Legacy app logic (still the parity source of truth)
+  js/glossary.js   230+ term glossary (canonical, imported by shadcn/)
+  js/offices.js    68 NWS office data (canonical)
+  js/abbreviations.js  109 abbreviation patterns (canonical)
+  js/diff.js       Forecast diff engine (canonical)
+  sw.js            Legacy service worker (not deployed; /sw.js is shadcn's)
   manifest.json    PWA manifest
 api/               Vercel serverless functions
   home.js          SSR homepage for /  (docs/index.html + live AFD digest)
@@ -32,12 +42,15 @@ tests/             Bun test suite (598 tests)
 
 ## Routing rule
 `vercel.json` rewrites are evaluated AFTER `handle: filesystem`, so any static
-file at a path shadows a rewrite to that path. `docs/index.html` and `docs/o`
-are therefore in `.vercelignore` — they stay committed (local dev, generators,
-tests) and reach the functions via `functions.*.includeFiles`. The 404
-catch-all must stay LAST in the `rewrites` array, and the `/api/:path*` →
-`/api/api-not-found` rewrite must stay BEFORE it — otherwise `/api/bogus` serves
-an HTML page to an agent probing the API.
+file at a path shadows a rewrite to that path. That is why
+`scripts/prepare-deploy.mjs` DELETES `shadcn/dist/index.html` from the build
+output (else it shadows the `/` → api/home.js rewrite), and why the functions
+read the shell from the committed `api/_home-shell.html` twin (generated from
+`shadcn/index.html` by `scripts/build-offices.mjs`) via
+`functions.*.includeFiles`. The 404 catch-all must stay LAST in the
+`rewrites` array, and the `/api/:path*` → `/api/api-not-found` rewrite must
+stay BEFORE it — otherwise `/api/bogus` serves an HTML page to an agent
+probing the API.
 
 ## Heading rule
 Every page needs an `<h1>` inside `<main>`, not only the masthead nameplate.
@@ -65,9 +78,14 @@ acceptmarkdown.com test vectors live in `tests/negotiate.test.js`.
   Markdown negotiation are functions, so they need `vercel dev`.
 
 ## Release rule
-Any PR that changes files under docs/ MUST bump CACHE_NAME in docs/sw.js —
-the service worker precaches the app shell cache-first, and a stale version
-serves new HTML with old CSS/JS to returning clients.
+The deployed service worker is shadcn/public/sw.js. Any PR that changes the
+frontend (shadcn/src, shadcn/index.html, or the docs/ statics copied into the
+deploy) MUST bump its CACHE const. Its asset strategy is network-first (the
+built asset names are STABLE, not hashed — the committed SSR shell references
+them), so stale-code risk is lower than the old cache-first worker, but the
+cache namespace still needs the bump to shed old entries. The old rule (bump
+CACHE_NAME in docs/sw.js on docs/ changes) still applies while the legacy
+client stays committed.
 
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.

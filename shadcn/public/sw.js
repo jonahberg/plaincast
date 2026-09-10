@@ -1,11 +1,15 @@
-// Plaincast shadcn edition — service worker.
+// Plaincast shadcn edition — service worker. Deployed at /sw.js, the same
+// URL the vanilla client's worker registered, so returning clients update to
+// this one on their next visit; activate() below then deletes every cache it
+// doesn't own (including the old plaincast-v* precaches).
 // Strategies:
-//   navigations  → network-first, falling back to the cached shell (SPA:
-//                  every route serves the same document)
-//   /assets/*    → cache-first (Vite content-hashes them, so they're immutable)
+//   navigations  → network-first, falling back to the cached shell
+//   /assets/*    → network-first with cache fallback (the names are STABLE,
+//                  not content-hashed — the committed SSR shell references
+//                  them — so cache-first would pin stale code)
 //   api.weather.gov GETs → network-first with cache fallback, so the last
 //                  fetched forecast still renders offline
-const CACHE = 'plaincast-shadcn-v1';
+const CACHE = 'plaincast-shadcn-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -37,11 +41,15 @@ self.addEventListener('fetch', (event) => {
 
     if (url.origin === location.origin && url.pathname.startsWith('/assets/')) {
         event.respondWith(
-            caches.match(request).then(hit => hit || fetch(request).then(res => {
-                const copy = res.clone();
-                event.waitUntil(caches.open(CACHE).then(c => c.put(request, copy)));
-                return res;
-            }))
+            fetch(request)
+                .then(res => {
+                    if (res.ok) {
+                        const copy = res.clone();
+                        event.waitUntil(caches.open(CACHE).then(c => c.put(request, copy)));
+                    }
+                    return res;
+                })
+                .catch(() => caches.match(request).then(hit => hit || Response.error()))
         );
         return;
     }
