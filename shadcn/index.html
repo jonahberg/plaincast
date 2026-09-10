@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plaincast — What the forecast actually says</title>
+    <meta name="description" content="NWS meteorologists write the real forecasts 3-4x daily, but in dense shorthand. Plaincast uses AI to translate them into plain English anyone can read.">
+    <meta name="theme-color" content="#ffffff">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="preconnect" href="https://api.weather.gov" crossorigin>
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Plaincast — What the forecast actually says">
+    <meta property="og:description" content="NWS Area Forecast Discussions decoded into plain English — side-by-side translation, 230+ term jargon glossary, forecaster confidence, edition history.">
+    <meta property="og:site_name" content="Plaincast">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Plaincast — What the forecast actually says">
+    <meta name="twitter:description" content="NWS Area Forecast Discussions decoded into plain English.">
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Plaincast (shadcn edition)",
+        "description": "NWS Area Forecast Discussions decoded into plain English with side-by-side translation, a 230+ term jargon glossary, forecaster confidence indicators, edition history, and per-edition diffs.",
+        "applicationCategory": "WeatherApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Jonah Berg", "url": "https://jonahberg.com" },
+        "sourceOrganization": { "@type": "GovernmentOrganization", "name": "National Weather Service", "url": "https://www.weather.gov" }
+    }
+    </script>
+
+    <script>
+        // Pre-paint theme: follow a stored explicit choice, else the OS.
+        // Must run before first paint to avoid a flash.
+        (function () {
+            try {
+                var t = localStorage.getItem('plaincast-theme');
+                if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                }
+            } catch (e) { /* first paint stays light */ }
+        })();
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- For crawlers, agents and no-JS readers: what this page is and where
+         every office edition lives. The React app replaces none of this — it
+         mounts into #root above. -->
+    <noscript>
+        <main style="max-width:640px;margin:2rem auto;padding:0 1rem;font-family:system-ui,sans-serif">
+            <h1>Plaincast — the National Weather Service forecast, decoded into plain English</h1>
+            <p>NWS meteorologists write Area Forecast Discussions 3–4 times daily — the real
+            forecasts, in dense shorthand. Plaincast translates them into plain English. This
+            edition of the app requires JavaScript; the server-rendered original lives at
+            <a href="https://plaincast.live">plaincast.live</a>, readable by anything.</p>
+            <h2>The forecast, office by office</h2>
+            <p>
+                <a href="/o/OKX/">New York</a> · <a href="/o/BOX/">Boston</a> · <a href="/o/PHI/">Philadelphia</a> ·
+                <a href="/o/LWX/">Washington DC</a> · <a href="/o/PBZ/">Pittsburgh</a> · <a href="/o/BUF/">Buffalo</a> ·
+                <a href="/o/RAH/">Raleigh</a> · <a href="/o/CHS/">Charleston SC</a> · <a href="/o/FFC/">Atlanta</a> ·
+                <a href="/o/MFL/">Miami</a> · <a href="/o/JAX/">Jacksonville</a> · <a href="/o/TBW/">Tampa Bay</a> ·
+                <a href="/o/BMX/">Birmingham</a> · <a href="/o/OHX/">Nashville</a> · <a href="/o/MRX/">Morristown</a> ·
+                <a href="/o/JAN/">Jackson MS</a> · <a href="/o/LOT/">Chicago</a> · <a href="/o/DTX/">Detroit</a> ·
+                <a href="/o/IND/">Indianapolis</a> · <a href="/o/CLE/">Cleveland</a> · <a href="/o/ILN/">Cincinnati</a> ·
+                <a href="/o/MKX/">Milwaukee</a> · <a href="/o/GRR/">Grand Rapids</a> · <a href="/o/LSX/">St. Louis</a> ·
+                <a href="/o/EAX/">Kansas City</a> · <a href="/o/DMX/">Des Moines</a> · <a href="/o/MPX/">Minneapolis</a> ·
+                <a href="/o/DLH/">Duluth</a> · <a href="/o/FSD/">Sioux Falls</a> · <a href="/o/BIS/">Bismarck</a> ·
+                <a href="/o/OAX/">Omaha</a> · <a href="/o/FGF/">Grand Forks</a> · <a href="/o/FWD/">Dallas/Fort Worth</a> ·
+                <a href="/o/HGX/">Houston</a> · <a href="/o/EWX/">San Antonio</a> · <a href="/o/OUN/">Oklahoma City</a> ·
+                <a href="/o/TSA/">Tulsa</a> · <a href="/o/LZK/">Little Rock</a> · <a href="/o/LIX/">New Orleans</a> ·
+                <a href="/o/SHV/">Shreveport</a> · <a href="/o/LCH/">Lake Charles</a> · <a href="/o/BOU/">Denver</a> ·
+                <a href="/o/PUB/">Pueblo</a> · <a href="/o/GJT/">Grand Junction</a> · <a href="/o/SLC/">Salt Lake City</a> ·
+                <a href="/o/BOI/">Boise</a> · <a href="/o/BYZ/">Billings</a> · <a href="/o/MSO/">Missoula</a> ·
+                <a href="/o/RIW/">Riverton</a> · <a href="/o/PSR/">Phoenix</a> · <a href="/o/VEF/">Las Vegas</a> ·
+                <a href="/o/TWC/">Tucson</a> · <a href="/o/FGZ/">Flagstaff</a> · <a href="/o/ABQ/">Albuquerque</a> ·
+                <a href="/o/EPZ/">El Paso</a> · <a href="/o/LOX/">Los Angeles</a> · <a href="/o/SGX/">San Diego</a> ·
+                <a href="/o/MTR/">San Francisco</a> · <a href="/o/STO/">Sacramento</a> · <a href="/o/HNX/">Central California</a> ·
+                <a href="/o/EKA/">Eureka</a> · <a href="/o/SEW/">Seattle</a> · <a href="/o/PQR/">Portland</a> ·
+                <a href="/o/MFR/">Medford</a> · <a href="/o/OTX/">Spokane</a> · <a href="/o/AFC/">Anchorage</a> ·
+                <a href="/o/AFG/">Fairbanks</a> · <a href="/o/HFO/">Honolulu</a>
+            </p>
+        </main>
+    </noscript>
+
+    <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>

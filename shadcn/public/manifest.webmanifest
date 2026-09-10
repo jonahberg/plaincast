@@ -1,0 +1,17 @@
+{
+    "name": "Plaincast",
+    "short_name": "Plaincast",
+    "description": "The National Weather Service forecast, decoded into plain English.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#ffffff",
+    "icons": [
+        {
+            "src": "/icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        }
+    ]
+}

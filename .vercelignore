@@ -20,3 +20,8 @@ docs/o
 # tests/seo-pages.test.js. docs/index.html stays committed as the file humans
 # edit, the local-dev homepage, and the generator's input.
 docs/index.html
+
+# The shadcn/ui edition is a standalone Vite app (shadcn/README.md); it is
+# not part of the Vercel deploy (outputDirectory is docs/), so keep its
+# sources out of the upload entirely.
+shadcn
