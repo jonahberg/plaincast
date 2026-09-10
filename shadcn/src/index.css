@@ -1,0 +1,125 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─── Plaincast design tokens (DESIGN.md) mapped onto shadcn variables ──
+   Light: warm cream paper, warm near-black ink, deep teal accent, amber
+   for jargon/warnings. Dark: warm charcoal, desaturated teal. */
+:root {
+    --radius: 0.375rem;
+
+    --background: #FAFAF5;
+    --foreground: #1C1917;
+    --card: #FFFFFF;
+    --card-foreground: #1C1917;
+    --popover: #FFFFFF;
+    --popover-foreground: #1C1917;
+    --primary: #0F766E;
+    --primary-foreground: #F0FDFA;
+    --secondary: #F5F5F0;
+    --secondary-foreground: #1C1917;
+    --muted: #F5F5F0;
+    --muted-foreground: #78716C;
+    --accent: #F0FDFA;
+    --accent-foreground: #0F766E;
+    --destructive: #DC2626;
+    --border: #E7E5E4;
+    --input: #E7E5E4;
+    --ring: #0F766E;
+
+    /* Plaincast extras */
+    --amber: #B45309;
+    --amber-light: #FFFBEB;
+    --teal-light: #F0FDFA;
+    --teal-muted: rgba(15, 118, 110, 0.08);
+    --text-secondary: #57534E;
+}
+
+.dark {
+    --background: #111110;
+    --foreground: #E7E5E4;
+    --card: #1C1917;
+    --card-foreground: #E7E5E4;
+    --popover: #1C1917;
+    --popover-foreground: #E7E5E4;
+    --primary: #2DD4BF;
+    --primary-foreground: #042F2E;
+    --secondary: #0C0C0B;
+    --secondary-foreground: #E7E5E4;
+    --muted: #0C0C0B;
+    --muted-foreground: #78716C;
+    --accent: rgba(13, 148, 136, 0.12);
+    --accent-foreground: #2DD4BF;
+    --destructive: #F87171;
+    --border: #292524;
+    --input: #292524;
+    --ring: #2DD4BF;
+
+    --amber: #FBBF24;
+    --amber-light: rgba(180, 83, 9, 0.15);
+    --teal-light: rgba(13, 148, 136, 0.12);
+    --teal-muted: rgba(45, 212, 191, 0.08);
+    --text-secondary: #A8A29E;
+}
+
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-amber: var(--amber);
+    --color-amber-light: var(--amber-light);
+    --color-teal-light: var(--teal-light);
+    --color-teal-muted: var(--teal-muted);
+    --color-text-secondary: var(--text-secondary);
+
+    --radius-sm: calc(var(--radius) - 2px);
+    --radius-md: var(--radius);
+    --radius-lg: calc(var(--radius) + 4px);
+    --radius-xl: calc(var(--radius) + 8px);
+
+    /* DESIGN.md font stacks */
+    --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-serif: "Source Serif 4", Georgia, serif;
+    --font-display: "Fraunces", Georgia, serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+    body {
+        @apply bg-background text-foreground font-serif antialiased;
+        font-size: 17px;
+        line-height: 1.75;
+    }
+}
+
+@layer components {
+    /* Rendered plain-English translation HTML (from lib/afd.js) */
+    .plain-prose p {
+        @apply mb-4 last:mb-0;
+    }
+    .plain-prose strong {
+        @apply font-semibold text-foreground;
+    }
+    .plain-prose h3 {
+        @apply font-display text-lg mt-5 mb-2 tracking-tight text-text-secondary;
+    }
+}
