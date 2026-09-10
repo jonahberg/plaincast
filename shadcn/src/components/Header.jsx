@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Check, CloudSun, Github, Keyboard, Moon, Share2, Sun } from 'lucide-react';
+import { CloudSun, Github, Keyboard, LocateFixed, Moon, Share2, Sun } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { OFFICE_NAMES } from '@data/offices.js';
 import { OFFICE_GROUPS } from '@/lib/offices-groups';
+import { findNearestOffice } from '@/lib/nws';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -16,16 +17,44 @@ import {
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-export function Header({ office, onOfficeChange, onShowKbd, theme, onToggleTheme, selectRef }) {
-    const [copied, setCopied] = useState(false);
-
+export function Header({ office, shareUrl, onOfficeChange, onShowKbd, theme, onToggleTheme, selectRef }) {
     const share = async () => {
-        const url = `${location.origin}${location.pathname}?office=${office}`;
+        const title = `Plaincast — ${OFFICE_NAMES[office]} (${office})`;
+        if (navigator.share) {
+            try {
+                await navigator.share({ title, url: shareUrl });
+                return;
+            } catch (e) {
+                if (e.name === 'AbortError') return; // user closed the sheet
+            }
+        }
         try {
-            await navigator.clipboard.writeText(url);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (e) { /* clipboard unavailable */ }
+            await navigator.clipboard.writeText(shareUrl);
+            toast.success('Link copied', { description: shareUrl });
+        } catch (e) {
+            toast.error("Couldn't copy the link");
+        }
+    };
+
+    const locate = () => {
+        if (!navigator.geolocation) {
+            toast.error('Geolocation is not available in this browser');
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const detected = findNearestOffice(pos.coords.latitude, pos.coords.longitude);
+                if (!detected) return;
+                if (detected === office) {
+                    toast.success(`${OFFICE_NAMES[detected]} (${detected}) is already your nearest office`);
+                    return;
+                }
+                onOfficeChange(detected);
+                toast.success(`Showing ${OFFICE_NAMES[detected]} (${detected}), your nearest office`);
+            },
+            () => toast.error("Couldn't read your location"),
+            { timeout: 8000 }
+        );
     };
 
     return (
@@ -56,14 +85,23 @@ export function Header({ office, onOfficeChange, onShowKbd, theme, onToggleTheme
                     </SelectContent>
                 </Select>
 
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={locate} aria-label="Use my location">
+                            <LocateFixed />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Find my nearest office</TooltipContent>
+                </Tooltip>
+
                 <div className="ml-auto flex items-center gap-1">
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button variant="ghost" size="icon" onClick={share} aria-label="Share forecast link">
-                                {copied ? <Check /> : <Share2 />}
+                                <Share2 />
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent>{copied ? 'Link copied' : 'Copy link to this forecast'}</TooltipContent>
+                        <TooltipContent>Share this forecast</TooltipContent>
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>

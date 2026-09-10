@@ -17,4 +17,27 @@ export default defineConfig({
     server: {
         fs: { allow: ['..'] },
     },
+    build: {
+        rollupOptions: {
+            output: {
+                // Vendor split: the framework and the component primitives
+                // change far less often than the app code, so returning
+                // visitors keep them cached across deploys.
+                manualChunks: {
+                    vendor: [
+                        'react',
+                        'react-dom',
+                        '@radix-ui/react-accordion',
+                        '@radix-ui/react-dialog',
+                        '@radix-ui/react-progress',
+                        '@radix-ui/react-select',
+                        '@radix-ui/react-separator',
+                        '@radix-ui/react-slot',
+                        '@radix-ui/react-tabs',
+                        '@radix-ui/react-tooltip',
+                    ],
+                },
+            },
+        },
+    },
 });

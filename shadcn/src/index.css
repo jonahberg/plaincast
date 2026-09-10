@@ -111,4 +111,18 @@
     .plain-prose h3 {
         @apply mt-5 mb-2 text-base font-semibold tracking-tight;
     }
+
+    /* "What changed" diff view (lib renderDiffHTML classes) */
+    .diff-prose p {
+        @apply mb-3 rounded-sm px-2 py-1 last:mb-0;
+    }
+    .diff-added {
+        @apply bg-chart-2/15 text-foreground;
+    }
+    .diff-removed {
+        @apply bg-destructive/10 text-muted-foreground line-through decoration-destructive/40;
+    }
+    .diff-unchanged {
+        @apply text-muted-foreground;
+    }
 }
