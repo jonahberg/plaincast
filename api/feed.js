@@ -67,7 +67,7 @@ function buildDelta(prevText, currText) {
 export default async function handler(req, res) {
     if (req.method !== 'GET') return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
 
-    const office = (req.query.office || '').toUpperCase();
+    const office = String(req.query.office ?? '').toUpperCase(); // String(): a repeated ?office= arrives as an array
     if (!office || !VALID_OFFICES.has(office)) {
         return sendError(res, 400, 'invalid_office', 'Invalid office. Use ?office=LOX (3-letter NWS code)');
     }

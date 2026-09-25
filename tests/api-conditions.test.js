@@ -155,3 +155,12 @@ describe('GET /api/conditions', () => {
         expect(res.body).toEqual({ temp: null, normal: null, delta: null });
     });
 });
+
+describe('GET /api/conditions — repeated query param', () => {
+    it('answers ?office=A&office=B (an array) with a 400, not a crash', async () => {
+        const res = createRes();
+        await handler(createReq({ office: ['LOT', 'OKX'] }), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.code).toBe('invalid_office');
+    });
+});

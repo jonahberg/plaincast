@@ -44,7 +44,7 @@ const CLIMATE_NORMALS = {
 };
 
 export default async function handler(req, res) {
-    const office = (req.query.office || '').toUpperCase();
+    const office = String(req.query.office ?? '').toUpperCase(); // String(): a repeated ?office= arrives as an array
     if (!OFFICE_NAMES[office]) {
         return sendError(res, 400, 'invalid_office', 'Invalid office');
     }

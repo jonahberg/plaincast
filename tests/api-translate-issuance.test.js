@@ -228,3 +228,12 @@ describe('GET /api/translate-issuance', () => {
         expect(last).toBe(429);
     });
 });
+
+describe('GET /api/translate-issuance — repeated query param', () => {
+    it('answers ?office=A&office=B (an array) with a 400, not a crash', async () => {
+        const res = createRes();
+        await handler(createReq({ office: ['LOX', 'OKX'], id: freshId() }), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.code).toBe('invalid_office');
+    });
+});
