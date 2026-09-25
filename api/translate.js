@@ -1,12 +1,14 @@
 // Vercel serverless function: AI translation of AFD sections via Claude Haiku
 // Uses AI Gateway for model routing, failover, and cost tracking
 
+import { createHash } from 'node:crypto';
 import { generateText } from 'ai';
 import { OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { sendError } from './_errors.js';
 
-// Translation cache: keyed on hash(text + canonical section + office), 4-hour TTL
+// Translation cache: keyed on sha256(whitespace-normalized text + canonical
+// section + office), 4-hour TTL
 // Fluid Compute shares instances across concurrent requests, so this persists.
 // The key deliberately EXCLUDES client-supplied issuanceTime and uses a bucketed
 // section label: any client-varied key component is a cache-bust lever where each
@@ -16,18 +18,17 @@ const CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours (NWS issues AFDs ~3-4x daily)
 const CACHE_MAX = 500; // max entries to prevent unbounded growth
 
 function cacheKey(text, sectionKey, office) {
-    let hash = 0;
-    const str = `${text}|${sectionKey}|${office}`;
-    for (let i = 0; i < str.length; i++) {
-        hash = ((hash << 5) - hash) + str.charCodeAt(i);
-        hash |= 0;
-    }
-    return hash.toString(36);
+    // Whitespace-normalized so reflowing a real section can't bust the cache;
+    // a cryptographic hash so no crafted text can collide with a real entry.
+    return createHash('sha256')
+        .update(`${normalizeForMatch(text)}|${sectionKey}|${office}`)
+        .digest('base64url');
 }
 
 // Bucket a free-text section label into a bounded set of canonical keys for
-// caching. The raw label still feeds the prompt (legitimate context); this only
-// bounds how many cache entries one text can occupy.
+// caching. The prompt gets the canonical label too (promptSectionLabel), never
+// the raw one: the raw label isn't in the cache key, so letting it steer the
+// output would let one caller poison the entry every reader shares.
 const DISPLAY_SECTIONS = new Map(
     Object.values(SECTION_NAMES).map(v => [v.toUpperCase(), v])
 );
@@ -44,6 +45,12 @@ export function canonicalSectionKey(label) {
         if (u.startsWith(k)) return v;
     }
     return 'OTHER';
+}
+
+// The section name the prompt sees: the canonical display name, or null
+// (→ "Unknown") for labels that bucket to OTHER.
+export function promptSectionLabel(sectionKey) {
+    return sectionKey && sectionKey !== 'OTHER' ? sectionKey : null;
 }
 
 function getCachedTranslation(text, sectionKey, office) {
@@ -144,21 +151,24 @@ rateLimitCleanupTimer.unref?.();
 const afdTextCache = new Map(); // office -> { products: [{norm, issuanceTime}], time }
 const AFD_TEXT_TTL = 10 * 60 * 1000; // 10 min
 
+// Case-sensitive on purpose: the cache key is built from this same
+// normalization, so any variation it tolerates is variation that can't be a
+// cache-bust lever.
 function normalizeForMatch(s) {
-    return String(s).toLowerCase().replace(/\$\$|&&/g, ' ').replace(/\s+/g, ' ').trim();
+    return String(s).replace(/\$\$|&&/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 // True when `text` is a contiguous chunk of the normalized product text.
 // parseSections() output is always a contiguous slice of productText (headers,
 // $$/&& markers and the forecaster tail are removed), so this does not reject
-// legitimate section text. The head+tail fallback tolerates rare edge trims.
+// legitimate section text — measured Sep 25 2026: 722/722 sections across all
+// 68 offices' two latest AFDs matched exactly. There is deliberately no
+// head+tail fallback: it let arbitrary text through between a real first and
+// last 160 characters.
 export function textMatchesAFD(text, normalizedProductTexts) {
     const n = normalizeForMatch(text);
     if (n.length < 20) return false;
-    return normalizedProductTexts.some(p =>
-        p.includes(n)
-        || (n.length > 160 && p.includes(n.slice(0, 160)) && p.includes(n.slice(-160)))
-    );
+    return normalizedProductTexts.some(p => p.includes(n));
 }
 
 // The matched product (not just a boolean) — its issuanceTime is the trusted,
@@ -359,7 +369,7 @@ export default async function handler(req, res) {
     // Calendar context: trust the matched product's issuance time over the
     // client's claim; the client value is only a hint when NWS is unreachable.
     const promptIssuanceTime = matchedProduct?.issuanceTime || issuanceTime;
-    const systemPrompt = buildSystemPrompt({ section: sectionLabel, office: officeCode, issuanceTime: promptIssuanceTime });
+    const systemPrompt = buildSystemPrompt({ section: promptSectionLabel(sectionKey), office: officeCode, issuanceTime: promptIssuanceTime });
 
     try {
         const result = await generateText({

@@ -285,3 +285,12 @@ describe('GET /api/changelog?id= (pinned issuance for the timeline)', () => {
         expect(res.statusCode).toBe(400);
     });
 });
+
+describe('GET /api/changelog — repeated query param', () => {
+    it('answers ?office=A&office=B (an array) with a 400, not a crash', async () => {
+        const res = createRes();
+        await handler(createReq({ query: { office: ['LOX', 'OKX'] } }), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.code).toBe('invalid_office');
+    });
+});

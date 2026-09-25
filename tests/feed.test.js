@@ -239,3 +239,12 @@ describe('GET /api/feed — shape preserved', () => {
         expect(res.headers['cache-control']).toContain('stale-while-revalidate=7200');
     });
 });
+
+describe('GET /api/feed — repeated query param', () => {
+    it('answers ?office=A&office=B (an array) with a 400, not a crash', async () => {
+        const res = createRes();
+        await feedHandler(createReq({ query: { office: ['OKX', 'LOX'] } }), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.code).toBe('invalid_office');
+    });
+});
