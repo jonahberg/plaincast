@@ -70,11 +70,16 @@ export function Footer({ office, rawUrl }) {
                         </a>
                         <a className={LINK} href="/about">About</a>
                         <a className={LINK} href="/developers">Developers</a>
+                        <a className={LINK} href="/contact">Contact</a>
+                        <a className={LINK} href="/privacy">Privacy</a>
                         <a className={LINK} href="https://github.com/jonahberg/plaincast" target="_blank" rel="noopener noreferrer">
                             GitHub
                         </a>
                         <a className={LINK} href="https://ui.shadcn.com" target="_blank" rel="noopener noreferrer">
                             Built with shadcn/ui
+                        </a>
+                        <a className={LINK} href="https://jonahberg.com" target="_blank" rel="noopener noreferrer">
+                            Jonah Berg
                         </a>
                     </p>
                 </div>
