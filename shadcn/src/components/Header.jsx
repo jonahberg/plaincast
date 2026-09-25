@@ -84,6 +84,18 @@ export function Header({
 
                 <Separator orientation="vertical" className="hidden !h-5 sm:block" />
 
+                {/* Same site nav as the server-rendered pages' header (api/_page-shell.html).
+                    md+ only: below that the picker needs the room, and the footer
+                    carries the National Desk link at every width. */}
+                <nav aria-label="Site" className="hidden shrink-0 items-center gap-1 md:flex">
+                    <a href="/" aria-current="page" className="inline-flex h-8 items-center whitespace-nowrap rounded-md bg-accent px-2.5 text-sm font-medium text-foreground">
+                        Forecast
+                    </a>
+                    <a href="/national/" className="inline-flex h-8 items-center whitespace-nowrap rounded-md px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+                        National Desk
+                    </a>
+                </nav>
+
                 <Select value={office} onValueChange={pick} open={pickerOpen} onOpenChange={onPickerOpenChange}>
                     <SelectTrigger
                         ref={selectRef}

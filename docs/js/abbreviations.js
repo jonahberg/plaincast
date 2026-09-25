@@ -65,10 +65,10 @@ export const BASIC_ABBREVIATIONS = [
     [/\bnocturnal\b/gi, 'nighttime'],
 
     // Aviation
-    [/\bMVFR\b/g, 'marginal visual flying conditions'],
-    [/\bLIFR\b/g, 'very low visibility flying conditions'],
-    [/\bIFR\b/g, 'instrument-only flying conditions'],
-    [/\bVFR\b/g, 'good visual flying conditions'],
+    [/\bMVFR(?:\s+conditions)?\b/g, 'marginal visual flying conditions'],
+    [/\bLIFR(?:\s+conditions)?\b/g, 'very low visibility flying conditions'],
+    [/\bIFR(?:\s+conditions)?\b/g, 'instrument-only flying conditions'],
+    [/\bVFR(?:\s+conditions)?\b/g, 'good visual flying conditions'],
     [/\bTAFs?\b/g, 'airport forecasts'],
     [/\bGDP\b/g, 'ground delay program'],
     [/\bCIGS?\b/gi, 'ceilings'],
