@@ -1,9 +1,11 @@
 import { CloudSun, Github, Keyboard, LocateFixed, Moon, Share2, Sun } from 'lucide-react';
+import { useRef } from 'react';
 import { toast } from 'sonner';
 
 import { OFFICE_NAMES } from '@data/offices.js';
 import { OFFICE_GROUPS } from '@/lib/offices-groups';
 import { findNearestOffice } from '@/lib/nws';
+import { officeTitle } from '@/lib/seo';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -17,9 +19,21 @@ import {
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-export function Header({ office, shareUrl, onOfficeChange, onShowKbd, theme, onToggleTheme, selectRef }) {
+export function Header({
+    office, shareUrl, onOfficeChange, onShowKbd, theme, onToggleTheme, selectRef,
+    pickerOpen, onPickerOpenChange,
+}) {
+    // After a pick, focus must NOT return to the trigger: a focused trigger
+    // swallows the j/k shortcuts (and, before select.jsx blocked it, typeahead-
+    // switched offices on them). Escape still restores focus normally.
+    const justPicked = useRef(false);
+    const pick = (code) => {
+        justPicked.current = true;
+        onOfficeChange(code);
+    };
+
     const share = async () => {
-        const title = `Plaincast — ${OFFICE_NAMES[office]} (${office})`;
+        const title = officeTitle(OFFICE_NAMES[office]);
         if (navigator.share) {
             try {
                 await navigator.share({ title, url: shareUrl });
@@ -59,19 +73,45 @@ export function Header({ office, shareUrl, onOfficeChange, onShowKbd, theme, onT
 
     return (
         <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 sm:px-6">
-                <a href="/" className="flex items-center gap-2 font-semibold">
+            {/* 320–375px budget: icon-only wordmark, a flexible picker, and
+                only locate/share/theme — shortcuts + GitHub return at sm (the
+                footer carries the GitHub link at every width). */}
+            <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-4 sm:gap-3 sm:px-6">
+                <a href="/" className="flex shrink-0 items-center gap-2 font-semibold" aria-label="Plaincast home">
                     <CloudSun className="size-5" aria-hidden="true" />
-                    <span>Plaincast</span>
+                    <span className="hidden sm:inline">Plaincast</span>
                 </a>
 
                 <Separator orientation="vertical" className="hidden !h-5 sm:block" />
 
-                <Select value={office} onValueChange={onOfficeChange}>
-                    <SelectTrigger ref={selectRef} size="sm" className="w-full max-w-56 sm:w-56" aria-label="NWS forecast office">
+                {/* Same site nav as the server-rendered pages' header (api/_page-shell.html).
+                    md+ only: below that the picker needs the room, and the footer
+                    carries the National Desk link at every width. */}
+                <nav aria-label="Site" className="hidden shrink-0 items-center gap-1 md:flex">
+                    <a href="/" aria-current="page" className="inline-flex h-8 items-center whitespace-nowrap rounded-md bg-accent px-2.5 text-sm font-medium text-foreground">
+                        Forecast
+                    </a>
+                    <a href="/national/" className="inline-flex h-8 items-center whitespace-nowrap rounded-md px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+                        National Desk
+                    </a>
+                </nav>
+
+                <Select value={office} onValueChange={pick} open={pickerOpen} onOpenChange={onPickerOpenChange}>
+                    <SelectTrigger
+                        ref={selectRef}
+                        size="sm"
+                        className="w-auto min-w-0 flex-1 sm:w-56 sm:flex-none"
+                        aria-label="NWS forecast office"
+                    >
                         <SelectValue placeholder="Choose an office" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent
+                        onCloseAutoFocus={(e) => {
+                            if (!justPicked.current) return;
+                            justPicked.current = false;
+                            e.preventDefault();
+                        }}
+                    >
                         {OFFICE_GROUPS.map(group => (
                             <SelectGroup key={group.label}>
                                 <SelectLabel>{group.label}</SelectLabel>
@@ -85,16 +125,15 @@ export function Header({ office, shareUrl, onOfficeChange, onShowKbd, theme, onT
                     </SelectContent>
                 </Select>
 
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={locate} aria-label="Use my location">
-                            <LocateFixed />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Find my nearest office</TooltipContent>
-                </Tooltip>
-
-                <div className="ml-auto flex items-center gap-1">
+                <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={locate} aria-label="Use my location">
+                                <LocateFixed />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Find my nearest office</TooltipContent>
+                    </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button variant="ghost" size="icon" onClick={share} aria-label="Share forecast link">
@@ -105,7 +144,10 @@ export function Header({ office, shareUrl, onOfficeChange, onShowKbd, theme, onT
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={onShowKbd} aria-label="Keyboard shortcuts">
+                            <Button
+                                variant="ghost" size="icon" onClick={onShowKbd}
+                                aria-label="Keyboard shortcuts" className="hidden sm:inline-flex"
+                            >
                                 <Keyboard />
                             </Button>
                         </TooltipTrigger>
@@ -113,7 +155,7 @@ export function Header({ office, shareUrl, onOfficeChange, onShowKbd, theme, onT
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" asChild>
+                            <Button variant="ghost" size="icon" asChild className="hidden sm:inline-flex">
                                 <a
                                     href="https://github.com/jonahberg/plaincast"
                                     target="_blank"

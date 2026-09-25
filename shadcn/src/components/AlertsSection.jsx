@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { AlertTriangle, Eye, Info, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, ChevronRight, Eye, Info, Loader2 } from 'lucide-react';
 
 import { OFFICE_TIMEZONES } from '@data/offices.js';
-import { alertWindow, classifyAlertKind } from '@/lib/nws';
+import { alertWindow, classifyAlertKind, groupAlerts } from '@/lib/nws';
 import { explainAlert } from '@/lib/ai';
 import {
     Accordion,
@@ -20,14 +20,16 @@ const KIND_META = {
     statement: { label: 'Statement', badge: 'outline', Icon: Info },
 };
 
-function describe(alerts, tz) {
+function describe(groups, total, tz) {
     const now = Date.now();
-    const upcoming = alerts.filter(a => alertWindow(a, tz, now)?.upcoming).length;
-    const active = alerts.length - upcoming;
+    const upcoming = groups.filter(a => alertWindow(a, tz, now)?.upcoming).length;
+    const active = groups.length - upcoming;
     const parts = [];
     if (active) parts.push(`${active} in effect now`);
     if (upcoming) parts.push(`${upcoming} starting later`);
-    return `${alerts.length === 1 ? '1 alert' : `${alerts.length} alerts`} issued by this office — ${parts.join(', ')}.`;
+    const head = groups.length === 1 ? '1 alert' : `${groups.length} alerts`;
+    const zones = total > groups.length ? ` (${total} zone notices)` : '';
+    return `${head} issued by this office${zones} — ${parts.join(', ')}.`;
 }
 
 // A lazily-fetched plain-English lead for one expanded alert (soft-fails to
@@ -61,10 +63,32 @@ function AlertLead({ id }) {
     );
 }
 
-// Active alerts as an Accordion inside a Card: one row per alert, expanding
-// inline to a plain-English lead plus the verbatim NWS text.
+function AlertBody({ alert, showArea = true }) {
+    return (
+        <>
+            {showArea && alert.areaDesc && (
+                <p className="mb-3 break-words text-xs text-muted-foreground">{alert.areaDesc}</p>
+            )}
+            <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-4 font-mono text-xs leading-6">
+                {alert.description || alert.headline}
+            </pre>
+            {alert.instruction && (
+                <p className="mt-3 text-sm">
+                    <span className="font-semibold">What to do: </span>
+                    {alert.instruction}
+                </p>
+            )}
+        </>
+    );
+}
+
+// Active alerts as an Accordion inside a Card: one row per distinct alert
+// (identical event + end time collapse into one row with a count — see
+// groupAlerts), expanding inline to a plain-English lead plus the verbatim
+// NWS text and every zone it covers.
 export function AlertsSection({ alerts, office, sectionRef }) {
     const [expanded, setExpanded] = useState(null);
+    const groups = useMemo(() => groupAlerts(alerts), [alerts]);
     if (!alerts.length) return null;
     const tz = OFFICE_TIMEZONES[office];
     const now = Date.now();
@@ -74,22 +98,27 @@ export function AlertsSection({ alerts, office, sectionRef }) {
             <Card>
                 <CardHeader>
                     <CardTitle>Active alerts</CardTitle>
-                    <CardDescription>{describe(alerts, tz)}</CardDescription>
+                    <CardDescription>{describe(groups, alerts.length, tz)}</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Accordion type="single" collapsible value={expanded} onValueChange={setExpanded}>
-                        {alerts.map((alert, i) => {
-                            const kind = classifyAlertKind(alert.event);
+                        {groups.map((group) => {
+                            const kind = classifyAlertKind(group.event);
                             const meta = KIND_META[kind];
-                            const win = alertWindow(alert, tz, now);
-                            const value = `alert-${i}`;
+                            const win = alertWindow(group, tz, now);
+                            const value = `alert-${group.key}`;
                             return (
-                                <AccordionItem key={alert.id || i} value={value}>
+                                <AccordionItem key={group.key} value={value}>
                                     <AccordionTrigger className="hover:no-underline">
-                                        <span className="flex flex-wrap items-center gap-2 pr-2 text-left">
+                                        <span className="flex min-w-0 flex-wrap items-center gap-2 pr-2 text-left">
                                             <meta.Icon className="size-4 shrink-0" aria-hidden="true" />
-                                            <span className="font-medium">{alert.event}</span>
+                                            <span className="font-medium">{group.event}</span>
                                             <Badge variant={meta.badge}>{meta.label}</Badge>
+                                            {group.count > 1 && (
+                                                <Badge variant="outline" aria-label={`${group.count} alerts`}>
+                                                    ×{group.count}
+                                                </Badge>
+                                            )}
                                             {win?.upcoming && <Badge variant="outline">Upcoming</Badge>}
                                             {win && (
                                                 <span className="font-normal text-muted-foreground">{win.label}</span>
@@ -97,20 +126,30 @@ export function AlertsSection({ alerts, office, sectionRef }) {
                                         </span>
                                     </AccordionTrigger>
                                     <AccordionContent>
-                                        {alert.areaDesc && (
-                                            <p className="mb-3 text-xs text-muted-foreground">
-                                                {alert.areaDesc}
-                                            </p>
-                                        )}
-                                        {expanded === value && <AlertLead id={alert.id} />}
-                                        <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-4 font-mono text-xs leading-6">
-                                            {alert.description || alert.headline}
-                                        </pre>
-                                        {alert.instruction && (
-                                            <p className="mt-3 text-sm">
-                                                <span className="font-semibold">What to do: </span>
-                                                {alert.instruction}
-                                            </p>
+                                        {expanded === value && <AlertLead id={group.id} />}
+                                        {group.count === 1 ? (
+                                            <AlertBody alert={group} />
+                                        ) : (
+                                            <>
+                                                <p className="mb-3 text-xs text-muted-foreground">
+                                                    Issued for {group.count} zones — each has its own local details.
+                                                </p>
+                                                <div className="divide-y rounded-md border">
+                                                    {group.members.map((member, i) => (
+                                                        <details key={member.id || i} className="group/zone">
+                                                            <summary className="cursor-pointer list-none px-3 py-2 text-sm hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                                                                <span className="flex items-start gap-2">
+                                                                    <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform group-open/zone:rotate-90" aria-hidden="true" />
+                                                                    <span className="min-w-0 break-words">{member.areaDesc || `Zone ${i + 1}`}</span>
+                                                                </span>
+                                                            </summary>
+                                                            <div className="px-3 pb-3">
+                                                                <AlertBody alert={member} showArea={false} />
+                                                            </div>
+                                                        </details>
+                                                    ))}
+                                                </div>
+                                            </>
                                         )}
                                     </AccordionContent>
                                 </AccordionItem>

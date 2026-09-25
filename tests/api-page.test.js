@@ -37,7 +37,7 @@ describe('trust anchor pages exist and are substantial', () => {
                 .replace(/<[^>]+>/g, ' ')
                 .replace(/\s+/g, ' ').trim();
             expect(text.length).toBeGreaterThan(500);
-            expect(html).toContain('<h1 class="nameplate">');
+            expect(html).toContain('<h1 class="page-title">');
         }
     });
 

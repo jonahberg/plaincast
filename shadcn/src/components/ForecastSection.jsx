@@ -5,6 +5,7 @@ import { OFFICE_TIMEZONES } from '@data/offices.js';
 import { renderDiffHTML } from '@data/diff.js';
 import { sectionDomId, translateToPlainEnglish } from '@/lib/afd';
 import { translateSection } from '@/lib/ai';
+import { track } from '@/lib/track';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,6 +39,7 @@ export const ForecastSection = memo(function ForecastSection({
             observer.disconnect();
             translateSection(section, office, productId, issuanceTime).then(html => {
                 if (cancelled) return;
+                if (!html) track('ai-translate-fail', { office, section: section.key });
                 setAi(html ? { status: 'done', html } : { status: 'failed', html: null });
             });
         }, { rootMargin: '200px' });
@@ -90,7 +92,7 @@ export const ForecastSection = memo(function ForecastSection({
                 </CardHeader>
                 <CardContent>
                     <Tabs defaultValue="plain">
-                        <TabsList>
+                        <TabsList className="h-auto max-w-full flex-wrap">
                             <TabsTrigger value="plain">Plain English</TabsTrigger>
                             <TabsTrigger value="original">Original</TabsTrigger>
                             {changed && <TabsTrigger value="diff">What changed</TabsTrigger>}

@@ -56,7 +56,9 @@ const CENSUS_MAX = 6;
 
 // Event-class counts across the whole Severe/Extreme feed (warnings AND
 // watches — the census reports the sky, the Wire reports the offices).
-export function buildCensus(features) {
+// `max` defaults to the strip's cap; the calm-face check passes Infinity so a
+// rare tropical class below the top six still counts.
+export function buildCensus(features, max = CENSUS_MAX) {
     const counts = new Map();
     for (const feat of features || []) {
         const event = feat?.properties?.event;
@@ -66,7 +68,32 @@ export function buildCensus(features) {
     return [...counts.entries()]
         .map(([event, count]) => ({ event, count }))
         .sort((a, b) => (b.count - a.count) || a.event.localeCompare(b.event))
-        .slice(0, CENSUS_MAX);
+        .slice(0, max);
+}
+
+// Tropical-cyclone products. They never appear in an SPC convective outlook,
+// so a day with no thunderstorm risk can still be a day with a hurricane
+// watch up — and the headline must not call that sky quiet.
+const TROPICAL_EVENT = /hurricane|tropical storm|typhoon|storm surge/i;
+
+// The desk headline when SPC outlines no convective risk. "Quiet skies" is a
+// claim about the WHOLE sky, so it is only true when the severe/extreme feed
+// is empty too. Otherwise the headline narrows to what the outlook actually
+// says (no thunderstorm risk) and the note names what IS in effect —
+// tropical classes first, since those are the ones a reader would be most
+// misled about. Returns plain text; the caller escapes.
+export function calmHeadline(census) {
+    const all = (census || []).filter(c => c?.event && c.count > 0);
+    if (all.length === 0) return { title: 'Quiet skies nationally', note: null };
+    const tropical = all.filter(c => TROPICAL_EVENT.test(c.event));
+    const lead = (tropical.length ? tropical : all).slice(0, 3)
+        .map(c => `${c.event} ×${c.count}`).join(' · ');
+    return {
+        title: 'No severe thunderstorm risk outlined',
+        note: tropical.length
+            ? `The tropics are active: ${lead}`
+            : `Other hazards in effect: ${lead}`,
+    };
 }
 
 // SPC Day 1 Convective Outlook shape (verified live 2026-08-15):

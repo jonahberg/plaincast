@@ -44,7 +44,7 @@ import { fetchSevereAlerts, fetchAlertTotals, fetchSpcOutlook } from './_utils.j
 import { regexTranslate } from './_afd-sections.js';
 import {
     groupDispatches, buildCensus, parseSpcOutlook, parseRiskCategory,
-    parseDiscussionBody, digestArea, formatExpiry, nextOutlookTime,
+    parseDiscussionBody, digestArea, formatExpiry, nextOutlookTime, calmHeadline,
 } from './_national.js';
 import {
     sendNegotiated, send406, setVary, selectRepresentation, acceptHeader, HTML, MARKDOWN,
@@ -168,21 +168,25 @@ export function buildStripHtml(census, totals, quiet) {
 // small line naming the risk type and the outlined regions.
 //
 // CALM FACE: no outlined risk is not an empty section — it is the day's
-// actual news, so it gets a line of its own and no display word.
+// actual news, so it gets a line of its own and no display word. `census` is
+// the UNCAPPED event census: with anything in it (a hurricane watch, a flood
+// warning) the sky is not "quiet", only thunderstorm-free — see calmHeadline.
 //
 // The regions string arrives as SPC wrote it (SHOUTED, often with a leading
 // article that reads wrong once the display is lowercased): strip the leading
 // "THE " here, and let the stylesheet do the lowercasing.
-export function buildRiskHtml(risk) {
+export function buildRiskHtml(risk, census = []) {
     if (!risk?.level) {
+        const calm = calmHeadline(census);
+        const note = calm.note ? `\n        <p class="desk-risk-of">${escHtml(calm.note)}</p>` : '';
         return `<section class="desk-risk">
-        <p class="desk-risk-quiet">Quiet skies nationally</p>
+        <p class="desk-risk-quiet">${escHtml(calm.title)}</p>${note}
     </section>`;
     }
     const regions = String(risk.regions ?? '').replace(/^THE\s+/i, '').replace(/\s+/g, ' ').trim();
     const tail = regions ? ` · ${escHtml(regions)}` : '';
     return `<section class="desk-risk">
-        <p class="desk-risk-word">${escHtml(sentenceWord(risk.level))}</p>
+        <p class="desk-risk-word" data-level="${escHtml(risk.level.toLowerCase())}">${escHtml(sentenceWord(risk.level))}</p>
         <p class="desk-risk-of">risk of severe thunderstorms${tail}</p>
     </section>`;
 }
@@ -232,7 +236,7 @@ export function buildRailHtml(rails) {
         const noteHtml = note ? `<p class="desk-rail-note">${escHtml(note)}</p>` : '';
         return `        <div class="desk-rail-day${i === 0 ? ' now' : ''}">` +
             `<h3 class="desk-rail-label">${escHtml(r?.label ?? '')}</h3>` +
-            `<p class="desk-rail-level">${level}</p>${noteHtml}</div>`;
+            `<p class="desk-rail-level"${r?.level ? ` data-level="${escHtml(String(r.level).toLowerCase())}"` : ''}>${level}</p>${noteHtml}</div>`;
     });
     return `<section class="desk-rail" aria-label="Three-day severe outlook">
 ${cells.join('\n')}
@@ -295,7 +299,7 @@ export function buildClockHtml(nextTime) {
 // consume rather than from their output, so there is no HTML to strip and no
 // second parse to drift.
 export function buildDeskMarkdown({
-    census, totals, quiet, risk, summary, copy, rail, rows, issuanceTime, nextTime,
+    census, fullCensus, totals, quiet, risk, summary, copy, rail, rows, issuanceTime, nextTime,
 }) {
     const lines = [];
     lines.push('# The National Desk — where the weather is today');
@@ -321,7 +325,12 @@ export function buildDeskMarkdown({
         lines.push(`## ${sentenceWord(risk.level)} risk of severe thunderstorms`
             + `${regions ? ` — ${regions}` : ''}`);
     } else {
-        lines.push('## Quiet skies nationally');
+        const calm = calmHeadline(fullCensus ?? census);
+        lines.push(`## ${calm.title}`);
+        if (calm.note) {
+            lines.push('');
+            lines.push(calm.note);
+        }
     }
     lines.push('');
     if (summary) {
@@ -471,13 +480,19 @@ export default async function handler(req, res) {
         ];
 
         const census = buildCensus(features);
+        const fullCensus = buildCensus(features, Infinity);
         const nextTime = nextOutlookTime(new Date().toISOString());
 
-        const ssr = [
-            buildStripHtml(census, totals, quiet),
-            buildRiskHtml(risk),
+        // The story (risk moment, standfirst, running copy) reads as one
+        // card; the wrapper is presentational and changes no section order.
+        const story = [
+            buildRiskHtml(risk, fullCensus),
             buildLedeHtml({ summary, issuanceTime: outlook?.issuanceTime || null, deckSuppressed }),
             buildCopyHtml(copy),
+        ].filter(Boolean).join('\n\n    ');
+        const ssr = [
+            buildStripHtml(census, totals, quiet),
+            `<div class="desk-story card">\n    ${story}\n    </div>`,
             buildRailHtml(rail),
             buildWireHtml(rows),
             // Request-time clock. Near a slot boundary a CDN-cached copy can name a
@@ -489,7 +504,7 @@ export default async function handler(req, res) {
         if (!baked.includes(MARKER)) throw new Error('skeleton marker missing from shell');
 
         const markdown = buildDeskMarkdown({
-            census, totals, quiet, risk, summary, copy, rail, rows,
+            census, fullCensus, totals, quiet, risk, summary, copy, rail, rows,
             issuanceTime: outlook?.issuanceTime || null, nextTime,
         });
 

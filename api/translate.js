@@ -260,6 +260,28 @@ export function getTranslationCalendarContext(office, issuanceTime) {
     };
 }
 
+// Deterministically annotate Zulu clock times with the office's local time
+// before the model sees them ("VCSH through 15Z" → "VCSH through 15Z (10 AM
+// CDT)"). Haiku converting Zulu itself got it wrong in prod (LOT, Sep 25 2026:
+// 15Z rendered as "3 PM"). Only 2- or 4-digit HH/HHMM + Z tokens; DDHHMMZ and
+// TAF day/hour ranges are left alone. The local label is taken on the issuance
+// date so DST is right for the forecast window.
+export function annotateZuluTimes(text, office, issuanceTime) {
+    const timeZone = OFFICE_TIMEZONES[office];
+    if (!timeZone || typeof text !== 'string') return text;
+    const base = getSafeIssueDate(issuanceTime);
+    const fmt = new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric', minute: '2-digit', timeZone, timeZoneName: 'short',
+    });
+    return text.replace(/\b(\d{2})(\d{2})?Z\b(?!\s*\()/g, (tok, hh, mm) => {
+        const h = Number(hh), m = mm === undefined ? 0 : Number(mm);
+        if (h > 23 || m > 59) return tok;
+        const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), h, m));
+        const local = fmt.format(d).replace(':00 ', ' ').replace(/ /g, ' ');
+        return `${tok} (${local})`;
+    });
+}
+
 export function buildSystemPrompt({ section, office, issuanceTime }) {
     const calendarContext = getTranslationCalendarContext(office, issuanceTime);
 
@@ -281,7 +303,9 @@ Rules:
 - Do NOT use markdown headers (##, ###), horizontal rules (---), code blocks, or bullet lists
 - Write in flowing prose paragraphs only
 - Expand all NWS abbreviations naturally
-- Convert Zulu times to context (e.g., "early morning", "Tuesday afternoon")
+- Zulu times in the text are already annotated with the correct local time, e.g. "15Z (10 AM CDT)": use that local time, and never convert a Zulu time yourself
+- Airport and station identifiers (e.g., DPA, ORD, MDW, KMKE): never replace one with an airport or city name unless the text itself names it; write "the DPA airport" instead
+- Don't repeat a word that was just used (write "good flying conditions", never "conditions conditions")
 - Keep it concise but complete - no filler, no hedging
 - Use short paragraphs (2-3 sentences max each)
 - If there are hazards or watches/warnings, lead with those
@@ -375,7 +399,7 @@ export default async function handler(req, res) {
         const result = await generateText({
             model: 'anthropic/claude-haiku-4.5',
             system: systemPrompt,
-            prompt: text,
+            prompt: annotateZuluTimes(text, officeCode, promptIssuanceTime),
             maxOutputTokens: degraded ? DEGRADED_MAX_TOKENS : 1024,
             abortSignal: AbortSignal.timeout(15000),
         });

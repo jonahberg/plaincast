@@ -112,6 +112,21 @@
         @apply mt-5 mb-2 text-base font-semibold tracking-tight;
     }
 
+    /* Key takeaway: Key Messages split into real list items (lib/afd.js
+       splitTakeawayItems) */
+    .takeaway-list {
+        @apply my-1 space-y-1.5 pl-5;
+    }
+    ul.takeaway-list {
+        @apply list-disc;
+    }
+    ol.takeaway-list {
+        @apply list-decimal;
+    }
+    .takeaway-list li {
+        @apply pl-1;
+    }
+
     /* Server-rendered digest (#ssr-root): classes emitted by api/home.js and
        api/office-page.js buildSsrHtml — plain rules, since Tailwind cannot
        scan the api/ template strings. The React app removes this region on
@@ -144,7 +159,7 @@
 
     /* "What changed" diff view (lib renderDiffHTML classes) */
     .diff-prose p {
-        @apply mb-3 rounded-sm px-2 py-1 last:mb-0;
+        @apply mb-3 rounded-sm px-2 py-1 break-words last:mb-0;
     }
     .diff-added {
         @apply bg-chart-2/15 text-foreground;

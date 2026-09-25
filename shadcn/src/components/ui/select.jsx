@@ -16,11 +16,26 @@ function SelectValue({ ...props }) {
     return <SelectPrimitive.Value data-slot="select-value" {...props} />;
 }
 
-function SelectTrigger({ className, size = 'default', children, ...props }) {
+// A CLOSED Radix trigger typeahead-selects on any printable key, so a focused
+// office picker turned the j/k section shortcuts into "switch to Jackson /
+// Kansas City" (Sep 2026). Printable keys on the closed trigger are swallowed
+// here (preventDefault makes Radix skip its own handler); Enter/Space/arrows
+// still open it, and typeahead inside the open list is unaffected.
+function blockClosedTypeahead(e) {
+    if (e.key.length === 1 && e.key !== ' ' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+    }
+}
+
+function SelectTrigger({ className, size = 'default', children, onKeyDown, ...props }) {
     return (
         <SelectPrimitive.Trigger
             data-slot="select-trigger"
             data-size={size}
+            onKeyDown={(e) => {
+                onKeyDown?.(e);
+                if (!e.defaultPrevented) blockClosedTypeahead(e);
+            }}
             className={cn(
                 "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50 flex w-fit items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
                 className

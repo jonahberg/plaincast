@@ -88,8 +88,9 @@ CACHE_NAME in docs/sw.js on docs/ changes) still applies while the legacy
 client stays committed.
 
 ## Design System
-Always read DESIGN.md before making any visual or UI decisions.
-All font choices, colors, spacing, and aesthetic direction are defined there.
+Always read DESIGN.md before making any visual or UI decisions. Since
+2026-09-25 the current system is shadcn/ui sitewide (Jonah's decision); the
+older "Dispatch" editorial system in DESIGN.md is archived.
 Do not deviate without explicit user approval.
 In QA mode, flag any code that doesn't match DESIGN.md.
 

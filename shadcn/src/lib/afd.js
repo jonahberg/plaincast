@@ -290,11 +290,68 @@ export function annotateSegments(text) {
 }
 
 // Key takeaway: KEY MESSAGES verbatim, else first sentences of the synopsis.
+// Key Messages are usually a list — "- a\n\n- b" (LOT) or "1) a\n\n2) b"
+// (OKX) — and collapsing whitespace ran them into one line. Returns
+// { ordered, preamble, items, trailing } for a real list of 2+ items, else
+// null (plain prose stays a paragraph). Numbered markers must count up from
+// 1, so a wrapped line that merely starts with a number ("70. Then…") is
+// read as a continuation, not a new item.
+const BULLET_MARKER = /^\s*[-*•]\s+/;
+const NUMBER_MARKER = /^\s*\(?(\d{1,2})[).]\s+/;
+
+export function splitTakeawayItems(text) {
+    const lines = String(text || '').split('\n');
+    const items = [];
+    const preamble = [];
+    const trailing = [];
+    let current = null;
+    let ordered = null;
+    let blankSince = false;
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) { blankSince = true; continue; }
+        const bullet = line.match(BULLET_MARKER);
+        const num = line.match(NUMBER_MARKER);
+        const numberOk = num && ordered !== false && Number(num[1]) === items.length + (current !== null ? 1 : 0) + 1;
+        const bulletOk = bullet && ordered !== true;
+        if (numberOk || bulletOk) {
+            // A paragraph between two items belongs to the earlier one.
+            if (current !== null) items.push(trailing.length ? `${current} ${trailing.join(' ')}` : current);
+            ordered = Boolean(numberOk);
+            current = line.slice((numberOk ? num : bullet)[0].length).trim();
+            trailing.length = 0;
+        } else if (current !== null && !blankSince && !trailing.length) {
+            current += ` ${trimmed}`;
+        } else if (current !== null) {
+            trailing.push(trimmed);
+        } else {
+            preamble.push(trimmed);
+        }
+        blankSince = false;
+    }
+    if (current !== null) items.push(current);
+    if (items.length < 2) return null;
+    // Text after the list that isn't a continuation belongs to no item.
+    return { ordered, preamble: preamble.join(' '), items, trailing: trailing.join(' ') };
+}
+
+function takeawayInline(text, tz) {
+    const flat = text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
+    return stripAIArtifacts(translateToPlainEnglish(flat, tz).replace(/<\/?p>/g, ''));
+}
+
 export function extractTakeaway(sections, tz) {
     const messagesSection = sections.find(s => s.key === 'Messages');
     if (messagesSection) {
-        const text = messagesSection.text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
-        return stripAIArtifacts(translateToPlainEnglish(text, tz).replace(/<\/?p>/g, ''));
+        const list = splitTakeawayItems(messagesSection.text);
+        if (list) {
+            const tag = list.ordered ? 'ol' : 'ul';
+            const lis = list.items.map(item => `<li>${takeawayInline(item, tz)}</li>`).join('');
+            const pre = list.preamble ? `<p>${takeawayInline(list.preamble, tz)}</p>` : '';
+            const post = list.trailing ? `<p>${takeawayInline(list.trailing, tz)}</p>` : '';
+            return `${pre}<${tag} class="takeaway-list">${lis}</${tag}>${post}`;
+        }
+        return takeawayInline(messagesSection.text, tz);
     }
     const synSection = sections.find(s => s.key === 'Synopsis')
         || sections.find(s => s.key === 'Discussion')

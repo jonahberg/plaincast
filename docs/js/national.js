@@ -3,9 +3,9 @@
 // deterministic deck, wire, census, and the office index all render server-side.
 // Everything here is a bonus on top of that floor, so every failure path is
 // silence: never an error state, never console noise in normal operation.
-// Untested DOM glue, same treatment as /js/theme-init.js.
+// Untested DOM glue, same treatment as /js/theme-init.js and /js/site-chrome.js.
 
-// Today's date in the masthead folio (the shell can't bake a date — it's CDN-cached).
+// Today's date in the page-intro kicker (#folio-date) (the shell can't bake a date — it's CDN-cached).
 try {
     const folio = document.getElementById('folio-date');
     if (folio) {

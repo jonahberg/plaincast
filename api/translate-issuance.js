@@ -7,7 +7,7 @@ import { generateText } from 'ai';
 import { OFFICE_NAMES, SECTION_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractSections } from './_afd-sections.js';
-import { buildSystemPrompt } from './translate.js';
+import { annotateZuluTimes, buildSystemPrompt } from './translate.js';
 import { getSnapshot, putSnapshot } from './_snapshots.js';
 import { sendError } from './_errors.js';
 
@@ -145,7 +145,7 @@ export default async function handler(req, res) {
                 const result = await generateText({
                     model: 'anthropic/claude-haiku-4.5',
                     system: buildSystemPrompt({ section: s.key, office, issuanceTime }),
-                    prompt: s.text,
+                    prompt: annotateZuluTimes(s.text, office, issuanceTime),
                     maxOutputTokens: 1024,
                     abortSignal: AbortSignal.timeout(15000),
                 });

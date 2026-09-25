@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { storedTheme } from '@/lib/theme';
+
 const KEY = 'plaincast-theme';
 
 // Follows the OS until the user explicitly toggles — only a toggle persists
@@ -7,9 +9,11 @@ const KEY = 'plaincast-theme';
 // theme). The pre-paint script in index.html applies the same logic before
 // first paint.
 export function useTheme() {
-    const [theme, setTheme] = useState(() =>
-        document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-    );
+    const [theme, setTheme] = useState(() => {
+        const stored = storedTheme();
+        if (stored) return stored;
+        return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    });
 
     useEffect(() => {
         document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -19,7 +23,7 @@ export function useTheme() {
     useEffect(() => {
         const mq = matchMedia('(prefers-color-scheme: dark)');
         const onChange = () => {
-            try { if (localStorage.getItem(KEY)) return; } catch (e) { /* fall through */ }
+            if (storedTheme()) return;
             setTheme(mq.matches ? 'dark' : 'light');
         };
         mq.addEventListener('change', onChange);

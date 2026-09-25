@@ -93,6 +93,36 @@ export async function fetchAlerts(office) {
     }
 }
 
+// One row per distinct (event, end time): a tropical system puts the same
+// "Tropical Storm Watch until 1:00 PM" on every zone (HFO listed 38 rows, 19
+// of them one watch). Groups keep first-seen order (fetchAlerts already sorts
+// warnings first); the lead alert's fields stand for the group, `members`
+// keeps every alert, `areas` is the de-duplicated zone list and
+// `descriptions` the distinct texts (usually one).
+export function alertGroupKey(alert) {
+    return `${alert.event || ''}|${alert.ends || alert.expires || ''}`;
+}
+
+export function groupAlerts(alerts) {
+    const groups = new Map();
+    for (const a of alerts || []) {
+        const key = alertGroupKey(a);
+        let g = groups.get(key);
+        if (!g) {
+            g = { ...a, key, count: 0, members: [], areas: [], descriptions: [] };
+            groups.set(key, g);
+        }
+        g.count++;
+        g.members.push(a);
+        for (const area of String(a.areaDesc || '').split(';').map(s => s.trim()).filter(Boolean)) {
+            if (!g.areas.includes(area)) g.areas.push(area);
+        }
+        const text = (a.description || a.headline || '').trim();
+        if (text && !g.descriptions.includes(text)) g.descriptions.push(text);
+    }
+    return [...groups.values()];
+}
+
 // Warning → warning, Watch → watch, Statement → statement, everything else →
 // advisory (same default as the vanilla client's classifyAlertKind).
 export function classifyAlertKind(eventName) {
