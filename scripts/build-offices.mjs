@@ -24,6 +24,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { buildAppShell } from './app-shell.mjs';
+import { officeTitle } from '../shadcn/src/lib/seo.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DOCS = join(__dirname, '..', 'docs');
@@ -42,9 +43,9 @@ export function escHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export function officeTitle(city) {
-    return `${city} NWS Forecast in Plain English · Plaincast`;
-}
+// officeTitle lives in shadcn/src/lib/seo.js so the React app's
+// document.title uses the exact same format (re-exported for callers here).
+export { officeTitle };
 export function officeDescription(city, code) {
     return `The latest National Weather Service Area Forecast Discussion for ${city} (${code}), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.`;
 }

@@ -146,6 +146,11 @@
     <!-- Pre-paint theme (blocking, external file: the CSP has no
          script-src 'unsafe-inline'): must run before first paint. -->
     <script src="/theme-init.js"></script>
+    <!-- Vercel Web Analytics + Speed Insights (same-origin /_vercel/*, so
+         script-src 'self' covers them). Web Analytics also defines window.va,
+         which the app's failure telemetry (src/lib/track.js) reports through. -->
+    <script defer src="/_vercel/insights/script.js"></script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/app.css">
     <link rel="modulepreload" crossorigin href="/assets/vendor.js">
 <script type="application/ld+json">

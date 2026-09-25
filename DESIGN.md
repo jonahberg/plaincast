@@ -1,6 +1,16 @@
 # Design System — Plaincast
 
-> **CURRENT SYSTEM: "The Dispatch" (2026-06-11).** Plaincast is set as a *printed weather
+> **CURRENT SYSTEM: shadcn/ui (decided by Jonah, 2026-09-25).** The whole site — the React
+> app at `/` and `/o/CODE/` and the server-rendered `/national/`, trust pages and 404 — uses
+> the shadcn look: neutral shadcn color tokens (`shadcn/src/index.css`, mirrored in
+> `docs/styles.css`) with light/dark, the system font stack, shadcn cards/badges/buttons,
+> and one shared header and footer. Source of truth for components: `shadcn/src/components/`.
+> Theme choice lives in `localStorage['plaincast-theme']` on every page.
+>
+> Everything below ("The Dispatch" and the earlier editorial system) is ARCHIVED — kept for
+> history, no longer to be followed.
+
+> **ARCHIVED — "The Dispatch" (2026-06-11).** Plaincast is set as a *printed weather
 > almanac that happens to live on the web* — never a SaaS dashboard. The sections below
 > ("Product Context" onward) are the earlier editorial system and are SUPERSEDED where they
 > conflict with this block. North star: *a printed weather almanac on the web.* Anti-tells to

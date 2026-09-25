@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { RefreshCw, WifiOff, X } from 'lucide-react';
+import { FileWarning, RefreshCw, WifiOff, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { OFFICE_NAMES, OFFICE_TIMEZONES } from '@data/offices.js';
 import { computeDiff } from '@data/diff.js';
@@ -10,6 +11,8 @@ import {
 import { fetchEditionSnapshot } from '@/lib/ai';
 import { loadLastEdition, saveLastEdition } from '@/lib/offline';
 import { currentRoute, officeUrl } from '@/lib/route';
+import { changelogTitle, officeCanonical, officeFeedHref, officeTitle } from '@/lib/seo';
+import { track } from '@/lib/track';
 import { formatIssueTime, timeAgo } from '@/lib/format';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -27,6 +30,7 @@ import { ForecastSection } from '@/components/ForecastSection';
 import { AlertsSection } from '@/components/AlertsSection';
 import { Footer } from '@/components/Footer';
 import { KbdDialog } from '@/components/KbdDialog';
+import { ChangelogView } from '@/components/ChangelogView';
 
 const OFFICE_KEY = 'plaincast-office';
 const HISTORY_LIMIT = 10;
@@ -34,13 +38,13 @@ const HISTORY_LIMIT = 10;
 function initialState() {
     const route = currentRoute();
     if (route.office && OFFICE_NAMES[route.office]) {
-        return { office: route.office, editionId: route.edition, fromUrl: true };
+        return { office: route.office, editionId: route.edition, view: route.view, fromUrl: true };
     }
     try {
         const saved = localStorage.getItem(OFFICE_KEY);
-        if (saved && OFFICE_NAMES[saved]) return { office: saved, editionId: null, fromUrl: false };
+        if (saved && OFFICE_NAMES[saved]) return { office: saved, editionId: null, view: route.view, fromUrl: false };
     } catch (e) { /* private mode */ }
-    return { office: 'LOX', editionId: null, fromUrl: false };
+    return { office: 'LOX', editionId: null, view: route.view, fromUrl: false };
 }
 
 function LoadingSkeleton() {
@@ -71,7 +75,9 @@ function LoadingSkeleton() {
 
 export default function App() {
     const { theme, toggle } = useTheme();
-    const [{ office, editionId }, setLocation] = useState(initialState);
+    const [{ office, editionId, view }, setLocation] = useState(initialState);
+    const inChangelog = view === 'changelog';
+    const [pickerOpen, setPickerOpen] = useState(false);
     const [state, setState] = useState({ status: 'loading' });
     const [alerts, setAlerts] = useState([]);
     const [severe, setSevere] = useState(false);
@@ -112,12 +118,40 @@ export default function App() {
         setNewerEdition(null);
         setActiveKey(null);
 
-        const alertsPromise = fetchAlerts(code);
+        // Alerts load in parallel and merge in when they arrive — they never
+        // hold the forecast back (a slow alerts API used to blank the page).
+        fetchAlerts(code).then(({ alerts: liveAlerts, severe: severeNow }) => {
+            if (gen !== generation.current) return;
+            setAlerts(liveAlerts);
+            setSevere(severeNow);
+        });
+
+        // Parsed product → render state; an unparseable product gets its own
+        // 'empty' state (a link to the raw text) instead of a blank page.
+        const toState = (product, extra) => {
+            const fullText = product.productText || '';
+            const { sections, forecaster } = parseSections(fullText);
+            return {
+                status: sections.length ? 'ready' : 'empty',
+                sections,
+                forecaster,
+                issuedAt: product.issuanceTime ? new Date(product.issuanceTime) : null,
+                fullText,
+                productId: product.id || null,
+                archived: false,
+                offline: false,
+                savedAt: null,
+                rawUrl: null,
+                ...extra,
+            };
+        };
+
         try {
             const graph = await fetchAFDList(code);
             if (gen !== generation.current) return;
             const items = historyItems(graph, HISTORY_LIMIT);
             setEditions(items);
+            if (!items.length) throw new Error('No forecast discussions found for this office.');
 
             let product = null;
             let rawUrl = null;
@@ -126,8 +160,8 @@ export default function App() {
             if (target) {
                 product = await fetchProduct(target.url);
                 rawUrl = target.url;
-                archived = target.id !== items[0]?.id;
-            } else if (targetEditionId) {
+                archived = target.id !== items[0].id;
+            } else {
                 // Aged out of NWS retention — a durable server snapshot (if any)
                 // keeps old shares from rotting.
                 const snap = await fetchEditionSnapshot(code, targetEditionId);
@@ -136,32 +170,31 @@ export default function App() {
                     product = { id: targetEditionId, productText: snap.productText, issuanceTime: snap.issuanceTime };
                     archived = true;
                 } else {
+                    // Gone for good: show the latest and drop the dead
+                    // ?edition= from the address bar (replace, not push — the
+                    // stale URL shouldn't sit in history as a second entry).
                     product = await fetchProduct(items[0].url);
                     rawUrl = items[0].url;
+                    if (gen !== generation.current) return;
+                    history.replaceState(history.state, '', officeUrl(code, null));
+                    renderedRoute.current = currentRoute();
+                    toast('That edition is no longer available', { description: 'Showing the latest forecast instead.' });
                 }
             }
             if (gen !== generation.current) return;
             if (!product) throw new Error('No forecast discussions found for this office.');
 
-            const { alerts: liveAlerts, severe: severeNow } = await alertsPromise;
-            if (gen !== generation.current) return;
-
-            const { sections, forecaster } = parseSections(product.productText || '');
-            const next = {
-                status: 'ready',
-                sections,
-                forecaster,
+            const next = toState(product, {
                 rawUrl,
-                issuedAt: product.issuanceTime ? new Date(product.issuanceTime) : null,
-                fullText: product.productText || '',
                 productId: product.id || target?.id || null,
                 archived,
-                offline: false,
-                savedAt: null,
-            };
+            });
             setState(next);
-            setAlerts(liveAlerts);
-            setSevere(severeNow);
+            if (next.status === 'empty') {
+                track('afd-parse-empty', { office: code });
+                announce(`The ${OFFICE_NAMES[code]} forecast couldn't be read`);
+                return;
+            }
             announce(`Forecast for ${OFFICE_NAMES[code]} loaded`);
 
             if (!archived) {
@@ -182,30 +215,23 @@ export default function App() {
                     fetchProduct(items[1].url).then(prev => {
                         if (gen !== generation.current) return;
                         const prevSections = parseSections(prev.productText || '').sections;
-                        const results = computeDiff(prevSections, sections);
+                        const results = computeDiff(prevSections, next.sections);
                         setDiffs(new Map(results.map(r => [r.key, r])));
                     }).catch(() => { /* the tabs simply don't appear */ });
                 }
             }
         } catch (e) {
             if (gen !== generation.current) return;
+            track('afd-fetch-fail', { office: code });
             // Offline / NWS outage: fall back to the last edition this browser
             // read for this office.
             const cached = loadLastEdition(code);
             if (cached?.product?.productText) {
-                const { sections, forecaster } = parseSections(cached.product.productText);
-                setState({
-                    status: 'ready',
-                    sections,
-                    forecaster,
+                setState(toState(cached.product, {
                     rawUrl: cached.rawUrl || null,
-                    issuedAt: cached.product.issuanceTime ? new Date(cached.product.issuanceTime) : null,
-                    fullText: cached.product.productText,
-                    productId: cached.product.id || null,
-                    archived: false,
                     offline: true,
                     savedAt: cached.savedAt || null,
-                });
+                }));
                 announce('Offline — showing the last edition you read');
             } else {
                 setState({ status: 'error', message: e.message || String(e) });
@@ -214,24 +240,51 @@ export default function App() {
         }
     }, [announce]);
 
-    useEffect(() => { load(office, editionId); }, [office, editionId, load]);
-
     useEffect(() => {
-        document.title = `Plaincast — ${OFFICE_NAMES[office]} (${office})`;
-    }, [office]);
+        if (inChangelog) {
+            generation.current++; // strand any in-flight forecast load
+            return;
+        }
+        load(office, editionId);
+    }, [office, editionId, inChangelog, load]);
+
+    // Title + per-office head links, in the SSR formats (lib/seo.js is shared
+    // with scripts/build-offices.mjs). Only on an office URL: the homepage
+    // keeps its own title and canonical until the reader navigates to one.
+    useEffect(() => {
+        if (!currentRoute().office) return;
+        const city = OFFICE_NAMES[office];
+        document.title = inChangelog ? changelogTitle(city) : officeTitle(city);
+        const setAttr = (selector, attr, value) => {
+            document.head.querySelector(selector)?.setAttribute(attr, value);
+        };
+        setAttr('link[rel="canonical"]', 'href', officeCanonical(office));
+        setAttr('meta[property="og:url"]', 'content', officeCanonical(office));
+        setAttr('link[rel="alternate"][type="text/markdown"]', 'href', officeCanonical(office));
+        setAttr('link[rel="alternate"][type="application/rss+xml"]', 'href', officeFeedHref(office));
+    }, [office, inChangelog]);
 
     // ─── Navigation (canonical /o/CODE/ URLs, ?edition= permalinks) ──
-    const navigate = useCallback((code, targetEditionId = null, { push = true } = {}) => {
-        setLocation({ office: code, editionId: targetEditionId });
+    const navigate = useCallback((code, targetEditionId = null, { push = true, view: nextView = null } = {}) => {
+        setLocation({ office: code, editionId: nextView ? null : targetEditionId, view: nextView });
         try { localStorage.setItem(OFFICE_KEY, code); } catch (e) { /* private mode */ }
         if (push) {
-            history.pushState({}, '', officeUrl(code, targetEditionId));
+            history.pushState({}, '', officeUrl(code, targetEditionId, nextView));
             renderedRoute.current = currentRoute();
         }
         if (!targetEditionId) window.scrollTo({ top: 0 });
     }, []);
 
-    const changeOffice = useCallback((code) => navigate(code, null), [navigate]);
+    // Switching office keeps the current view (the ledger stays the ledger).
+    const changeOffice = useCallback((code) => navigate(code, null, { view }), [navigate, view]);
+    const openChangelog = useCallback((e) => {
+        if (e && (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0)) return;
+        e?.preventDefault();
+        navigate(office, null, { view: 'changelog' });
+    }, [navigate, office]);
+    const leaveChangelog = useCallback((targetEditionId = null) => {
+        navigate(office, targetEditionId);
+    }, [navigate, office]);
     const selectEdition = useCallback((id) => {
         navigate(office, id && id !== editions[0]?.id ? id : null);
     }, [navigate, office, editions]);
@@ -241,10 +294,11 @@ export default function App() {
             const route = currentRoute();
             // Fragment-only navigation (contents links) also fires popstate.
             if (route.office === renderedRoute.current.office
-                && route.edition === renderedRoute.current.edition) return;
+                && route.edition === renderedRoute.current.edition
+                && route.view === renderedRoute.current.view) return;
             renderedRoute.current = route;
             const code = route.office && OFFICE_NAMES[route.office] ? route.office : office;
-            navigate(code, route.edition, { push: false });
+            navigate(code, route.edition, { push: false, view: route.view });
         };
         window.addEventListener('popstate', onPop);
         return () => window.removeEventListener('popstate', onPop);
@@ -256,7 +310,7 @@ export default function App() {
     const productId = state.status === 'ready' ? state.productId : null;
     const viewingHistorical = state.status === 'ready' && state.archived;
     useEffect(() => {
-        if (!productId || viewingHistorical) return;
+        if (!productId || viewingHistorical || inChangelog) return;
         const interval = severe ? 2 * 60 * 1000 : 10 * 60 * 1000;
         const timer = setInterval(async () => {
             if (document.hidden) return;
@@ -272,11 +326,11 @@ export default function App() {
             } catch (e) { /* silent retry next cycle */ }
         }, interval);
         return () => clearInterval(timer);
-    }, [office, productId, severe, viewingHistorical]);
+    }, [office, productId, severe, viewingHistorical, inChangelog]);
 
     // Online/offline transitions
     useEffect(() => {
-        const onOnline = () => { setOfflineNow(false); if (state.offline) load(office, editionId); };
+        const onOnline = () => { setOfflineNow(false); if (state.offline && !inChangelog) load(office, editionId); };
         const onOffline = () => setOfflineNow(true);
         window.addEventListener('online', onOnline);
         window.addEventListener('offline', onOffline);
@@ -284,7 +338,7 @@ export default function App() {
             window.removeEventListener('online', onOnline);
             window.removeEventListener('offline', onOffline);
         };
-    }, [office, editionId, state.offline, load]);
+    }, [office, editionId, state.offline, inChangelog, load]);
 
     const tz = OFFICE_TIMEZONES[office];
     const ready = state.status === 'ready';
@@ -338,10 +392,13 @@ export default function App() {
         return () => observer.disconnect();
     }, [ready, navSections]);
 
-    // Keyboard shortcuts: j/k section hop, / office search, ? help
+    // Keyboard shortcuts: j/k section hop, / office search, ? help. Skipped
+    // while focus is in a form control, including a Radix Select trigger
+    // (role=combobox) — there the keys belong to the control.
     useEffect(() => {
         const onKey = (e) => {
-            if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+            if (e.defaultPrevented) return;
+            if (e.target.closest?.('input, textarea, select, [contenteditable], [role="combobox"], [role="listbox"], [data-slot="select-trigger"]')) return;
             if (e.metaKey || e.ctrlKey || e.altKey) return;
             if (e.key === '?') {
                 e.preventDefault();
@@ -349,7 +406,8 @@ export default function App() {
             } else if (e.key === '/') {
                 e.preventDefault();
                 selectRef.current?.focus();
-            } else if (e.key === 'j' || e.key === 'k') {
+                setPickerOpen(true);
+            } else if ((e.key === 'j' || e.key === 'k') && !inChangelog) {
                 const keys = navSections.map(s => s.key);
                 if (!keys.length) return;
                 e.preventDefault();
@@ -362,7 +420,7 @@ export default function App() {
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [navSections, activeKey, jumpTo]);
+    }, [navSections, activeKey, jumpTo, inChangelog]);
 
     // Stable ref callbacks so memo(ForecastSection) isn't defeated by a fresh
     // closure every render.
@@ -380,7 +438,8 @@ export default function App() {
         return refCallbacks.current.get(key);
     }, []);
 
-    const shareUrl = officeUrl(office, viewingHistorical ? state.productId : null).toString();
+    const shareUrl = officeUrl(office, viewingHistorical ? state.productId : null, view).toString();
+    const changelogHref = officeUrl(office, null, 'changelog').toString();
 
     return (
         <TooltipProvider delayDuration={200}>
@@ -401,6 +460,8 @@ export default function App() {
                     theme={theme}
                     onToggleTheme={toggle}
                     selectRef={selectRef}
+                    pickerOpen={pickerOpen}
+                    onPickerOpenChange={setPickerOpen}
                 />
 
                 <main id="sections" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
@@ -437,13 +498,22 @@ export default function App() {
                         </Alert>
                     )}
 
-                    {state.status === 'loading' && (
+                    {inChangelog && (
+                        <ChangelogView
+                            office={office}
+                            announce={announce}
+                            onBack={() => leaveChangelog(null)}
+                            onOpenEdition={(id) => leaveChangelog(id)}
+                        />
+                    )}
+
+                    {!inChangelog && state.status === 'loading' && (
                         <div aria-busy="true" aria-label="Loading the forecast">
                             <LoadingSkeleton />
                         </div>
                     )}
 
-                    {state.status === 'error' && (
+                    {!inChangelog && state.status === 'error' && (
                         <Alert variant="destructive">
                             <AlertTitle>Couldn't fetch the forecast</AlertTitle>
                             <AlertDescription>
@@ -455,7 +525,37 @@ export default function App() {
                         </Alert>
                     )}
 
-                    {ready && (
+                    {!inChangelog && state.status === 'empty' && (
+                        <Alert>
+                            <FileWarning />
+                            <AlertTitle>This forecast couldn't be decoded</AlertTitle>
+                            <AlertDescription>
+                                <p>
+                                    The {OFFICE_NAMES[office]} office issued a discussion Plaincast couldn't split
+                                    into sections — its format may be unusual this time.
+                                </p>
+                                <p className="mt-2 flex flex-wrap gap-2">
+                                    {state.rawUrl && (
+                                        <Button asChild size="sm">
+                                            <a href={state.rawUrl} target="_blank" rel="noopener noreferrer">
+                                                Read the original NWS text
+                                            </a>
+                                        </Button>
+                                    )}
+                                    <Button variant="outline" size="sm" onClick={() => load(office, editionId)}>
+                                        Try again
+                                    </Button>
+                                </p>
+                                {!state.rawUrl && state.fullText && (
+                                    <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-4 font-mono text-xs leading-6">
+                                        {state.fullText}
+                                    </pre>
+                                )}
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
+                    {!inChangelog && ready && (
                         <>
                             <PageIntro
                                 office={office}
@@ -469,6 +569,8 @@ export default function App() {
                                 currentEditionId={viewingHistorical ? state.productId : null}
                                 onSelectEdition={selectEdition}
                                 viewingHistorical={viewingHistorical}
+                                changelogHref={changelogHref}
+                                onOpenChangelog={openChangelog}
                             />
                             <Explainer />
                             <SectionNav sections={navSections} activeKey={activeKey} onJump={jumpTo} />
@@ -495,7 +597,7 @@ export default function App() {
                     )}
                 </main>
 
-                <Footer office={office} rawUrl={ready ? state.rawUrl : null} />
+                <Footer office={office} rawUrl={!inChangelog && ready ? state.rawUrl : null} />
             </div>
             <KbdDialog open={kbdOpen} onOpenChange={setKbdOpen} />
             <Toaster theme={theme} position="bottom-right" />

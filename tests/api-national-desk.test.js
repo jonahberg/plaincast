@@ -36,9 +36,9 @@ mock.module('../api/_utils.js', () => ({
 
 const {
     default: handler, buildStripHtml, buildRiskHtml, buildLedeHtml,
-    buildCopyHtml, buildRailHtml, buildWireHtml, buildClockHtml,
+    buildCopyHtml, buildRailHtml, buildWireHtml, buildClockHtml, buildDeskMarkdown,
 } = await import('../api/national-desk.js');
-const { parseSpcOutlook, parseRiskCategory } = await import('../api/_national.js');
+const { parseSpcOutlook, parseRiskCategory, calmHeadline, buildCensus } = await import('../api/_national.js');
 const { OFFICE_NAMES } = await import('../docs/js/offices.js');
 const { default: alerts } = await import('./fixtures/national/severe-alerts.json');
 const { default: swody1 } = await import('./fixtures/national/swody1.json');
@@ -143,6 +143,36 @@ describe('buildRiskHtml', () => {
         expect(html).not.toContain('desk-risk-word');
     });
 
+    // Live 2026-09-25: the desk said "Quiet skies nationally" over a census
+    // strip showing 19 Tropical Storm Watch and 8 Hurricane Watch. SPC
+    // convective outlooks never carry tropical products, so "no outlined
+    // risk" alone cannot justify calling the sky quiet.
+    test('calm face with tropical alerts active is not "quiet"', () => {
+        const census = [
+            { event: 'Coastal Flood Warning', count: 30 },
+            { event: 'Tropical Storm Watch', count: 19 },
+            { event: 'Hurricane Watch', count: 8 },
+        ];
+        const html = buildRiskHtml(null, census);
+        expect(html).not.toContain('Quiet skies nationally');
+        expect(html).toContain('No severe thunderstorm risk outlined');
+        expect(html).toContain('The tropics are active: Tropical Storm Watch ×19 · Hurricane Watch ×8');
+        expect(html).toContain('desk-risk-quiet');
+        expect(html).not.toContain('desk-risk-word');
+    });
+
+    test('calm face with only non-tropical alerts names them instead', () => {
+        const html = buildRiskHtml(null, [{ event: 'Flood Warning', count: 4 }]);
+        expect(html).not.toContain('Quiet skies nationally');
+        expect(html).toContain('Other hazards in effect: Flood Warning ×4');
+    });
+
+    test('an outlined risk ignores the census entirely', () => {
+        const html = buildRiskHtml({ level: 'SLIGHT', regions: '' }, [{ event: 'Hurricane Watch', count: 8 }]);
+        expect(html).toContain('>Slight<');
+        expect(html).not.toContain('tropics');
+    });
+
     test('omits the separator when the headline names no regions', () => {
         const html = buildRiskHtml({ level: 'HIGH', regions: '' });
         expect(html).toContain('>High<');
@@ -154,6 +184,39 @@ describe('buildRiskHtml', () => {
         const html = buildRiskHtml({ level: 'SLIGHT', regions: '<img src=x> & THE REST' });
         expect(html).not.toContain('<img');
         expect(html).toContain('&amp;');
+    });
+});
+
+describe('calmHeadline', () => {
+    test('quiet only when nothing is in effect', () => {
+        expect(calmHeadline([])).toEqual({ title: 'Quiet skies nationally', note: null });
+        expect(calmHeadline(undefined).title).toBe('Quiet skies nationally');
+    });
+    test('tropical classes lead the note even when outnumbered', () => {
+        const c = calmHeadline([
+            { event: 'Flood Warning', count: 50 },
+            { event: 'Storm Surge Watch', count: 2 },
+        ]);
+        expect(c.title).toBe('No severe thunderstorm risk outlined');
+        expect(c.note).toBe('The tropics are active: Storm Surge Watch ×2');
+    });
+    test('buildCensus(features, Infinity) keeps a rare tropical class past the strip cap', () => {
+        const feats = [];
+        for (const [event, n] of [['A Warning', 9], ['B Warning', 8], ['C Warning', 7], ['D Warning', 6],
+            ['E Warning', 5], ['F Warning', 4], ['Hurricane Watch', 1]]) {
+            for (let i = 0; i < n; i++) feats.push({ properties: { event } });
+        }
+        expect(buildCensus(feats).some(c => c.event === 'Hurricane Watch')).toBe(false);
+        expect(calmHeadline(buildCensus(feats, Infinity)).note).toContain('Hurricane Watch ×1');
+    });
+    test('the Markdown twin says the same thing as the HTML', () => {
+        const md = buildDeskMarkdown({
+            census: [], fullCensus: [{ event: 'Hurricane Watch', count: 8 }], totals: null, quiet: 68,
+            risk: null, summary: null, copy: [], rail: [], rows: [], issuanceTime: null, nextTime: '1630 UTC',
+        });
+        expect(md).toContain('## No severe thunderstorm risk outlined');
+        expect(md).toContain('The tropics are active: Hurricane Watch ×8');
+        expect(md).not.toContain('Quiet skies');
     });
 });
 
@@ -531,7 +594,12 @@ describe('GET /api/national-desk (SSR /national/)', () => {
         await handler(createReq(), res);
         expect(res.statusCode).toBe(200);
         expect(res.headers['cache-control']).toBe('public, s-maxage=600, stale-while-revalidate=1800');
-        expect(res.body).toContain('Quiet skies nationally');
+        // The fixture feed carries a Tropical Storm Warning, so the sky is
+        // thunderstorm-free but NOT quiet — the headline must say so.
+        expect(res.body).not.toContain('Quiet skies nationally');
+        expect(res.body).toContain('No severe thunderstorm risk outlined');
+        expect(res.body).toContain('The tropics are active: Tropical Storm Warning ×1');
+        expect(res.body).toContain('desk-risk-quiet');
         expect(res.body).not.toContain('desk-risk-word');
         // the page continues: copy, rail, wire, clock all still there
         expect(res.body).toContain('class="desk-copy"');
@@ -599,6 +667,19 @@ describe('GET /api/national-desk (SSR /national/)', () => {
         expect(res.body).not.toContain('active products nationwide');
         expect(res.body).toContain(`<b>${DESK_COUNT}</b>/${DESK_COUNT} desks quiet`);
         expect(res.body).not.toContain('Setting the type…');
+    });
+
+    it('says "Quiet skies" only when the severe feed is empty too', async () => {
+        mockOutlooks.DY1 = {
+            productText: '...NO SEVERE THUNDERSTORM AREAS FORECAST...\n\n...SUMMARY...\nA quiet day nationally with no organized severe threat.\n\n...Discussion...\nWeak flow aloft and limited moisture will keep thunderstorms disorganized nationwide today.\n',
+            issuanceTime: swody1.issuanceTime,
+        };
+        mockFeatures = [];
+        const res = createRes();
+        await handler(createReq(), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toContain('Quiet skies nationally');
+        expect(res.body).not.toContain('No severe thunderstorm risk outlined');
     });
 
     it('never interprets $-sequences from upstream text as replacement patterns', async () => {

@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
-import { History, Lightbulb, Moon, Sunrise, Sunset, Thermometer } from 'lucide-react';
+import { History, Lightbulb, ListTree, Moon, Rss, Sunrise, Sunset, Thermometer } from 'lucide-react';
 
 import { OFFICE_COORDS, OFFICE_NAMES, OFFICE_TIMEZONES } from '@data/offices.js';
 import { confidenceScore, confidenceWord } from '@data/timeline.js';
 import { moonPhase, sunTimes } from '@/lib/almanac';
+import { officeFeedHref } from '@/lib/seo';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -15,7 +16,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { timeAgo } from '@/lib/format';
+import { readingOrNull, timeAgo } from '@/lib/format';
 
 const CONF_BAR = {
     High: 'bg-chart-2',
@@ -40,11 +41,14 @@ function Almanac({ office, conditions }) {
     const tz = OFFICE_TIMEZONES[office];
     const cells = useMemo(() => {
         const out = [];
-        if (conditions && Number.isFinite(+conditions.temp)) {
-            out.push({ Icon: Thermometer, label: 'Now', value: `${+conditions.temp}°` });
+        // null/undefined mean "no reading" (+null would render as 0°).
+        const temp = readingOrNull(conditions?.temp);
+        const normal = readingOrNull(conditions?.normal);
+        if (temp !== null) {
+            out.push({ Icon: Thermometer, label: 'Now', value: `${temp}°` });
         }
-        if (conditions && Number.isFinite(+conditions.normal)) {
-            out.push({ Icon: Thermometer, label: 'Normal high', value: `${+conditions.normal}°` });
+        if (normal !== null) {
+            out.push({ Icon: Thermometer, label: 'Normal high', value: `${normal}°` });
         }
         const coords = OFFICE_COORDS[office];
         if (coords) {
@@ -82,6 +86,7 @@ function Almanac({ office, conditions }) {
 export function PageIntro({
     office, takeawayHTML, forecaster, issueLine, fullText, conditions,
     changelog, editions, currentEditionId, onSelectEdition, viewingHistorical,
+    changelogHref, onOpenChangelog,
 }) {
     const tz = OFFICE_TIMEZONES[office];
     const score = confidenceScore(fullText);
@@ -124,10 +129,12 @@ export function PageIntro({
                         <History className="size-3.5" aria-hidden="true" />
                         {/* A deep-linked edition older than the NWS retention window
                             isn't in the list — show it as "Archived", never as Latest. */}
+                        {/* Always controlled: '' (no matching item) shows the
+                            placeholder instead of flipping to uncontrolled. */}
                         <Select
                             value={!currentEditionId || editions.some(e => e.id === currentEditionId)
                                 ? (currentEditionId || editions[0].id)
-                                : undefined}
+                                : ''}
                             onValueChange={onSelectEdition}
                         >
                             <SelectTrigger size="sm" className="h-7 gap-1 border-none px-1 text-sm shadow-none" aria-label="Forecast edition">
@@ -165,6 +172,25 @@ export function PageIntro({
                     {changelog.changelog}
                 </p>
             )}
+
+            <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <a
+                    href={changelogHref}
+                    onClick={onOpenChangelog}
+                    className="inline-flex items-center gap-1.5 font-medium underline-offset-4 hover:underline"
+                >
+                    <ListTree className="size-3.5" aria-hidden="true" />
+                    See every revision
+                </a>
+                <a
+                    href={officeFeedHref(office)}
+                    className="inline-flex items-center gap-1.5 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                    type="application/rss+xml"
+                >
+                    <Rss className="size-3.5" aria-hidden="true" />
+                    RSS feed for {OFFICE_NAMES[office]}
+                </a>
+            </p>
         </section>
     );
 }
