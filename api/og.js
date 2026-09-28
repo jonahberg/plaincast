@@ -18,13 +18,15 @@ import { OFFICE_NAMES, OFFICE_TIMEZONES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractLede, regexTranslate, sectionHealth } from './_afd-sections.js';
 
-// ─── The Dispatch card identity (DESIGN.md) ─────────────────────────
-// Warm paper, ink, hairline rules. Dark text on paper only — no gradients,
-// no icons. Fraunces for the wordmark + city, Source Serif for the takeaway.
-const PAPER = '#f7f3ea';
-const INK = '#211d17';
-const RULE = '#d8cdb6';
-const MUTED = '#6d6453';
+// ─── Card identity: the shadcn look (DESIGN.md, current) ────────────
+// Same neutral tokens as shadcn/src/index.css (light theme), Geist type.
+// The site itself uses the system font stack, which a PNG cannot carry, so
+// the card uses Geist, shadcn's default typeface.
+const BACKGROUND = '#ffffff';   // --background oklch(1 0 0)
+const FOREGROUND = '#0a0a0a';   // --foreground oklch(0.145 0 0)
+const MUTED = '#737373';        // --muted-foreground oklch(0.556 0 0)
+const BORDER = '#e5e5e5';       // --border oklch(0.922 0 0)
+const SECONDARY = '#f5f5f5';    // --secondary oklch(0.97 0 0)
 const WIDTH = 1200;
 const HEIGHT = 630;
 
@@ -34,16 +36,21 @@ const ID_MAX = 64;
 
 const FALLBACK_TAKEAWAY = 'What the forecast actually says.';
 
-// Card-only static TTF subsets (satori cannot read the site's woff2 files).
-// Fraunces is pinned at wght 600; Source Serif 4 at 400; latin + latin-1
-// punctuation coverage, ~27KB/~35KB. import.meta.url-relative reads are
-// traced by Vercel's bundler; vercel.json includeFiles is belt-and-braces.
+// Card-only static TTF subsets of Geist (OFL, api/_og-fonts/GEIST-LICENSE.txt):
+// Regular + SemiBold, latin + latin-1 + typographic punctuation, ~30KB each.
+// GPOS/GSUB/kern are stripped on purpose: satori mis-applies Geist's kerning
+// around spaces (visibly uneven word gaps). Regenerate with fonttools:
+//   pyftsubset Geist-<W>.ttf --unicodes=U+0020-007E,U+00A0-00FF,U+2013,U+2014,
+//     U+2018,U+2019,U+201C,U+201D,U+2022,U+2026,U+00B7,U+00B0
+//     --layout-features='' --drop-tables+=GPOS,GSUB,kern
+// import.meta.url-relative reads are traced by Vercel's bundler; vercel.json
+// includeFiles is belt-and-braces.
 let fontCache = null;
 function loadFonts() {
     if (!fontCache) {
         fontCache = [
-            readFileSync(new URL('./_og-fonts/fraunces-card.ttf', import.meta.url)),
-            readFileSync(new URL('./_og-fonts/source-serif-card.ttf', import.meta.url)),
+            readFileSync(new URL('./_og-fonts/geist-regular-card.ttf', import.meta.url)),
+            readFileSync(new URL('./_og-fonts/geist-semibold-card.ttf', import.meta.url)),
         ];
     }
     return fontCache;
@@ -100,27 +107,44 @@ export function buildCardElement({ city, dateline, takeaway }) {
             height: '100%',
             display: 'flex',
             flexDirection: 'column',
-            backgroundColor: PAPER,
-            color: INK,
-            padding: '64px 72px',
-            fontFamily: '"Source Serif 4"',
+            backgroundColor: BACKGROUND,
+            color: FOREGROUND,
+            padding: '60px 72px',
+            fontFamily: 'Geist',
+            fontWeight: 400,
         },
         [
-            // Masthead: Fraunces wordmark bound by a hairline rule.
-            div({ display: 'flex', flexDirection: 'column' }, [
-                div({ fontFamily: 'Fraunces', fontSize: 38, fontWeight: 600, letterSpacing: '-0.5px' }, 'Plaincast'),
-                div({ marginTop: 22, height: 1, width: '100%', backgroundColor: RULE }, undefined),
+            // Header: wordmark + an outline badge, like the site header.
+            div({ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }, [
+                div({ fontSize: 36, fontWeight: 600, letterSpacing: '-0.8px' }, 'Plaincast'),
+                div({
+                    display: 'flex',
+                    fontSize: 20,
+                    fontWeight: 600,
+                    color: FOREGROUND,
+                    backgroundColor: SECONDARY,
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: 8,
+                    padding: '6px 14px',
+                }, 'Forecast discussion'),
             ]),
-            // Centerpiece: city headline, small-caps dateline, takeaway deck.
+            // Centerpiece: city, dateline, takeaway.
             div({ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'center' }, [
-                div({ fontFamily: 'Fraunces', fontSize: 84, fontWeight: 600, letterSpacing: '-1.5px', lineHeight: 1.05 }, city),
-                div({ marginTop: 18, fontSize: 21, letterSpacing: '2.5px', color: MUTED }, dateline.toUpperCase()),
-                div({ display: 'block', marginTop: 30, fontSize: 33, lineHeight: 1.45, lineClamp: 3 }, takeaway),
+                div({ fontSize: 84, fontWeight: 600, letterSpacing: '-2.5px', lineHeight: 1.05 }, city),
+                div({ marginTop: 16, fontSize: 24, color: MUTED }, dateline),
+                div({ display: 'block', marginTop: 28, fontSize: 34, lineHeight: 1.4, letterSpacing: '-0.3px', lineClamp: 3 }, takeaway),
             ]),
-            // Folio: hairline rule, then the site name.
-            div({ display: 'flex', flexDirection: 'column' }, [
-                div({ height: 1, width: '100%', backgroundColor: RULE }, undefined),
-                div({ marginTop: 20, fontSize: 21, letterSpacing: '1.5px', color: MUTED }, 'plaincast.live'),
+            // Footer: border-top, site name + what it is.
+            div({
+                display: 'flex',
+                justifyContent: 'space-between',
+                paddingTop: 22,
+                borderTop: `1px solid ${BORDER}`,
+                fontSize: 21,
+                color: MUTED,
+            }, [
+                div({ display: 'flex' }, 'plaincast.live'),
+                div({ display: 'flex' }, 'NWS forecasts in plain English'),
             ]),
         ]
     );
@@ -128,13 +152,13 @@ export function buildCardElement({ city, dateline, takeaway }) {
 
 // ─── renderCardPng ──────────────────────────────────────────────────
 export async function renderCardPng({ city, dateline, takeaway }) {
-    const [fraunces, sourceSerif] = loadFonts();
+    const [geistRegular, geistSemiBold] = loadFonts();
     const image = new ImageResponse(buildCardElement({ city, dateline, takeaway }), {
         width: WIDTH,
         height: HEIGHT,
         fonts: [
-            { name: 'Fraunces', data: fraunces, weight: 600, style: 'normal' },
-            { name: 'Source Serif 4', data: sourceSerif, weight: 400, style: 'normal' },
+            { name: 'Geist', data: geistRegular, weight: 400, style: 'normal' },
+            { name: 'Geist', data: geistSemiBold, weight: 600, style: 'normal' },
         ],
     });
     return Buffer.from(await image.arrayBuffer());

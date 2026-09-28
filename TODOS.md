@@ -15,9 +15,9 @@
 - **Shared cache for AI results.** Caches are in-memory per instance; Blob is not
   provisioned, so `api/_snapshots.js` is inert. Provisioning Blob (or moving to
   Vercel Runtime Cache) turns cold starts into cache hits.
-- **@vercel/og 1.x** (major). Clears the 2 high `sharp` advisories in `bun audit`.
-  Not reachable today (sharp only rasterises our own SVG), so it rides with the
-  next OG change. `api/og.js` also still uses the archived Dispatch fonts.
+- **@vercel/og is pinned to exactly 1.0.1.** 1.0.2 and 1.0.3 import `dist/hb.wasm`
+  (harfbuzz) but do not ship it, so every render throws ENOENT. Before bumping,
+  check the tarball: `npm pack @vercel/og@<v> --dry-run | grep hb.wasm`.
 - **Other majors:** ai 7, vite 8, @vitejs/plugin-react 6, lucide-react 1.x.
 
 ## Completed

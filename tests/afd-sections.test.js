@@ -407,7 +407,7 @@ describe('GET /api/og (raster share cards)', () => {
 });
 
 describe('OG card element tree (pure builder — text content the PNG cannot expose)', () => {
-    it('carries the Dispatch identity: paper, ink, wordmark, city, dateline, takeaway, folio', () => {
+    it('carries the shadcn identity: neutral tokens, Geist, wordmark, city, dateline, takeaway, footer', () => {
         const el = buildCardElement({
             city: 'New York',
             dateline: buildDateline('2026-07-03T23:49:00+00:00', 'OKX'),
@@ -416,13 +416,15 @@ describe('OG card element tree (pure builder — text content the PNG cannot exp
         const flat = JSON.stringify(el);
         expect(flat).toContain('Plaincast');
         expect(flat).toContain('New York');
-        expect(flat).toContain('AREA FORECAST DISCUSSION · FRI, JUL 3, 7:49 PM EDT');
+        expect(flat).toContain('Area Forecast Discussion · Fri, Jul 3, 7:49 PM EDT');
         expect(flat).toContain('Dangerous heat and humidity');
         expect(flat).not.toContain('FXUS');
         expect(flat).toContain('plaincast.live');
-        expect(flat).toContain('#f7f3ea'); // warm paper
-        expect(flat).toContain('#211d17'); // ink
-        expect(flat).toContain('#d8cdb6'); // hairline rule
+        expect(flat).toContain('#ffffff'); // --background
+        expect(flat).toContain('#0a0a0a'); // --foreground
+        expect(flat).toContain('#e5e5e5'); // --border
+        expect(flat).toContain('Geist');
+        expect(flat).not.toMatch(/Fraunces|Source Serif|#f7f3ea/); // archived Dispatch look
         expect(flat).not.toMatch(/gradient/i);
     });
 
