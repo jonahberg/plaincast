@@ -35,7 +35,7 @@ mock.module('../api/_utils.js', () => ({
     productUrlFromItem: (item) => item?.id || null,
 }));
 
-const { default: handler, changedParagraphs } = await import('../api/changelog.js');
+const { default: handler, changedParagraphs, coldBudget } = await import('../api/changelog.js');
 
 function createRes() {
     return {
@@ -86,6 +86,7 @@ describe('changedParagraphs', () => {
 
 describe('GET /api/changelog', () => {
     beforeEach(() => {
+        coldBudget.reset();
         mockListThrows = false;
         mockListDelay = 0;
         mockItemsByOffice = null;
@@ -221,6 +222,7 @@ describe('GET /api/changelog', () => {
 
 describe('GET /api/changelog?id= (pinned issuance for the timeline)', () => {
     beforeEach(() => {
+        coldBudget.reset();
         mockListThrows = false;
         mockGenerateText = async () => ({
             text: 'Snow chances faded from the Tuesday forecast.',
@@ -292,5 +294,55 @@ describe('GET /api/changelog — repeated query param', () => {
         await handler(createReq({ query: { office: ['LOX', 'OKX'] } }), res);
         expect(res.statusCode).toBe(400);
         expect(res.body.code).toBe('invalid_office');
+    });
+});
+
+describe('GET /api/changelog — Sep 28 2026 audit hardening', () => {
+    beforeEach(() => {
+        coldBudget.reset();
+        mockListThrows = false;
+        mockListDelay = 0;
+        mockItemsByOffice = null;
+        generateCalls = 0;
+        mockGenerateText = async () => ({ text: 'A cold front Thursday brings showers and cooler air.', finishReason: 'stop' });
+    });
+
+    it('400s (unknown_param, no-store) on junk query params — no list fetch, no model call', async () => {
+        setScenario();
+        listCalls = 0;
+        const res = createRes();
+        await handler(createReq({ query: { office: 'SEW', _: '123' } }), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.code).toBe('unknown_param');
+        expect(res.headers['cache-control']).toBe('no-store');
+        expect(listCalls).toBe(0);
+        expect(generateCalls).toBe(0);
+    });
+
+    it('accepts exactly the params the client sends (office, id)', async () => {
+        const items = setScenario();
+        const res = createRes();
+        await handler(createReq({ query: { office: 'SEW', id: items[0].id } }), res);
+        expect(res.statusCode).toBe(200);
+    });
+
+    it('503s (over_capacity) past the instance-wide cold budget — not a cached soft-fail 200', async () => {
+        const offices = ['LOX', 'SGX', 'MTR', 'STO', 'EKA', 'SEW', 'PQR', 'MFR', 'OKX', 'BOX'];
+        // 60 cold pinned pairs (distinct ids) exhaust the budget.
+        for (let i = 0; i < 60; i++) {
+            const items = setScenario();
+            const r = createRes();
+            // Rotating IPs: exactly the caller a per-IP limit can't stop.
+            await handler(createReq({ query: { office: offices[i % offices.length], id: items[0].id }, headers: { 'x-forwarded-for': `198.18.0.${i}` } }), r);
+            expect(r.statusCode).toBe(200);
+        }
+        expect(generateCalls).toBe(60);
+        const items = setScenario();
+        const res = createRes();
+        await handler(createReq({ query: { office: 'LOX', id: items[0].id }, headers: { 'x-forwarded-for': '198.18.1.1' } }), res);
+        expect(res.statusCode).toBe(503);
+        expect(res.body.code).toBe('over_capacity');
+        expect(res.headers['cache-control']).toBe('no-store');
+        expect(generateCalls).toBe(60);
     });
 });

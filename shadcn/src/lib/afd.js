@@ -169,10 +169,60 @@ export function sectionDomId(key) {
     return 'section-' + key.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
 }
 
+// Zulu (UTC) times → office-local clock times, for the instant regex
+// translation shown before the AI arrives. Handles HHZ, HHMMZ, single-digit
+// HZ and ranges ("6-9Z", "05-09z", "20z-22z", "15-18Z" — both ends
+// converted). Each time resolves to its first occurrence at/after the
+// issuance hour (a range's end at/after its start), so DST is taken from the
+// right day. Invalid clock values and aviation tokens (DDHHMMZ stamps,
+// 27015G25KT, P6SM, FL250) never match. Forked verbatim into docs/js/app.js
+// and shadcn/src/lib/afd.js (tests/shadcn-parity.test.js).
+export function zuluToLocal(text, tz, issuedAt) {
+    const issued = issuedAt ? new Date(issuedAt) : null;
+    const base = issued && !isNaN(issued.getTime()) ? issued : new Date();
+    const floor = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), base.getUTCHours()));
+    const parse = (tok) => {
+        const h = parseInt(tok.length === 4 ? tok.substring(0, 2) : tok, 10);
+        const m = tok.length === 4 ? parseInt(tok.substring(2), 10) : 0;
+        return h > 23 || m > 59 ? null : { h, m };
+    };
+    const at = (t, notBefore) => {
+        const d = new Date(Date.UTC(notBefore.getUTCFullYear(), notBefore.getUTCMonth(), notBefore.getUTCDate(), t.h, t.m));
+        return d < notBefore ? new Date(d.getTime() + 86400000) : d;
+    };
+    const fmt = (d) => {
+        const m = d.getUTCMinutes();
+        try {
+            return d.toLocaleString('en-US', { hour: 'numeric', minute: m > 0 ? '2-digit' : undefined, timeZone: tz, timeZoneName: 'short' })
+                .replace(/[  ]/g, ' ');
+        } catch (e) {
+            const stdOffsets = { 'America/New_York': -5, 'America/Detroit': -5, 'America/Indiana/Indianapolis': -5, 'America/Chicago': -6, 'America/Denver': -7, 'America/Phoenix': -7, 'America/Los_Angeles': -8, 'America/Anchorage': -9, 'Pacific/Honolulu': -10 };
+            const offset = stdOffsets[tz] || -8;
+            const localHr = (d.getUTCHours() + offset + 24) % 24;
+            const ampm = localHr >= 12 ? 'PM' : 'AM';
+            const hr12 = localHr === 0 ? 12 : localHr > 12 ? localHr - 12 : localHr;
+            return `${hr12}${m > 0 ? ':' + String(m).padStart(2, '0') : ''} ${ampm}`;
+        }
+    };
+    return text.replace(/\b(\d{4}|\d{1,2})(?:Z?\s*[-–]\s*(\d{4}|\d{1,2}))?Z\b/gi, (tok, a, b) => {
+        const t1 = parse(a);
+        const t2 = b === undefined ? null : parse(b);
+        if (!t1 || (b !== undefined && !t2)) return tok;
+        const start = at(t1, floor);
+        const first = fmt(start);
+        if (!t2) return first;
+        const second = fmt(at(t2, start));
+        const suffix = first.split(' ').pop();
+        return second.endsWith(' ' + suffix)
+            ? `${first.slice(0, -suffix.length - 1)}–${second}`
+            : `${first}–${second}`;
+    });
+}
+
 // Returns HTML (paragraphs, sub-headers, <strong> highlights). tz is the
 // office IANA zone used for Zulu → local conversion (a parameter here; the
 // vanilla client reads the `currentOffice` global instead).
-export function translateToPlainEnglish(text, tz = 'America/Los_Angeles') {
+export function translateToPlainEnglish(text, tz = 'America/Los_Angeles', issuedAt = null) {
     let t = text;
 
     t = t.replace(/\d{2}\/\d{3,4}\s*(?:AM|PM|Z)\.?\s*/gi, '');
@@ -188,24 +238,8 @@ export function translateToPlainEnglish(text, tz = 'America/Los_Angeles') {
         t = t.replace(pat, rep);
     }
 
-    // Zulu times → local (DST-aware); same fallback offset table as app.js
-    // when the Intl zone lookup throws.
-    t = t.replace(/\b(\d{2,4})Z\b/gi, (_, h) => {
-        const utcHour = parseInt(h.length <= 2 ? h : h.substring(0, 2));
-        const utcMin = h.length > 2 ? parseInt(h.substring(2)) : 0;
-        const now = new Date();
-        const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), utcHour, utcMin));
-        try {
-            return utcDate.toLocaleString('en-US', { hour: 'numeric', minute: utcMin > 0 ? '2-digit' : undefined, timeZone: tz, timeZoneName: 'short' });
-        } catch (e) {
-            const stdOffsets = { 'America/New_York': -5, 'America/Detroit': -5, 'America/Indiana/Indianapolis': -5, 'America/Chicago': -6, 'America/Denver': -7, 'America/Phoenix': -7, 'America/Los_Angeles': -8, 'America/Anchorage': -9, 'Pacific/Honolulu': -10 };
-            const offset = stdOffsets[tz] || -8;
-            const localHr = (utcHour + offset + 24) % 24;
-            const ampm = localHr >= 12 ? 'PM' : 'AM';
-            const hr12 = localHr === 0 ? 12 : localHr > 12 ? localHr - 12 : localHr;
-            return `${hr12} ${ampm}`;
-        }
-    });
+    // Zulu times → local (DST-aware), dated from the issuance time.
+    t = zuluToLocal(t, tz, issuedAt);
 
     t = t.replace(/(\d{3})\s*dam\b/g, '$1-decameter');
     t = t.replace(/(\d{3,4})\s*mb\b/g, '$1 mb level');

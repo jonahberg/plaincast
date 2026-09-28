@@ -30,6 +30,9 @@ export const CODES = {
     timeout: 'The request took too long and was abandoned.',
     internal_error: 'Something failed on our side.',
     forbidden: 'The request was understood but refused.',
+    unknown_param: 'The query string carries a parameter this endpoint does not accept.',
+    over_capacity: 'The service is at its AI-generation budget for this minute.',
+    alert_expired: 'The alert has expired and is no longer explained.',
 };
 
 const OFFICE_HINT = 'Pass ?office=<CODE> with a 3-letter NWS office code, e.g. ?office=LOX. '
@@ -47,6 +50,9 @@ const HINTS = {
     timeout: 'Retry once. If it persists, the upstream is degraded.',
     internal_error: `If this persists, report it at ${DOCS_URL}`,
     forbidden: `See the endpoint's stated contract at ${SPEC_URL}`,
+    unknown_param: `Remove the extra parameters; the accepted ones are listed at ${SPEC_URL}`,
+    over_capacity: 'Retry in about a minute. This budget is service-wide, not per client.',
+    alert_expired: 'Fetch the current alerts for the area; NWS issues updates under new ids.',
 };
 
 // Build the body without sending it — used by handlers that need to merge extra

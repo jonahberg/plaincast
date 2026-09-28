@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ChevronRight, Eye, Info, Loader2 } from 'lucide-react';
 
 import { OFFICE_TIMEZONES } from '@data/offices.js';
-import { alertWindow, classifyAlertKind, groupAlerts } from '@/lib/nws';
+import { alertWindow, badgeRepeatsEvent, classifyAlertKind, groupAlerts } from '@/lib/nws';
 import { explainAlert } from '@/lib/ai';
 import {
     Accordion,
@@ -113,7 +113,12 @@ export function AlertsSection({ alerts, office, sectionRef }) {
                                         <span className="flex min-w-0 flex-wrap items-center gap-2 pr-2 text-left">
                                             <meta.Icon className="size-4 shrink-0" aria-hidden="true" />
                                             <span className="font-medium">{group.event}</span>
-                                            <Badge variant={meta.badge}>{meta.label}</Badge>
+                                            {/* "Coastal Flood Advisory" + an "Advisory" badge would be
+                                                read as "…Advisory Advisory": the badge is visual only
+                                                when the event name already says it. */}
+                                            <Badge variant={meta.badge} aria-hidden={badgeRepeatsEvent(group.event, meta.label) || undefined}>
+                                                {meta.label}
+                                            </Badge>
                                             {group.count > 1 && (
                                                 <Badge variant="outline" aria-label={`${group.count} alerts`}>
                                                     ×{group.count}

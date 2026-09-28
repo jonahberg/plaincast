@@ -93,7 +93,7 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 │  Every page above serves HTML to browsers and   │
 │  Markdown to `Accept: text/markdown`, one URL.  │
 │                                                 │
-│  No framework. No build step. ES modules.       │
+│  Frontend: shadcn/ui + React SPA (Vite build).  │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -101,13 +101,12 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 
 ## Technical Details
 
-- **Modular vanilla app** - ES modules in `docs/js/`, no framework, no build step
-- **Zero frontend dependencies** - Vanilla HTML/CSS/JS with ES module imports
+- **shadcn/ui frontend** - React + Vite SPA in `shadcn/`, built into `shadcn/dist` on deploy; shared data modules (glossary, offices, abbreviations, diff) live in `docs/js/`
 - **NWS API** - Pulls directly from `api.weather.gov` (no API key needed)
 - **AI summaries** - Claude Haiku via Vercel AI Gateway with OIDC auth
 - **Forecast diff** - Paragraph-level comparison showing what changed between AFD versions
-- **Custom typography** - Fraunces display, Source Serif 4 body, DM Sans UI, JetBrains Mono for raw AFD; self-hosted subsetted woff2 (~393KB total, real small caps and oldstyle figures)
-- **Light/dark mode** - Editorial design with warm cream backgrounds, dark mode with warm near-blacks
+- **One look sitewide** - shadcn/ui components and tokens on every page (see `DESIGN.md`)
+- **Light/dark mode** - Follows the system setting, with a toggle that persists across pages
 - **Mobile responsive** - Side-by-side stacks to vertical on screens under 768px
 - **Accessible** - ARIA roles on modals and tooltips, focus trapping, keyboard navigation, severity marks
 - **DST-aware** - Zulu time conversion uses IANA timezones per office
@@ -125,10 +124,13 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 ## Run Locally
 
 ```bash
-cd docs && python3 -m http.server 8765
-# Open http://localhost:8765
-# Note: AI summaries require the Vercel serverless function.
-# Locally, sections will fall back to regex translation.
+bun install && (cd shadcn && bun install)
+cd shadcn && bun run dev
+# Frontend only. AI summaries, SSR pages and Markdown negotiation are
+# serverless functions: run `vercel dev` from the repo root for those.
+# Without them, sections fall back to regex translation.
+
+bun test tests/   # full suite
 ```
 
 ---

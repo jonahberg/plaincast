@@ -1,0 +1,23 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2   # tests rely on this version's mock.module semantics
+      - run: bun install --frozen-lockfile
+      - run: bun test tests/
+      - run: bun install --frozen-lockfile
+        working-directory: shadcn
+      - run: bun run build
+        working-directory: shadcn
+      - run: bunx @redocly/cli lint docs/openapi.json

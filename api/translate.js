@@ -6,6 +6,10 @@ import { generateText } from 'ai';
 import { OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { sendError } from './_errors.js';
+import { extractSections } from './_afd-sections.js';
+// The client parser, imported so verification matches what browsers send.
+// Pure module (relative imports only); shadcn/package.json is type:module.
+import { parseSections } from '../shadcn/src/lib/afd.js';
 
 // Translation cache: keyed on sha256(whitespace-normalized text + canonical
 // section + office), 4-hour TTL
@@ -148,7 +152,7 @@ rateLimitCleanupTimer.unref?.();
 // Only translate text that actually appears in the office's recent AFD, so the
 // public endpoint can't be used to translate arbitrary (billable) text.
 // An AFD is identical for everyone for hours, so this is cached per office.
-const afdTextCache = new Map(); // office -> { products: [{norm, issuanceTime}], time }
+const afdTextCache = new Map(); // office -> { products: [{sections, issuanceTime}], time }
 const AFD_TEXT_TTL = 10 * 60 * 1000; // 10 min
 
 // Case-sensitive on purpose: the cache key is built from this same
@@ -158,24 +162,44 @@ function normalizeForMatch(s) {
     return String(s).replace(/\$\$|&&/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-// True when `text` is a contiguous chunk of the normalized product text.
-// parseSections() output is always a contiguous slice of productText (headers,
-// $$/&& markers and the forecaster tail are removed), so this does not reject
-// legitimate section text — measured Sep 25 2026: 722/722 sections across all
-// 68 offices' two latest AFDs matched exactly. There is deliberately no
-// head+tail fallback: it let arbitrary text through between a real first and
-// last 160 characters.
-export function textMatchesAFD(text, normalizedProductTexts) {
-    const n = normalizeForMatch(text);
-    if (n.length < 20) return false;
-    return normalizedProductTexts.some(p => p.includes(n));
+// Exact-section verification (Sep 28 2026 audit). The old check accepted any
+// 20+ char contiguous slice of a recent product, so every distinct slice (and
+// every one of ~12 section labels) was a fresh billed model call. Now the text
+// must EQUAL — after whitespace normalisation — one whole section body, and
+// the section label comes from the matched section, never the client.
+//
+// The index is built with the CLIENT parser first (shadcn/src/lib/afd.js
+// parseSections: exactly what the React app POSTs — it also strips forecaster
+// signatures, which extractSections does not), then the server parser, so a
+// section either parser produces verifies. Measured against the live latest
+// AFD of all 68 offices: see tests/translate-section-parity.test.js.
+const UNTRANSLATED_SECTIONS = new Set(['Active Alerts']);
+
+export function buildSectionIndex(productText) {
+    const index = new Map(); // normalized section text -> canonical section key
+    const add = (key, text) => {
+        const sectionKey = canonicalSectionKey(key);
+        if (UNTRANSLATED_SECTIONS.has(sectionKey)) return;
+        const n = normalizeForMatch(text);
+        if (n.length < 20 || index.has(n)) return;
+        index.set(n, sectionKey);
+    };
+    if (typeof productText !== 'string' || !productText) return index;
+    try {
+        for (const s of parseSections(productText).sections) add(s.key, s.text);
+    } catch { /* fall through to the server parser */ }
+    for (const s of extractSections(productText)) add(s.key, s.text);
+    return index;
 }
 
-// The matched product (not just a boolean) — its issuanceTime is the trusted,
-// server-derived calendar context for the prompt.
-export function findMatchingAFD(text, products) {
-    for (const prod of products) {
-        if (textMatchesAFD(text, [prod.norm])) return prod;
+// The matched product AND section — the product's issuanceTime is the
+// trusted calendar context; the section key is the trusted label.
+export function findMatchingSection(text, products) {
+    const n = normalizeForMatch(text);
+    if (n.length < 20) return null;
+    for (const product of products) {
+        const sectionKey = product.sections?.get(n);
+        if (sectionKey) return { product, sectionKey };
     }
     return null;
 }
@@ -192,7 +216,7 @@ async function getOfficeAFDProducts(office) {
             const prod = await fetchAFDProduct(url, { signal: AbortSignal.timeout(8000) });
             if (typeof prod?.productText !== 'string') return null;
             return {
-                norm: normalizeForMatch(prod.productText),
+                sections: buildSectionIndex(prod.productText),
                 issuanceTime: typeof prod.issuanceTime === 'string' ? prod.issuanceTime : null,
             };
         } catch { return null; }
@@ -263,21 +287,101 @@ export function getTranslationCalendarContext(office, issuanceTime) {
 // Deterministically annotate Zulu clock times with the office's local time
 // before the model sees them ("VCSH through 15Z" → "VCSH through 15Z (10 AM
 // CDT)"). Haiku converting Zulu itself got it wrong in prod (LOT, Sep 25 2026:
-// 15Z rendered as "3 PM"). Only 2- or 4-digit HH/HHMM + Z tokens; DDHHMMZ and
-// TAF day/hour ranges are left alone. The local label is taken on the issuance
-// date so DST is right for the forecast window.
+// 15Z rendered as "3 PM").
+//
+// Forms (Sep 28 2026 audit; upper- or lowercase z): HZ / HHZ / HHMMZ, ranges H-HZ / HH-HHZ /
+// HHMM-HHMMZ (both ends annotated: "6-9Z (1-4 AM CDT Tue)"), and a DD/ day
+// prefix ("29/12Z", "29/12-18Z") that pins the UTC day. DDHHMMZ stamps, 3-digit
+// tokens, TAF DDHH/DDHH ranges and wind/visibility/flight-level groups
+// (27015G25KT, P6SM, FL250 — no trailing Z, or glued to letters) never match.
+//
+// The instant is the FIRST occurrence of that UTC clock time at-or-after the
+// issuance (not on the issuance's UTC date), so an afternoon "00Z" is this
+// evening and DST/day rollover come out right. One exception, measured on the
+// 68 live AFDs of Sep 28 2026: tokens up to 1 h BEFORE issuance were all past
+// references ("12Z TAFS", "until 11Z" in a 1150Z product — the aviation text
+// is written before the AFD goes out), while those 1-6 h before were mostly
+// future ("06-08Z tonight"). So the search starts 1 h before issuance. When
+// the local calendar date differs from the issuance's, the weekday is added
+// ("00Z (7 PM CDT Mon)"). A range end is the first occurrence at-or-after its
+// start ("20-06Z" crosses midnight). A TAF cycle label names the current or
+// next cycle, which may sit hours either side of issuance ("(12Z TAF
+// Issuance)" in a 1357Z product; "/00Z TAFS/" in a 2030Z one), so it resolves
+// to the NEAREST occurrence instead.
+const ZULU_RE = /(?<![\w.])(?:(\d{1,2})\/)?(\d{4}|\d{1,2})(?:[-\u2013](\d{4}|\d{1,2}))?Z\b(?!\s*\()/gi;
+const ZULU_LOOKBACK_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function parseZuluClock(tok) {
+    const h = Number(tok.length === 4 ? tok.slice(0, 2) : tok);
+    const m = tok.length === 4 ? Number(tok.slice(2)) : 0;
+    return h > 23 || m > 59 ? null : { h, m };
+}
+
+function localParts(date, timeZone) {
+    const parts = {};
+    for (const p of new Intl.DateTimeFormat('en-US', {
+        timeZone, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
+        hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short',
+    }).formatToParts(date)) parts[p.type] = p.value;
+    return {
+        clock: parts.minute === '00' ? parts.hour : `${parts.hour}:${parts.minute}`,
+        ampm: (parts.dayPeriod || '').toUpperCase(),
+        tz: parts.timeZoneName,
+        weekday: parts.weekday,
+        dateKey: `${parts.year}-${parts.month}-${parts.day}`,
+    };
+}
+
 export function annotateZuluTimes(text, office, issuanceTime) {
     const timeZone = OFFICE_TIMEZONES[office];
     if (!timeZone || typeof text !== 'string') return text;
     const base = getSafeIssueDate(issuanceTime);
-    const fmt = new Intl.DateTimeFormat('en-US', {
-        hour: 'numeric', minute: '2-digit', timeZone, timeZoneName: 'short',
-    });
-    return text.replace(/\b(\d{2})(\d{2})?Z\b(?!\s*\()/g, (tok, hh, mm) => {
-        const h = Number(hh), m = mm === undefined ? 0 : Number(mm);
-        if (h > 23 || m > 59) return tok;
-        const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), h, m));
-        const local = fmt.format(d).replace(':00 ', ' ').replace(/ /g, ' ');
+    const issueDateKey = localParts(base, timeZone).dateKey;
+    const y = base.getUTCFullYear(), mo = base.getUTCMonth(), d0 = base.getUTCDate();
+
+    const firstAtOrAfter = ({ h, m }, notBefore) => {
+        let t = Date.UTC(y, mo, d0, h, m) - DAY_MS;
+        while (t < notBefore) t += DAY_MS;
+        return t;
+    };
+    const nearest = ({ h, m }) => {
+        const b = base.getTime();
+        return [-1, 0, 1].map(off => Date.UTC(y, mo, d0 + off, h, m))
+            .reduce((best, t) => (Math.abs(t - b) < Math.abs(best - b) ? t : best));
+    };
+    const onDayOfMonth = ({ h, m }, dom) => {
+        // The nearest UTC date with that day-of-month (a DD/ prefix names it).
+        for (const off of [0, 1, -1, 2, -2, 3, -3, 4, 5, 6, 7, 8, 9, 10]) {
+            const t = Date.UTC(y, mo, d0 + off, h, m);
+            if (new Date(t).getUTCDate() === dom) return t;
+        }
+        return null;
+    };
+    const label = (p, withDay = true) => `${p.clock} ${p.ampm} ${p.tz}`
+        + (withDay && p.dateKey !== issueDateKey ? ` ${p.weekday}` : '');
+
+    return text.replace(ZULU_RE, (tok, dd, t1, t2, offset, whole) => {
+        const c1 = parseZuluClock(t1);
+        const c2 = t2 === undefined ? null : parseZuluClock(t2);
+        if (!c1 || (t2 !== undefined && !c2)) return tok;
+        const dom = dd === undefined ? null : Number(dd);
+        if (dom !== null && (dom < 1 || dom > 31)) return tok;
+        const tafLabel = /^\s*TAFS?\b/i.test(whole.slice(offset + tok.length));
+        const start = (dom !== null ? onDayOfMonth(c1, dom) : null)
+            ?? (tafLabel ? nearest(c1) : firstAtOrAfter(c1, base.getTime() - ZULU_LOOKBACK_MS));
+        const p1 = localParts(new Date(start), timeZone);
+        if (!c2) return `${tok} (${label(p1)})`;
+        const p2 = localParts(new Date(firstAtOrAfter(c2, start)), timeZone);
+        let local;
+        if (p1.tz === p2.tz && p1.dateKey === p2.dateKey) {
+            const span = p1.ampm === p2.ampm
+                ? `${p1.clock}-${p2.clock} ${p1.ampm}`
+                : `${p1.clock} ${p1.ampm}-${p2.clock} ${p2.ampm}`;
+            local = `${span} ${p1.tz}` + (p1.dateKey !== issueDateKey ? ` ${p1.weekday}` : '');
+        } else {
+            local = `${label(p1)}-${label(p2)}`;
+        }
         return `${tok} (${local})`;
     });
 }
@@ -303,7 +407,7 @@ Rules:
 - Do NOT use markdown headers (##, ###), horizontal rules (---), code blocks, or bullet lists
 - Write in flowing prose paragraphs only
 - Expand all NWS abbreviations naturally
-- Zulu times in the text are already annotated with the correct local time, e.g. "15Z (10 AM CDT)": use that local time, and never convert a Zulu time yourself
+- Zulu times in the text are already annotated with the correct local time, e.g. "15Z (10 AM CDT)" or, for a range, "6-9Z (1-4 AM CDT Tue)"; a weekday after the zone means that local day (no weekday means the issuance's local day). Use that local time and day, and never convert a Zulu time yourself
 - Airport and station identifiers (e.g., DPA, ORD, MDW, KMKE): never replace one with an airport or city name unless the text itself names it; write "the DPA airport" instead
 - Don't repeat a word that was just used (write "good flying conditions", never "conditions conditions")
 - Keep it concise but complete - no filler, no hedging
@@ -334,11 +438,19 @@ export default async function handler(req, res) {
         return sendError(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
     }
 
-    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    // Vercel parses the JSON body lazily: reading req.body on a malformed
+    // payload THROWS, which used to escape as an unstructured 500.
+    let body;
+    try {
+        body = req.body;
+    } catch {
+        return sendError(res, 400, 'invalid_request', 'Invalid request body');
+    }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
         return sendError(res, 400, 'invalid_request', 'Invalid request body');
     }
 
-    const { text, section, office, issuanceTime } = req.body;
+    const { text, section, office, issuanceTime } = body;
     const officeCode = typeof office === 'string' ? office.toUpperCase() : office;
     const hasSection = section !== undefined && section !== null && section !== '';
     const hasOffice = office !== undefined && office !== null && office !== '';
@@ -361,9 +473,11 @@ export default async function handler(req, res) {
         return sendError(res, 400, 'invalid_request', 'Invalid issuanceTime');
     }
 
-    // Check translation cache first
-    const sectionKey = canonicalSectionKey(sectionLabel);
-    const cached = getCachedTranslation(text, sectionKey, officeCode);
+    // Fast path: a verified entry under the client's label bucket. Only
+    // verified translations are ever cached, so a hit is safe to serve before
+    // verification; the authoritative lookup (matched label) is below.
+    const clientSectionKey = canonicalSectionKey(sectionLabel);
+    const cached = getCachedTranslation(text, clientSectionKey, officeCode);
     if (cached) {
         return res.status(200).json({ translation: cached, cached: true });
     }
@@ -375,18 +489,25 @@ export default async function handler(req, res) {
     try { afdProducts = await getOfficeAFDProducts(officeCode); } catch { afdProducts = []; }
     const degraded = afdProducts.length === 0;
     let matchedProduct = null;
+    // The label comes from the matched section; the client's label is used
+    // only in degraded mode, where nothing is cached.
+    let sectionKey = clientSectionKey;
     if (!degraded) {
-        matchedProduct = findMatchingAFD(text, afdProducts);
-        if (!matchedProduct) {
+        const match = findMatchingSection(text, afdProducts);
+        if (!match) {
             return sendError(res, 403, 'forbidden', 'Text does not match a current forecast');
         }
+        matchedProduct = match.product;
+        sectionKey = match.sectionKey;
+        const hit = getCachedTranslation(text, sectionKey, officeCode);
+        if (hit) return res.status(200).json({ translation: hit, cached: true });
     } else {
         console.warn(`[translate] degraded mode (AFD source unavailable): office=${officeCode}`);
         if (!checkDegradedRateLimit(clientIp) || !checkDegradedGlobalBudget()) {
-            return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+            return sendError(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
         }
         if (text.length > DEGRADED_TEXT_MAX) {
-            return res.status(400).json({ error: 'Text too long' });
+            return sendError(res, 400, 'invalid_request', 'Text too long');
         }
     }
 
@@ -409,22 +530,31 @@ export default async function handler(req, res) {
         // Check for model refusal (safety filter triggered) before empty-text guard,
         // since filter refusals typically come back with empty or stubbed text.
         if (result.finishReason === 'content-filter') {
-            return res.status(503).json({ error: 'Translation skipped for this section', reason: 'content-filter' });
+            return sendError(res, 503, 'upstream_error', 'Translation skipped for this section', { reason: 'content-filter' });
         }
 
         if (!translation) {
-            return res.status(502).json({ error: 'Empty translation' });
+            return sendError(res, 502, 'upstream_error', 'Empty translation');
         }
 
-        // Cache successful translation for future requests
+        if (degraded) {
+            // Unverified text translated against a CLIENT-SUPPLIED issuance
+            // time: never write it to the shared cache (one caller's lie
+            // about the date would be served to everyone for 4 h), and keep
+            // it off any CDN/browser cache.
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(200).json({ translation, cached: false, degraded: true });
+        }
+
+        // Cache successful (verified) translation for future requests
         setCachedTranslation(text, sectionKey, officeCode, translation);
 
         return res.status(200).json({ translation, cached: false });
     } catch (err) {
         if (err.name === 'AbortError' || err.name === 'TimeoutError') {
-            return res.status(504).json({ error: 'Translation timed out' });
+            return sendError(res, 504, 'timeout', 'Translation timed out');
         }
         console.error('Translation error:', err);
-        return res.status(500).json({ error: 'Internal error' });
+        return sendError(res, 500, 'internal_error', 'Internal error');
     }
 }

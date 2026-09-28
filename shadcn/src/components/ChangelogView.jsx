@@ -181,9 +181,15 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
     const [attempt, setAttempt] = useState(0);
     // Pagination bookkeeping outside render state (mutated by loadMore).
     const data = useRef({ items: [], products: [] });
+    // Bumped by every (re)load: an "Earlier editions" fetch still in flight
+    // when the office changes must drop its results, not concat them onto
+    // the next office's loading state (that threw and blanked the app).
+    const generation = useRef(0);
 
     useEffect(() => {
         let cancelled = false;
+        generation.current++;
+        data.current = { items: [], products: [] };
         setState({ status: 'loading' });
         (async () => {
             try {
@@ -206,23 +212,34 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
     }, [office, name, attempt, announce]);
 
     const loadMore = useCallback(async () => {
-        setState(s => ({ ...s, loadingMore: true }));
+        const gen = generation.current;
+        setState(s => (s.status === 'ready' ? { ...s, loadingMore: true } : s));
         const { items, products } = data.current;
         const next = items.slice(products.length, products.length + BATCH);
-        if (!next.length) { setState(s => ({ ...s, more: false, loadingMore: false })); return; }
-        const fetched = await fetchProducts(next);
-        if (data.current.items !== items) return; // office changed mid-fetch
+        if (!next.length) { setState(s => (s.status === 'ready' ? { ...s, more: false, loadingMore: false } : s)); return; }
+        let fetched;
+        try {
+            fetched = await fetchProducts(next);
+        } catch (e) {
+            if (gen === generation.current) setState(s => (s.status === 'ready' ? { ...s, loadingMore: false } : s));
+            return;
+        }
+        // Office changed (or the view reloaded) mid-fetch: drop the results.
+        if (gen !== generation.current || data.current.items !== items) return;
         // The last already-fetched product heads the new pairs.
         const overlapFrom = products.length - 1;
         const all = products.concat(fetched);
         data.current = { items, products: all };
         const added = buildTimelineEntries(all.slice(overlapFrom), { parseSections, computeDiff });
-        setState(s => ({
-            ...s,
-            entries: s.entries.concat(added),
-            more: all.length < items.length,
-            loadingMore: false,
-        }));
+        setState(s => {
+            if (s.status !== 'ready') return s;
+            return {
+                ...s,
+                entries: s.entries.concat(added),
+                more: all.length < items.length,
+                loadingMore: false,
+            };
+        });
     }, []);
 
     const latestId = data.current.items[0]?.id;

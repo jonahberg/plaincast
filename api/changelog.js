@@ -6,6 +6,11 @@ import { generateText } from 'ai';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { sendError } from './_errors.js';
+import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
+
+// Instance-wide cap on cold model calls per minute (rotating IPs defeat the
+// per-IP limit; each cold issuance pair is one call).
+export const coldBudget = createColdBudget(60);
 
 // currentProductId -> { changelog, since, updated, time }
 const cache = new Map();
@@ -82,6 +87,7 @@ const PINNED_CACHE = 'public, s-maxage=86400, stale-while-revalidate=604800';
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
+    if (rejectUnknownParams(req, res, ['office', 'id'])) return;
 
     const office = String(req.query.office ?? '').toUpperCase(); // String(): a repeated ?office= arrives as an array
     if (!OFFICE_NAMES[office]) return sendError(res, 400, 'invalid_office', 'Invalid office');
@@ -120,6 +126,7 @@ export default async function handler(req, res) {
             if (r.cacheHeader) res.setHeader('Cache-Control', r.cacheHeader);
             return res.status(r.status).json({ ...r.body, cached: true });
         } catch (err) {
+            if (err?.code === 'over_capacity') return sendOverCapacity(res, err);
             // Mirror the cold-path soft-fail so a shared failure doesn't leak
             // an error status to piggybacking readers.
             res.setHeader('Cache-Control', 'public, s-maxage=60');
@@ -175,6 +182,7 @@ export default async function handler(req, res) {
         const system = `You summarize what changed between two consecutive National Weather Service Area Forecast Discussions. Given the NEW or CHANGED passages from the latest update, write ONE warm, plain-English sentence (max ~30 words) describing what changed for a general reader: shifts in timing, rain or snow chances, temperatures, hazards, or forecaster confidence. No preamble, no markdown, no lists, no quotes. If the changes are purely administrative or trivial (minor wording, aviation/TAF codes only), respond with exactly: NONE`;
         const prompt = `Forecast office: ${OFFICE_NAMES[office]}.\n\nNEW OR CHANGED PASSAGES FROM THE LATEST UPDATE:\n\n${changes.join('\n\n')}`;
 
+        if (!coldBudget.take()) throw overCapacityError();
         const result = await generateText({
             model: 'anthropic/claude-haiku-4.5',
             system,
@@ -211,6 +219,9 @@ export default async function handler(req, res) {
         if (r.cacheHeader) res.setHeader('Cache-Control', r.cacheHeader);
         return res.status(r.status).json(r.body);
     } catch (err) {
+        // Over budget is NOT a soft-fail: a 200 {transient} would sit in the
+        // CDN for a minute; a no-store 503 lets the next reader retry.
+        if (err?.code === 'over_capacity') return sendOverCapacity(res, err);
         console.error('Changelog error:', err);
         // Soft-fail: the feature simply doesn't render rather than erroring the
         // page — but let the CDN absorb failure storms for a minute. transient

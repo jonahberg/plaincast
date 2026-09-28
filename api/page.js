@@ -101,7 +101,9 @@ export default async function handler(req, res) {
     }
 
     const slug = String(req.query?.slug || '').toLowerCase();
-    const page = PAGES[slug];
+    // Own keys only: PAGES['constructor'] is Object.prototype's function
+    // (truthy), which used to reach renderPage and 500.
+    const page = Object.hasOwn(PAGES, slug) ? PAGES[slug] : undefined;
     if (!page) {
         // Only the three rewrites in vercel.json reach here, so this is a
         // routing bug rather than a user-visible 404 — but never guess.

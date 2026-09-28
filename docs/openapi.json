@@ -921,7 +921,10 @@
               "upstream_error",
               "timeout",
               "forbidden",
-              "internal_error"
+              "internal_error",
+              "unknown_param",
+              "over_capacity",
+              "alert_expired"
             ]
           },
           "hint": {

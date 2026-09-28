@@ -16,6 +16,7 @@ const APP = await Bun.file(new URL('../docs/js/app.js', import.meta.url)).text()
 const SHADCN_AFD = await Bun.file(new URL('../shadcn/src/lib/afd.js', import.meta.url)).text();
 const SHADCN_AI = await Bun.file(new URL('../shadcn/src/lib/ai.js', import.meta.url)).text();
 const SHADCN_ALMANAC = await Bun.file(new URL('../shadcn/src/lib/almanac.js', import.meta.url)).text();
+const SHADCN_FORMAT = await Bun.file(new URL('../shadcn/src/lib/format.js', import.meta.url)).text();
 
 // Extract a function body (the outermost { … } block) by name. Regex
 // quantifier braces like {2,3} are balanced pairs, so brace-counting stays
@@ -44,9 +45,10 @@ function normalize(body) {
 }
 
 const FORKS = [
-    [SHADCN_AFD, 'shadcn/src/lib/afd.js', ['parseSections', 'stripAIArtifacts', 'escapeHTML', 'stripNWSArtifacts', 'hasRealAlerts', 'reorderSections']],
+    [SHADCN_AFD, 'shadcn/src/lib/afd.js', ['parseSections', 'stripAIArtifacts', 'escapeHTML', 'stripNWSArtifacts', 'hasRealAlerts', 'reorderSections', 'zuluToLocal']],
     [SHADCN_AI, 'shadcn/src/lib/ai.js', ['formatTranslationHTML']],
     [SHADCN_ALMANAC, 'shadcn/src/lib/almanac.js', ['sunTimes', 'moonPhase']],
+    [SHADCN_FORMAT, 'shadcn/src/lib/format.js', ['readingOrNull']],
 ];
 
 describe('shadcn lib forks stay in lockstep with docs/js/app.js', () => {

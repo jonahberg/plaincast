@@ -154,6 +154,10 @@ code, pre { font-family: var(--font-mono); }
 @media (max-width: 380px) {
     .site-header-inner { gap: 0.375rem; }
     .site-nav a { padding-inline: 0.5rem; }
+    /* At 320px brand + "Forecast" + "National Desk" + the theme toggle are
+       ~340px in a 288px row: the nav ran under the toggle. The brand already
+       links to the forecast (/), so its duplicate nav link goes first. */
+    .site-nav a[href="/"]:not([aria-current="page"]) { display: none; }
 }
 
 /* ── Main + page intro (PageIntro.jsx scale) ─────────────────────────── */

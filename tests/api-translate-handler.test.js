@@ -13,6 +13,15 @@ mock.module('ai', () => ({
 let mockAFDThrows = false;
 const AFD_ISSUANCE_TIME = '2026-03-24T18:25:00+00:00';
 const AFD_SYNOPSIS = 'A dry pattern holds through the weekend with highs in the low 80s across the valleys and mountains through Tuesday afternoon. Marine layer returns midweek with patchy drizzle possible along the coast during the overnight and early morning hours. Weak troughing aloft keeps temperatures near seasonal normals into the following weekend before high pressure rebuilds from the east and a gradual warming trend takes hold across the region.';
+// Verification is exact-section (Sep 28 2026 audit): only a WHOLE section
+// body passes. So the mock product carries many distinct Short Term sections
+// (one per freshText() call) and a few .UPDATE... sections (a header that
+// buckets to "Unknown").
+const FRESH_COUNT = 120;
+const FRESH_SECTIONS = Array.from({ length: FRESH_COUNT }, (_, i) =>
+    `Fresh section ${i}: dry conditions continue tonight with patchy fog developing along the coast after midnight and clearing by mid morning.`);
+const UPDATE_SECTIONS = Array.from({ length: 5 }, (_, i) =>
+    `Update ${i}: the morning package was refreshed to lower sky cover and raise afternoon highs a degree or two across the valleys.`);
 const AFD_PRODUCT_TEXT = `000
 FXUS66 KLOX 241825
 AFDLOX
@@ -21,6 +30,8 @@ AFDLOX
 
 &&
 
+${FRESH_SECTIONS.map(t => `.SHORT TERM /THROUGH TONIGHT/...\n${t}\n\n&&\n`).join('\n')}
+${UPDATE_SECTIONS.map(t => `.UPDATE...\n${t}\n\n&&\n`).join('\n')}
 .AVIATION /18Z TAF THROUGH 18Z WEDNESDAY/...
 VFR conditions expected through the period.
 
@@ -79,25 +90,23 @@ function createReq(overrides = {}) {
 }
 
 const validBody = () => ({
-    text: 'A dry pattern holds through the weekend with highs in the low 80s across the valleys and mountains through Tuesday afternoon.',
+    text: AFD_SYNOPSIS, // one whole section: exact-section verification passes
     section: 'Synopsis',
     office: 'LOX',
     issuanceTime: '2026-03-24T18:25:00+00:00',
 });
 
-// Bust the translation cache via a unique sliding window over the mocked AFD
-// synopsis — each window is still a contiguous chunk of the product text, so
-// source-verification passes. (issuanceTime is deliberately NOT a cache-key
-// component: a client-controlled key component is a billing lever.)
-let windowCounter = 0;
+// Bust the translation cache with a never-used whole Short Term section of the
+// mocked AFD, so source-verification passes. (issuanceTime is deliberately NOT
+// a cache-key component: a client-controlled key component is a billing lever.)
+let freshCounter = 0;
 function freshText() {
-    const offset = windowCounter++ * 3;
-    // Fail LOUDLY when the window space is exhausted — silent modulo wrap
-    // would reuse earlier windows and turn cache-miss assertions into lies.
-    if (offset >= AFD_SYNOPSIS.length - 160) {
-        throw new Error('freshText exhausted: extend AFD_SYNOPSIS before adding more tests');
+    // Fail LOUDLY when the sections run out — silent reuse would turn
+    // cache-miss assertions into lies.
+    if (freshCounter >= FRESH_COUNT) {
+        throw new Error('freshText exhausted: raise FRESH_COUNT before adding more tests');
     }
-    return AFD_SYNOPSIS.slice(offset, offset + 150);
+    return FRESH_SECTIONS[freshCounter++];
 }
 const freshBody = (overrides = {}) => ({
     ...validBody(),
@@ -425,7 +434,7 @@ describe('POST /api/translate — cache-key hardening (billing abuse)', () => {
         expect(aiArgs.system).not.toContain('1999');
     });
 
-    it('canonicalizes section qualifiers — "SHORT TERM /THROUGH TONIGHT/" shares a cache entry with "Short Term"', async () => {
+    it('the client label never splits the cache — "SHORT TERM /THROUGH TONIGHT/" and "Short Term" share one entry', async () => {
         const text = freshText();
 
         const first = createRes();
@@ -503,14 +512,21 @@ describe('POST /api/translate — source verification is exact (Sep 25 2026 audi
         expect(aiArgs.system).not.toContain('tornado emergency');
     });
 
-    it('unknown labels reach the prompt as "Unknown", not verbatim', async () => {
+    it('the prompt label is the MATCHED section\'s, never the client\'s', async () => {
         let aiArgs;
         mockGenerateText = async (args) => { aiArgs = args; return { text: 'ok', finishReason: 'stop' }; };
-        const res = createRes();
+        let res = createRes();
         await handler(createReq({ body: freshBody({ section: 'Zebra Poetry Hour' }) }), res);
         expect(res.statusCode).toBe(200);
-        expect(aiArgs.system).toContain('Section name for context: Unknown');
+        expect(aiArgs.system).toContain('Section name for context: Short Term');
         expect(aiArgs.system).not.toContain('Zebra');
+
+        // An .UPDATE... section buckets to Unknown even when the client claims Synopsis.
+        res = createRes();
+        await handler(createReq({ body: freshBody({ text: UPDATE_SECTIONS[0], section: 'Synopsis' }) }), res);
+        expect(res.statusCode).toBe(200);
+        expect(aiArgs.system).toContain('Section name for context: Unknown');
+        expect(aiArgs.system).not.toContain('Section name for context: Synopsis');
     });
 });
 
@@ -566,5 +582,138 @@ describe('POST /api/translate — degraded mode (NWS unreachable)', () => {
         await handler(createReq({ body: freshBody() }), res);
         expect(res.statusCode).toBe(200);
         expect(aiArgs.maxOutputTokens).toBe(1024);
+    });
+});
+
+describe('POST /api/translate — exact-section verification (Sep 28 2026 audit)', () => {
+    let calls;
+    beforeEach(() => {
+        calls = 0;
+        mockAFDThrows = false;
+        mockGenerateText = async () => { calls++; return { text: 'exact translation', finishReason: 'stop' }; };
+    });
+
+    it('403s a 20-char mid-section substring (each slice used to be a fresh billed call)', async () => {
+        const text = AFD_SYNOPSIS.slice(40, 60);
+        expect(text.length).toBe(20);
+        const res = createRes();
+        await handler(createReq({ body: freshBody({ text, section: 'Synopsis' }) }), res);
+        expect(res.statusCode).toBe(403);
+        expect(res.body.code).toBe('forbidden');
+        expect(calls).toBe(0);
+    });
+
+    it('403s a long contiguous slice that is not a whole section', async () => {
+        const res = createRes();
+        await handler(createReq({ body: freshBody({ text: AFD_SYNOPSIS.slice(0, 150), section: 'Synopsis' }) }), res);
+        expect(res.statusCode).toBe(403);
+        expect(calls).toBe(0);
+    });
+
+    it('passes the exact section (and its whitespace-reflowed twin)', async () => {
+        const text = freshText();
+        let res = createRes();
+        await handler(createReq({ body: freshBody({ text }) }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body.cached).toBe(false);
+        res = createRes();
+        await handler(createReq({ body: freshBody({ text: `\n${text.replace(/ /g, '  \n')}\n` }) }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body.cached).toBe(true);
+        expect(calls).toBe(1);
+    });
+
+    it('removes the label multiplier — 12 labels on one section cost ONE model call', async () => {
+        const text = freshText();
+        const labels = ['Synopsis', 'Discussion', 'Short Term', 'Long Term', 'Aviation', 'Marine', 'Beaches',
+            'Fire Weather', 'Messages', 'What has changed', 'Zebra', 'Active Alerts'];
+        for (const section of labels) {
+            const res = createRes();
+            await handler(createReq({ body: freshBody({ text, section }) }), res);
+            expect(res.statusCode).toBe(200);
+        }
+        expect(calls).toBe(1);
+    });
+
+    it('403s the product\'s Watches/Warnings section — the client never translates it', async () => {
+        // Nothing the client POSTs is under Active Alerts (aiEligible=false),
+        // so it stays out of the verified index.
+        const { buildSectionIndex } = await import('../api/translate.js');
+        const idx = buildSectionIndex(`.SYNOPSIS...${AFD_SYNOPSIS}\n\n&&\n\n.LOX WATCHES/WARNINGS/ADVISORIES...\nWind Advisory in effect until 8 PM PDT this evening for the mountains.\n\n$$`);
+        expect([...idx.values()]).toEqual(['Synopsis']);
+    });
+});
+
+describe('POST /api/translate — degraded mode never feeds the shared cache', () => {
+    beforeEach(() => { mockAFDThrows = true; });
+
+    it('does not cache an unverified translation (client-supplied issuanceTime) and marks it no-store', async () => {
+        let calls = 0;
+        mockGenerateText = async () => { calls++; return { text: 'degraded', finishReason: 'stop' }; };
+        const body = freshBody({ office: 'TWC', text: 'Unverifiable degraded text long enough to pass the length validation checks.' });
+        const first = createRes();
+        await handler(createReq({ body }), first);
+        expect(first.statusCode).toBe(200);
+        expect(first.body.cached).toBe(false);
+        expect(first.body.degraded).toBe(true);
+        expect(first.headers['cache-control']).toBe('no-store');
+
+        const second = createRes();
+        await handler(createReq({ body }), second);
+        expect(second.statusCode).toBe(200);
+        expect(second.body.cached).toBe(false); // re-translated, not served from a poisoned entry
+        expect(calls).toBe(2);
+    });
+
+    it('degraded-mode 429 and 400 go through sendError', async () => {
+        const res = createRes();
+        await handler(createReq({ body: freshBody({ office: 'PSR', text: 'a'.repeat(7000) }) }), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toBe('Text too long');
+        expect(res.body.code).toBe('invalid_request');
+
+        const ip = uniqueIp();
+        let last;
+        for (let i = 0; i < 6; i++) {
+            last = createRes();
+            await handler(createReq({ body: freshBody({ office: 'FGZ', text: `Degraded sendError probe ${i} with enough length to validate.` }), headers: { 'x-forwarded-for': ip } }), last);
+        }
+        expect(last.statusCode).toBe(429);
+        expect(last.body.code).toBe('rate_limited');
+        expect(last.body.error).toBe('Too many requests. Please try again later.');
+    });
+});
+
+describe('POST /api/translate — malformed body and structured errors', () => {
+    beforeEach(() => { mockAFDThrows = false; });
+
+    it('400s (not 500s) when reading req.body throws (malformed JSON on Vercel)', async () => {
+        const req = createReq();
+        // Defined AFTER construction: createReq spreads overrides, which would invoke a getter.
+        Object.defineProperty(req, 'body', { get() { throw new SyntaxError('Unexpected token } in JSON'); } });
+        const res = createRes();
+        await handler(req, res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.code).toBe('invalid_request');
+        expect(res.body.error).toBe('Invalid request body');
+    });
+
+    it('model failures keep their error strings and gain code/hint/docs', async () => {
+        const cases = [
+            [async () => ({ text: 'x', finishReason: 'content-filter' }), 503, 'upstream_error', 'Translation skipped for this section'],
+            [async () => ({ text: '', finishReason: 'stop' }), 502, 'upstream_error', 'Empty translation'],
+            [async () => { const e = new Error('t'); e.name = 'TimeoutError'; throw e; }, 504, 'timeout', 'Translation timed out'],
+            [async () => { throw new Error('boom'); }, 500, 'internal_error', 'Internal error'],
+        ];
+        for (const [impl, status, code, error] of cases) {
+            mockGenerateText = impl;
+            const res = createRes();
+            await handler(createReq({ body: freshBody() }), res);
+            expect(res.statusCode).toBe(status);
+            expect(res.body.code).toBe(code);
+            expect(res.body.error).toBe(error);
+            expect(res.body.hint).toBeTruthy();
+            expect(res.body.docs).toBeTruthy();
+        }
     });
 });

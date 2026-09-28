@@ -16,7 +16,11 @@
 //   api.weather.gov GETs → network-first with cache fallback, so the last
 //                  fetched forecast still renders offline; its own cache is
 //                  capped at NWS_MAX entries (oldest evicted first).
-const CACHE = 'plaincast-shadcn-v3';
+//                  A cached /alerts/active response can hold alerts that
+//                  have since expired; the app drops those client-side
+//                  (dropExpiredAlerts in src/lib/nws.js), so an offline
+//                  reader never sees an expired Warning as live.
+const CACHE = 'plaincast-shadcn-v4';
 const NWS_CACHE = 'plaincast-shadcn-nws-v3';
 const NWS_MAX = 60;
 const PRECACHE = ['/', '/assets/app.js', '/assets/vendor.js', '/assets/app.css', '/theme-init.js'];
