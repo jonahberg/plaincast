@@ -10,6 +10,23 @@ import { extractSections } from './_afd-sections.js';
 import { annotateZuluTimes, buildSystemPrompt } from './translate.js';
 import { getSnapshot, putSnapshot } from './_snapshots.js';
 import { sendError } from './_errors.js';
+import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
+
+// Instance-wide cap on cold model calls per minute (each cold issuance costs
+// one call per section, so it is charged sections.length at once).
+export const coldBudget = createColdBudget(60);
+
+// Thrown statusCode → machine code. 404 = an id this office never issued.
+function issuanceErrorCode(status) {
+    if (status === 404) return 'invalid_id';
+    if (status === 503) return 'over_capacity';
+    return 'upstream_error';
+}
+function sendIssuanceError(res, e) {
+    if (e?.code === 'over_capacity') return sendOverCapacity(res, e);
+    if (e.statusCode === 404) res.setHeader('Cache-Control', 'public, s-maxage=60');
+    return sendError(res, e.statusCode, issuanceErrorCode(e.statusCode), e.publicMessage || 'Translation unavailable');
+}
 
 // `${office}|${id}` -> { payload, time }. A completed issuance is immutable,
 // so the TTL exists only to bound memory, not for freshness.
@@ -67,6 +84,7 @@ const MAX_SECTIONS = 10;
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
+    if (rejectUnknownParams(req, res, ['office', 'id'])) return;
 
     const office = String(req.query.office ?? '').toUpperCase(); // String(): a repeated ?office= arrives as an array
     if (!OFFICE_NAMES[office]) return sendError(res, 400, 'invalid_office', 'Invalid office');
@@ -103,9 +121,7 @@ export default async function handler(req, res) {
                 : 'public, s-maxage=300');
             return res.status(200).json({ ...payload, cached: true });
         } catch (e) {
-            const code = e?.statusCode || 502;
-            if (code === 404) res.setHeader('Cache-Control', 'public, s-maxage=60');
-            return res.status(code).json({ error: e?.publicMessage || 'Translation unavailable' });
+            return sendIssuanceError(res, { ...e, statusCode: e?.statusCode || 502, code: e?.code, publicMessage: e?.publicMessage });
         }
     }
 
@@ -136,6 +152,7 @@ export default async function handler(req, res) {
             .filter(s => s.text.length >= MIN_SECTION_CHARS && s.text.length <= MAX_SECTION_CHARS)
             .slice(0, MAX_SECTIONS);
         if (sections.length === 0) throw Object.assign(new Error('no sections'), { statusCode: 502, publicMessage: 'No translatable sections' });
+        if (!coldBudget.take(sections.length)) throw overCapacityError();
 
         // Translate the whole issuance in one parallel pass. Individual
         // section failures degrade gracefully — the client falls back to
@@ -189,10 +206,7 @@ export default async function handler(req, res) {
         }
         return res.status(200).json({ ...payload, cached: false });
     } catch (err) {
-        if (err?.statusCode) {
-            if (err.statusCode === 404) res.setHeader('Cache-Control', 'public, s-maxage=60');
-            return res.status(err.statusCode).json({ error: err.publicMessage || 'Error' });
-        }
+        if (err?.statusCode) return sendIssuanceError(res, err);
         if (err.name === 'AbortError' || err.name === 'TimeoutError') {
             return sendError(res, 504, 'timeout', 'Translation timed out');
         }

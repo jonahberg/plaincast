@@ -209,7 +209,57 @@ function stripNWSArtifacts(text) {
     return t.trim();
 }
 
-function translateToPlainEnglish(text) {
+// Zulu (UTC) times → office-local clock times, for the instant regex
+// translation shown before the AI arrives. Handles HHZ, HHMMZ, single-digit
+// HZ and ranges ("6-9Z", "05-09z", "20z-22z", "15-18Z" — both ends
+// converted). Each time resolves to its first occurrence at/after the
+// issuance hour (a range's end at/after its start), so DST is taken from the
+// right day. Invalid clock values and aviation tokens (DDHHMMZ stamps,
+// 27015G25KT, P6SM, FL250) never match. Forked verbatim into docs/js/app.js
+// and shadcn/src/lib/afd.js (tests/shadcn-parity.test.js).
+function zuluToLocal(text, tz, issuedAt) {
+    const issued = issuedAt ? new Date(issuedAt) : null;
+    const base = issued && !isNaN(issued.getTime()) ? issued : new Date();
+    const floor = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), base.getUTCHours()));
+    const parse = (tok) => {
+        const h = parseInt(tok.length === 4 ? tok.substring(0, 2) : tok, 10);
+        const m = tok.length === 4 ? parseInt(tok.substring(2), 10) : 0;
+        return h > 23 || m > 59 ? null : { h, m };
+    };
+    const at = (t, notBefore) => {
+        const d = new Date(Date.UTC(notBefore.getUTCFullYear(), notBefore.getUTCMonth(), notBefore.getUTCDate(), t.h, t.m));
+        return d < notBefore ? new Date(d.getTime() + 86400000) : d;
+    };
+    const fmt = (d) => {
+        const m = d.getUTCMinutes();
+        try {
+            return d.toLocaleString('en-US', { hour: 'numeric', minute: m > 0 ? '2-digit' : undefined, timeZone: tz, timeZoneName: 'short' })
+                .replace(/[  ]/g, ' ');
+        } catch (e) {
+            const stdOffsets = { 'America/New_York': -5, 'America/Detroit': -5, 'America/Indiana/Indianapolis': -5, 'America/Chicago': -6, 'America/Denver': -7, 'America/Phoenix': -7, 'America/Los_Angeles': -8, 'America/Anchorage': -9, 'Pacific/Honolulu': -10 };
+            const offset = stdOffsets[tz] || -8;
+            const localHr = (d.getUTCHours() + offset + 24) % 24;
+            const ampm = localHr >= 12 ? 'PM' : 'AM';
+            const hr12 = localHr === 0 ? 12 : localHr > 12 ? localHr - 12 : localHr;
+            return `${hr12}${m > 0 ? ':' + String(m).padStart(2, '0') : ''} ${ampm}`;
+        }
+    };
+    return text.replace(/\b(\d{4}|\d{1,2})(?:Z?\s*[-–]\s*(\d{4}|\d{1,2}))?Z\b/gi, (tok, a, b) => {
+        const t1 = parse(a);
+        const t2 = b === undefined ? null : parse(b);
+        if (!t1 || (b !== undefined && !t2)) return tok;
+        const start = at(t1, floor);
+        const first = fmt(start);
+        if (!t2) return first;
+        const second = fmt(at(t2, start));
+        const suffix = first.split(' ').pop();
+        return second.endsWith(' ' + suffix)
+            ? `${first.slice(0, -suffix.length - 1)}–${second}`
+            : `${first}–${second}`;
+    });
+}
+
+function translateToPlainEnglish(text, issuedAt = null) {
     let t = text;
 
     // Remove NWS timestamps like "15/913 AM.", "15/935 AM.", "15/1801Z.", "15/1002 AM."
@@ -243,31 +293,9 @@ function translateToPlainEnglish(text) {
         t = t.replace(pat, rep);
     }
 
-    // Convert Zulu time references: 18Z → local time (DST-aware). Case-insensitive
-    // because live aviation text uses lowercase 'z' ("05-09z", "20z-22z"); the
-    // replacement reads only the captured digits, so 'z' vs 'Z' is immaterial.
-    t = t.replace(/\b(\d{2,4})Z\b/gi, (_, h) => {
-        const utcHour = parseInt(h.length <= 2 ? h : h.substring(0, 2));
-        const utcMin = h.length > 2 ? parseInt(h.substring(2)) : 0;
-        // Create a UTC date for today to get proper DST offset
-        const now = new Date();
-        const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), utcHour, utcMin));
-        // Use the office timezone if available, fallback to America/Los_Angeles
-        const tz = OFFICE_TIMEZONES[currentOffice] || 'America/Los_Angeles';
-        try {
-            const local = utcDate.toLocaleString('en-US', { hour: 'numeric', minute: utcMin > 0 ? '2-digit' : undefined, timeZone: tz, timeZoneName: 'short' });
-            return local;
-        } catch(e) {
-            console.debug('Timezone conversion failed', e);
-            // Fallback: use IANA zone to determine standard offset
-            const stdOffsets = { 'America/New_York': -5, 'America/Detroit': -5, 'America/Indiana/Indianapolis': -5, 'America/Chicago': -6, 'America/Denver': -7, 'America/Phoenix': -7, 'America/Los_Angeles': -8, 'America/Anchorage': -9, 'Pacific/Honolulu': -10 };
-            const offset = stdOffsets[tz] || -8;
-            let localHr = (utcHour + offset + 24) % 24;
-            const ampm = localHr >= 12 ? 'PM' : 'AM';
-            const hr12 = localHr === 0 ? 12 : localHr > 12 ? localHr - 12 : localHr;
-            return `${hr12} ${ampm}`;
-        }
-    });
+    // Convert Zulu time references (18Z, 6-9Z, 20z-22z) → office-local time,
+    // DST-aware and dated from the issuance time (see zuluToLocal).
+    t = zuluToLocal(t, OFFICE_TIMEZONES[currentOffice] || 'America/Los_Angeles', issuedAt);
 
     // Clean up geopotential heights: "541 dam" → "a 541-dam"
     t = t.replace(/(\d{3})\s*dam\b/g, '$1-decameter');
@@ -1133,7 +1161,7 @@ function render(sections, productContext = {}) {
             plainHtml = formatAlerts(s.text, currentAlerts);
         } else {
             // Show regex translation immediately with AI loading indicator
-            const regexHtml = translateToPlainEnglish(s.text);
+            const regexHtml = translateToPlainEnglish(s.text, productContext.issuanceTime);
             plainHtml = regexHtml
                 + '<div class="ai-loading-label"><span class="ai-loading"></span> Summarizing…</div>';
         }
@@ -1906,6 +1934,15 @@ afterRender.push((prodData, office) => { if (viewingHistorical) return; lastProd
 // Load history after each render (via afterRender callback)
 afterRender.push((prodData, office) => { fetchHistoryList(office).then(items => { historyList = items; renderHistorySelector(items, prodData.id); }); });
 
+// A /api/conditions reading as a number, or null when absent. Forked
+// verbatim into shadcn/src/lib/format.js (tests/shadcn-parity.test.js).
+function readingOrNull(x) {
+    if (x === null || x === undefined) return null;
+    if (typeof x === 'string' && x.trim() === '') return null;
+    const n = typeof x === 'number' ? x : Number(x);
+    return Number.isFinite(n) ? n : null;
+}
+
 // Live conditions feed the almanac ledger + the atmosphere's condition tint
 afterRender.push(async (prodData, office) => {
     try {
@@ -1917,8 +1954,11 @@ afterRender.push(async (prodData, office) => {
         const ledger = document.getElementById('ledger');
         if (!ledger || ledger.querySelector('.ledger-now')) return; // already prepended
         let cells = '';
-        if (Number.isFinite(+data.temp)) cells += `<div class="ledger-cell ledger-now"><dt>Now</dt><dd>${+data.temp}°</dd></div>`;
-        if (Number.isFinite(+data.normal)) cells += ledgerCell('Normal high', `${+data.normal}°`);
+        // null/undefined/'' mean "no reading" (+null would render as "Now 0°").
+        const temp = readingOrNull(data.temp);
+        const normal = readingOrNull(data.normal);
+        if (temp !== null) cells += `<div class="ledger-cell ledger-now"><dt>Now</dt><dd>${temp}°</dd></div>`;
+        if (normal !== null) cells += ledgerCell('Normal high', `${normal}°`);
         if (cells) ledger.insertAdjacentHTML('afterbegin', cells);
     } catch (e) {
         // Silent — the ledger simply omits live conditions

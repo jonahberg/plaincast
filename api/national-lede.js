@@ -9,6 +9,11 @@ import { generateText } from 'ai';
 import { fetchSpcDy1 } from './_utils.js';
 import { parseSpcOutlook } from './_national.js';
 import { sendError } from './_errors.js';
+import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
+
+// Instance-wide cap on cold model calls per minute. One national answer per
+// SPC issuance, so real traffic needs a handful at most.
+export const coldBudget = createColdBudget(10);
 
 // issuanceTime -> { deck, time }
 const cache = new Map();
@@ -63,6 +68,8 @@ const TRANSIENT = { status: 200, cacheHeader: TRANSIENT_CACHE, body: { deck: nul
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
+    // This endpoint reads no input, so ANY param is only a CDN cache-bust.
+    if (rejectUnknownParams(req, res, [])) return;
 
     const clientIp = req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
     if (!checkRateLimit(clientIp)) {
@@ -76,6 +83,7 @@ export default async function handler(req, res) {
             if (r.cacheHeader) res.setHeader('Cache-Control', r.cacheHeader);
             return res.status(r.status).json({ ...r.body, cached: true });
         } catch (err) {
+            if (err?.code === 'over_capacity') return sendOverCapacity(res, err);
             // Mirror the cold-path soft-fail so a shared failure doesn't leak
             // an error status to piggybacking readers.
             res.setHeader('Cache-Control', TRANSIENT_CACHE);
@@ -104,6 +112,7 @@ export default async function handler(req, res) {
         const system = `You rewrite the U.S. Storm Prediction Center's Day 1 Convective Outlook summary as ONE plain-English sentence (max ~35 words) for a general reader: where severe weather is expected today and what kind. Warm, concrete, no jargon, no preamble, no markdown. If the outlook is quiet nationwide, say so plainly.`;
         const prompt = `HEADLINE: ${headline || '(none)'}\n\nSUMMARY:\n${summary}`;
 
+        if (!coldBudget.take()) throw overCapacityError();
         const result = await generateText({
             model: 'anthropic/claude-haiku-4.5',
             system,
@@ -133,6 +142,7 @@ export default async function handler(req, res) {
         if (r.cacheHeader) res.setHeader('Cache-Control', r.cacheHeader);
         return res.status(r.status).json(r.body);
     } catch (err) {
+        if (err?.code === 'over_capacity') return sendOverCapacity(res, err);
         console.error('National lede error:', err);
         // Soft-fail: the deck simply doesn't render rather than erroring the
         // page. `transient` tells the client this was a failure, not a verdict.

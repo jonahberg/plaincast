@@ -11,7 +11,7 @@ import {
 import { fetchEditionSnapshot } from '@/lib/ai';
 import { loadLastEdition, saveLastEdition } from '@/lib/offline';
 import { currentRoute, officeUrl } from '@/lib/route';
-import { changelogTitle, officeCanonical, officeFeedHref, officeTitle } from '@/lib/seo';
+import { headFor, officeFeedHref } from '@/lib/seo';
 import { track } from '@/lib/track';
 import { formatIssueTime, timeAgo } from '@/lib/format';
 import { useTheme } from '@/hooks/useTheme';
@@ -31,6 +31,7 @@ import { AlertsSection } from '@/components/AlertsSection';
 import { Footer } from '@/components/Footer';
 import { KbdDialog } from '@/components/KbdDialog';
 import { ChangelogView } from '@/components/ChangelogView';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const OFFICE_KEY = 'plaincast-office';
 const HISTORY_LIMIT = 10;
@@ -75,7 +76,9 @@ function LoadingSkeleton() {
 
 export default function App() {
     const { theme, toggle } = useTheme();
-    const [{ office, editionId, view }, setLocation] = useState(initialState);
+    // fromUrl: the address bar names an office (/o/CODE/). False at `/`, where
+    // the head keeps the homepage's title and canonical.
+    const [{ office, editionId, view, fromUrl }, setLocation] = useState(initialState);
     const inChangelog = view === 'changelog';
     const [pickerOpen, setPickerOpen] = useState(false);
     const [state, setState] = useState({ status: 'loading' });
@@ -117,6 +120,10 @@ export default function App() {
         setChangelog(null);
         setNewerEdition(null);
         setActiveKey(null);
+        // Per-office state: an offline fallback must never show the previous
+        // office's edition list or keep its severe posture.
+        setEditions([]);
+        setSevere(false);
 
         // Alerts load in parallel and merge in when they arrive — they never
         // hold the forecast back (a slow alerts API used to blank the page).
@@ -248,25 +255,26 @@ export default function App() {
         load(office, editionId);
     }, [office, editionId, inChangelog, load]);
 
-    // Title + per-office head links, in the SSR formats (lib/seo.js is shared
-    // with scripts/build-offices.mjs). Only on an office URL: the homepage
-    // keeps its own title and canonical until the reader navigates to one.
+    // Title + head links, in the SSR formats (lib/seo.js is shared with
+    // scripts/build-offices.mjs). On an office URL they name the office; at
+    // `/` (first load, or Back from an office page) they are the homepage's.
     useEffect(() => {
-        if (!currentRoute().office) return;
-        const city = OFFICE_NAMES[office];
-        document.title = inChangelog ? changelogTitle(city) : officeTitle(city);
+        const head = headFor({ office: fromUrl ? office : null, city: OFFICE_NAMES[office], changelog: inChangelog });
+        document.title = head.title;
         const setAttr = (selector, attr, value) => {
             document.head.querySelector(selector)?.setAttribute(attr, value);
         };
-        setAttr('link[rel="canonical"]', 'href', officeCanonical(office));
-        setAttr('meta[property="og:url"]', 'content', officeCanonical(office));
-        setAttr('link[rel="alternate"][type="text/markdown"]', 'href', officeCanonical(office));
+        setAttr('meta[property="og:title"]', 'content', head.title);
+        setAttr('meta[name="twitter:title"]', 'content', head.title);
+        setAttr('link[rel="canonical"]', 'href', head.canonical);
+        setAttr('meta[property="og:url"]', 'content', head.canonical);
+        setAttr('link[rel="alternate"][type="text/markdown"]', 'href', head.markdown);
         setAttr('link[rel="alternate"][type="application/rss+xml"]', 'href', officeFeedHref(office));
-    }, [office, inChangelog]);
+    }, [office, inChangelog, fromUrl]);
 
     // ─── Navigation (canonical /o/CODE/ URLs, ?edition= permalinks) ──
-    const navigate = useCallback((code, targetEditionId = null, { push = true, view: nextView = null } = {}) => {
-        setLocation({ office: code, editionId: nextView ? null : targetEditionId, view: nextView });
+    const navigate = useCallback((code, targetEditionId = null, { push = true, view: nextView = null, atHome = false } = {}) => {
+        setLocation({ office: code, editionId: nextView ? null : targetEditionId, view: nextView, fromUrl: push || !atHome });
         try { localStorage.setItem(OFFICE_KEY, code); } catch (e) { /* private mode */ }
         if (push) {
             history.pushState({}, '', officeUrl(code, targetEditionId, nextView));
@@ -298,7 +306,7 @@ export default function App() {
                 && route.view === renderedRoute.current.view) return;
             renderedRoute.current = route;
             const code = route.office && OFFICE_NAMES[route.office] ? route.office : office;
-            navigate(code, route.edition, { push: false, view: route.view });
+            navigate(code, route.edition, { push: false, view: route.view, atHome: !route.office });
         };
         window.addEventListener('popstate', onPop);
         return () => window.removeEventListener('popstate', onPop);
@@ -499,12 +507,14 @@ export default function App() {
                     )}
 
                     {inChangelog && (
-                        <ChangelogView
-                            office={office}
-                            announce={announce}
-                            onBack={() => leaveChangelog(null)}
-                            onOpenEdition={(id) => leaveChangelog(id)}
-                        />
+                        <ErrorBoundary scoped resetKey={`changelog|${office}`}>
+                            <ChangelogView
+                                office={office}
+                                announce={announce}
+                                onBack={() => leaveChangelog(null)}
+                                onOpenEdition={(id) => leaveChangelog(id)}
+                            />
+                        </ErrorBoundary>
                     )}
 
                     {!inChangelog && state.status === 'loading' && (
@@ -556,7 +566,7 @@ export default function App() {
                     )}
 
                     {!inChangelog && ready && (
-                        <>
+                        <ErrorBoundary scoped resetKey={`forecast|${office}|${state.productId}`}>
                             <PageIntro
                                 office={office}
                                 takeawayHTML={takeawayHTML}
@@ -593,7 +603,7 @@ export default function App() {
                                     />
                                 ))}
                             </div>
-                        </>
+                        </ErrorBoundary>
                     )}
                 </main>
 

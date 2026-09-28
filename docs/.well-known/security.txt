@@ -1,3 +1,4 @@
 Contact: https://github.com/jonahberg/plaincast/issues
+Expires: 2027-09-01T00:00:00.000Z
 Preferred-Languages: en
 Canonical: https://plaincast.live/.well-known/security.txt

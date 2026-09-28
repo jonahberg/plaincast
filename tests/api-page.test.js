@@ -145,6 +145,18 @@ describe('page handler', () => {
         expect(res.body).toContain('sitemap.xml');
     });
 
+    it('Object.prototype slugs (constructor, __proto__, toString) 404 instead of 500ing', async () => {
+        // Sep 28 2026 audit: PAGES['constructor'] is Object.prototype's
+        // function — truthy — so the lookup "found" a page and threw.
+        for (const slug of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf']) {
+            for (const accept of ['text/html', 'text/markdown']) {
+                const res = mockRes();
+                await handler(get(slug, accept), res);
+                expect(res.code).toBe(404);
+            }
+        }
+    });
+
     it('rejects non-GET', async () => {
         const res = mockRes();
         await handler({ method: 'POST', query: { slug: 'about' }, headers: {} }, res);

@@ -28,7 +28,7 @@ mock.module('../api/_utils.js', () => ({
     },
 }));
 
-const { default: handler } = await import('../api/explain-alert.js');
+const { default: handler, coldBudget, alertIsExpired, PROMPT_MAX_CHARS } = await import('../api/explain-alert.js');
 
 function createRes() {
     return {
@@ -58,7 +58,8 @@ const FULL_ALERT = {
     event: 'Severe Thunderstorm Warning',
     headline: 'Severe Thunderstorm Warning until 8 PM EDT',
     areaDesc: 'New York County; Kings County',
-    expires: '2026-07-03T20:00:00-04:00',
+    // Live alert: expiry is relative to now (expired alerts 410 since Sep 28 2026).
+    expires: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
     description: 'At 645 PM EDT, a severe thunderstorm was located over Newark, moving east at 30 mph. Sixty mph wind gusts and quarter size hail expected.',
     instruction: 'Move to an interior room on the lowest floor of a building.',
 };
@@ -70,6 +71,7 @@ describe('GET /api/explain-alert', () => {
         mockFetchDelay = 0;
         generateCalls = 0;
         fetchAlertCalls = 0;
+        coldBudget.reset();
         mockGenerateText = async () => ({ text: 'A severe thunderstorm is over Newark. **Move to an interior room.**', finishReason: 'stop' });
     });
 
@@ -196,5 +198,66 @@ describe('GET /api/explain-alert', () => {
             last = res.statusCode;
         }
         expect(last).toBe(429);
+    });
+});
+
+describe('GET /api/explain-alert — Sep 28 2026 audit hardening', () => {
+    beforeEach(() => {
+        mockAlert = { ...FULL_ALERT };
+        mockAlertThrows = false;
+        mockFetchDelay = 0;
+        generateCalls = 0;
+        coldBudget.reset();
+        mockGenerateText = async () => ({ text: 'Explained.', finishReason: 'stop' });
+    });
+
+    it('410s (alert_expired) an alert whose expires and ends are both past — no model call', async () => {
+        mockAlert = { ...FULL_ALERT, expires: '2026-07-03T20:00:00-04:00', ends: '2026-07-03T21:00:00-04:00' };
+        const res = createRes();
+        await handler(createReq({ id: freshUrn() }), res);
+        expect(res.statusCode).toBe(410);
+        expect(res.body.code).toBe('alert_expired');
+        expect(res.body.error).toBe('Alert has expired');
+        expect(generateCalls).toBe(0);
+    });
+
+    it('treats the LATER of ends/expires as the end (message rolled over, event still on)', () => {
+        const now = Date.parse('2026-09-28T12:00:00Z');
+        expect(alertIsExpired({ expires: '2026-09-28T11:00:00Z', ends: '2026-09-28T18:00:00Z' }, now)).toBe(false);
+        expect(alertIsExpired({ expires: '2026-09-28T11:00:00Z', ends: null }, now)).toBe(true);
+        expect(alertIsExpired({ expires: '2026-09-28T13:00:00Z' }, now)).toBe(false);
+        expect(alertIsExpired({}, now)).toBe(false); // no times: fail open
+    });
+
+    it('caps the prompt at ~6000 chars', async () => {
+        let prompt;
+        mockGenerateText = async (args) => { prompt = args.prompt; return { text: 'ok', finishReason: 'stop' }; };
+        mockAlert = { ...FULL_ALERT, description: 'Wind. '.repeat(5000) };
+        const res = createRes();
+        await handler(createReq({ id: freshUrn() }), res);
+        expect(res.statusCode).toBe(200);
+        expect(PROMPT_MAX_CHARS).toBe(6000);
+        expect(prompt.length).toBeLessThanOrEqual(6000);
+    });
+
+    it('400s (unknown_param) on junk query params — a CDN cache-bust lever', async () => {
+        const res = createRes();
+        await handler(createReq({ id: freshUrn(), cb: '1' }), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.code).toBe('unknown_param');
+        expect(res.headers['cache-control']).toBe('no-store');
+        expect(generateCalls).toBe(0);
+    });
+
+    it('503s (over_capacity) once the instance-wide cold-call budget is spent', async () => {
+        let last;
+        for (let i = 0; i < 31; i++) {
+            last = createRes();
+            await handler(createReq({ id: freshUrn() }), last);
+        }
+        expect(generateCalls).toBe(30);
+        expect(last.statusCode).toBe(503);
+        expect(last.body.code).toBe('over_capacity');
+        expect(last.headers['cache-control']).toBe('no-store');
     });
 });

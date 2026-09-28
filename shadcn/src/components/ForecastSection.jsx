@@ -22,26 +22,36 @@ export const ForecastSection = memo(function ForecastSection({
 }) {
     const tz = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
     const cardRef = useRef(null);
-    const [ai, setAi] = useState({ status: aiEligible ? 'pending' : 'off', html: null });
+    // 'idle' until the request actually starts (the card scrolls near the
+    // viewport) — "Summarizing…" must never show with nothing in flight.
+    const [ai, setAi] = useState({ status: aiEligible ? 'idle' : 'off', html: null });
 
     const plainHTML = useMemo(
-        () => translateToPlainEnglish(section.text, tz),
-        [section.text, tz]
+        () => translateToPlainEnglish(section.text, tz, issuanceTime),
+        [section.text, tz, issuanceTime]
     );
 
     useEffect(() => {
         if (!aiEligible) return;
         const el = cardRef.current;
-        if (!el || !('IntersectionObserver' in window)) return;
+        if (!el) return;
         let cancelled = false;
-        const observer = new IntersectionObserver((entries) => {
-            if (!entries.some(e => e.isIntersecting)) return;
-            observer.disconnect();
+        const start = () => {
+            setAi({ status: 'pending', html: null });
             translateSection(section, office, productId, issuanceTime).then(html => {
                 if (cancelled) return;
                 if (!html) track('ai-translate-fail', { office, section: section.key });
                 setAi(html ? { status: 'done', html } : { status: 'failed', html: null });
             });
+        };
+        if (!('IntersectionObserver' in window)) {
+            start();
+            return () => { cancelled = true; };
+        }
+        const observer = new IntersectionObserver((entries) => {
+            if (!entries.some(e => e.isIntersecting)) return;
+            observer.disconnect();
+            start();
         }, { rootMargin: '200px' });
         observer.observe(el);
         return () => { cancelled = true; observer.disconnect(); };
@@ -60,8 +70,10 @@ export const ForecastSection = memo(function ForecastSection({
             className="scroll-mt-20"
         >
             <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                <CardHeader className="min-w-0">
+                    {/* min-w-0 + wrap: at 320px a long title + "Updated" badge +
+                        "Summarizing…" must wrap, never push past the viewport. */}
+                    <CardTitle className="flex min-w-0 flex-wrap items-center gap-2 break-words">
                         {section.key}
                         {changed && (
                             <Badge variant="secondary">
@@ -69,7 +81,7 @@ export const ForecastSection = memo(function ForecastSection({
                             </Badge>
                         )}
                     </CardTitle>
-                    <CardAction className="text-xs text-muted-foreground">
+                    <CardAction className="whitespace-nowrap text-xs text-muted-foreground">
                         {ai.status === 'pending' && (
                             <span className="inline-flex items-center gap-1">
                                 <Loader2 className="size-3 animate-spin" aria-hidden="true" /> Summarizing…

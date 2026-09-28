@@ -65,7 +65,7 @@ export async function fetchAlerts(office) {
         if (!res.ok) return { alerts: [], severe: false };
         const data = await res.json();
         const senderMatch = OFFICE_SENDER[office] || '';
-        const alerts = [];
+        let alerts = [];
         for (const f of (data.features || [])) {
             const p = f.properties;
             if (senderMatch && !(p.senderName || '').includes(senderMatch)) continue;
@@ -83,6 +83,7 @@ export async function fetchAlerts(office) {
             });
         }
         const order = { warning: 0, watch: 1, advisory: 2, statement: 3 };
+        alerts = dropExpiredAlerts(alerts);
         alerts.sort((a, b) => order[classifyAlertKind(a.event)] - order[classifyAlertKind(b.event)]);
         const severe = alerts.some(a =>
             /warning/i.test(a.event) && /severe|extreme/i.test(a.severity));
@@ -91,6 +92,24 @@ export async function fetchAlerts(office) {
         console.debug('Alert fetch failed', e);
         return { alerts: [], severe: false };
     }
+}
+
+// True when the event name already contains the kind word ("Coastal Flood
+// Advisory" / "Advisory"), so the kind badge would repeat it to a screen reader.
+export function badgeRepeatsEvent(event, label) {
+    return new RegExp(`\\b${label}\\b`, 'i').test(event || '');
+}
+
+// Alerts whose message has expired (or whose event has ended). Online, the
+// /alerts/active feed never returns these; offline, the service worker serves
+// the last cached response, where an expired Warning would still look live.
+export function dropExpiredAlerts(alerts, now = Date.now()) {
+    const past = (iso) => {
+        if (!iso) return false;
+        const t = Date.parse(iso);
+        return Number.isFinite(t) && t < now;
+    };
+    return alerts.filter(a => !past(a.expires) && !past(a.ends));
 }
 
 // One row per distinct (event, end time): a tropical system puts the same

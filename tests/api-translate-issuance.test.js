@@ -27,6 +27,8 @@ National Weather Service Los Angeles/Oxnard CA
 $$`;
 
 let mockList = [];
+let mockProductText = null; // override AFD_TEXT per test
+let mockIssuanceTime = '2026-03-24T18:25:00+00:00';
 let mockListThrows = false;
 mock.module('../api/_utils.js', () => ({
     // A module mock replaces the WHOLE module process-wide (Bun mocks are
@@ -39,7 +41,7 @@ mock.module('../api/_utils.js', () => ({
     fetchSpcOutlook: async () => null,
     fetchAlertById: async () => null,
     fetchAFDList: async () => { if (mockListThrows) throw new Error('NWS down'); return mockList; },
-    fetchAFDProduct: async () => ({ productText: AFD_TEXT, issuanceTime: '2026-03-24T18:25:00+00:00' }),
+    fetchAFDProduct: async () => ({ productText: mockProductText || AFD_TEXT, issuanceTime: mockIssuanceTime }),
     productUrlFromItem: (item) => item?.id || null,
 }));
 
@@ -51,12 +53,13 @@ mock.module('../api/_snapshots.js', () => ({
     putSnapshot: async (office, id, payload) => { mockSnapshots[`${office}|${id}`] = payload; return true; },
 }));
 
-const { default: handler } = await import('../api/translate-issuance.js');
+const { default: handler, coldBudget } = await import('../api/translate-issuance.js');
 
 function createRes() {
     return {
         statusCode: 200, headers: {}, body: null, ended: false,
         setHeader(k, v) { this.headers[k.toLowerCase()] = v; return this; },
+        getHeader(k) { return this.headers[k.toLowerCase()]; }, // real Node res has it; sendError keeps a set Cache-Control
         status(c) { this.statusCode = c; return this; },
         json(d) { this.body = d; this.ended = true; return this; },
         end() { this.ended = true; return this; },
@@ -82,6 +85,9 @@ function freshId() { return `prod-${idCounter++}`; }
 describe('GET /api/translate-issuance', () => {
     beforeEach(() => {
         mockListThrows = false;
+        mockProductText = null;
+        mockIssuanceTime = '2026-03-24T18:25:00+00:00';
+        coldBudget.reset();
         mockGenerateText = async () => ({ text: 'plain english here', finishReason: 'stop' });
     });
 
@@ -235,5 +241,95 @@ describe('GET /api/translate-issuance — repeated query param', () => {
         await handler(createReq({ office: ['LOX', 'OKX'], id: freshId() }), res);
         expect(res.statusCode).toBe(400);
         expect(res.body.code).toBe('invalid_office');
+    });
+});
+
+describe('GET /api/translate-issuance — Sep 28 2026 audit hardening', () => {
+    beforeEach(() => {
+        mockListThrows = false;
+        mockProductText = null;
+        mockIssuanceTime = '2026-03-24T18:25:00+00:00';
+        coldBudget.reset();
+        mockGenerateText = async () => ({ text: 'plain english here', finishReason: 'stop' });
+    });
+
+    it('400s (unknown_param) on a junk query param — a CDN cache-bust lever', async () => {
+        const id = freshId();
+        mockList = [{ id }];
+        let calls = 0;
+        mockGenerateText = async () => { calls++; return { text: 'x', finishReason: 'stop' }; };
+        const res = createRes();
+        await handler(createReq({ office: 'LOX', id, v: '2' }), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.code).toBe('unknown_param');
+        expect(res.body.allowed).toEqual(['office', 'id']);
+        expect(calls).toBe(0);
+    });
+
+    it('allows the defensive `path` rewrite capture', async () => {
+        const id = freshId();
+        mockList = [{ id }];
+        const res = createRes();
+        await handler(createReq({ office: 'LOX', id, path: 'translate-issuance' }), res);
+        expect(res.statusCode).toBe(200);
+    });
+
+    it('routes thrown failures through sendError (code + hint), keeping the error strings', async () => {
+        mockList = [{ id: freshId() }];
+        let res = createRes();
+        await handler(createReq({ office: 'LOX', id: 'not-in-list' }), res);
+        expect(res.statusCode).toBe(404);
+        expect(res.body.error).toBe('Unknown edition');
+        expect(res.body.code).toBe('invalid_id');
+        expect(res.body.hint).toBeTruthy();
+        expect(res.headers['cache-control']).toBe('public, s-maxage=60');
+
+        const id = freshId();
+        mockList = [{ id }];
+        mockGenerateText = async () => { throw new Error('model down'); };
+        res = createRes();
+        await handler(createReq({ office: 'LOX', id }), res);
+        expect(res.statusCode).toBe(502);
+        expect(res.body.error).toBe('Translation unavailable');
+        expect(res.body.code).toBe('upstream_error');
+    });
+
+    it('charges every section of a cold issuance to the instance budget; 503 over_capacity when spent', async () => {
+        // AFD_TEXT has 3 translatable sections → 20 cold issuances = 60 calls.
+        for (let i = 0; i < 20; i++) {
+            const id = freshId();
+            mockList = [{ id }];
+            const r = createRes();
+            await handler(createReq({ office: 'LOX', id }), r);
+            expect(r.statusCode).toBe(200);
+        }
+        const id = freshId();
+        mockList = [{ id }];
+        const res = createRes();
+        await handler(createReq({ office: 'LOX', id }), res);
+        expect(res.statusCode).toBe(503);
+        expect(res.body.code).toBe('over_capacity');
+        expect(res.headers['cache-control']).toBe('no-store');
+    });
+
+    it('annotates Zulu times through the same annotateZuluTimes path as /api/translate', async () => {
+        const id = freshId();
+        mockList = [{ id }];
+        mockIssuanceTime = '2026-09-28T11:36:00+00:00';
+        mockProductText = `000
+FXUS63 KLOT 281136
+AFDLOT
+
+.AVIATION /12Z TAFS/...
+Showers expand across the Chicago metro area in the 6-9Z timeframe with MVFR ceilings through 15Z.
+
+$$`;
+        const prompts = [];
+        mockGenerateText = async (args) => { prompts.push(args.prompt); return { text: 'ok', finishReason: 'stop' }; };
+        const res = createRes();
+        await handler(createReq({ office: 'LOT', id }), res);
+        expect(res.statusCode).toBe(200);
+        expect(prompts.join('\n')).toContain('6-9Z (1-4 AM CDT Tue)');
+        expect(prompts.join('\n')).toContain('15Z (10 AM CDT)');
     });
 });

@@ -23,21 +23,30 @@ docs/              LEGACY vanilla client (no longer deployed as the frontend)
   sw.js            Legacy service worker (not deployed; /sw.js is shadcn's)
   manifest.json    PWA manifest
 api/               Vercel serverless functions
-  home.js          SSR homepage for /  (docs/index.html + live AFD digest)
+  home.js          SSR homepage for /  (api/_home-shell.html + live AFD digest)
   office-page.js   SSR /o/<CODE>/
-  national-desk.js SSR /national/
+  national-desk.js SSR /national/  (data in _national.js)
   page.js          /about, /contact, /privacy, /developers (content in _pages.js)
   not-found.js     catch-all agent-friendly 404 (HTML + Markdown)
   api-not-found.js JSON 404 for unknown /api/* paths
   _errors.js       structured JSON errors (code + hint + docs)
   _negotiate.js    Accept-header content negotiation (HTML / Markdown / 406)
   _edition-markdown.js  Markdown twin of an edition
-  translate.js     AI translation (AI Gateway + Claude)
+  _afd-sections.js server-side AFD section parser (translate verifies against it)
+  _snapshots.js    Blob-backed edition snapshots (inert unless BLOB_READ_WRITE_TOKEN is set)
+  _utils.js        shared fetch/cache/rate-limit helpers
+  *-shell.html     committed HTML shells (generated; see Routing rule)
+  translate.js     AI translation of one section (AI Gateway + Claude)
+  translate-issuance.js  AI translation of a whole edition
+  changelog.js     AI one-liner on what changed between issuances
+  explain-alert.js AI explanation of an active alert
+  national-lede.js AI lede for the national desk
   feed.js          RSS per office
   og.js            Dynamic OG images
   conditions.js    Current weather + averages
+  whereami.js      no-store geo lookup (Vercel headers) for the office pointer
 docs/openapi.json  OpenAPI 3.1 spec (lint: bunx @redocly/cli lint docs/openapi.json)
-tests/             Bun test suite (598 tests)
+tests/             Bun test suite (783 tests)
 ```
 
 ## Routing rule
@@ -73,9 +82,13 @@ acceptmarkdown.com test vectors live in `tests/negotiate.test.js`.
 
 ## Commands
 - `bun test tests/` — run all tests
-- `cd docs && python3 -m http.server 8765` — local dev. Note: `/` serves the
-  static shell with an empty `#sections`; the SSR digest, the trust pages and
-  Markdown negotiation are functions, so they need `vercel dev`.
+- `cd shadcn && bun run dev` — frontend dev server. The SSR digest, the trust
+  pages, the AI endpoints and Markdown negotiation are functions, so they need
+  `vercel dev` from the repo root.
+- `cd shadcn && bun run build` — production build (Vercel runs this plus
+  scripts/prepare-deploy.mjs)
+- `bun scripts/build-offices.mjs` — regenerate per-office pages, sitemap and
+  api/_home-shell.html after editing shadcn/index.html
 
 ## Release rule
 The deployed service worker is shadcn/public/sw.js. Any PR that changes the

@@ -39,7 +39,7 @@ mock.module('../api/_utils.js', () => ({
     productUrlFromItem: (item) => item?.id || null,
 }));
 
-const { default: handler } = await import('../api/national-lede.js');
+const { default: handler, coldBudget } = await import('../api/national-lede.js');
 const { default: swody1 } = await import('./fixtures/national/swody1.json');
 
 function createRes() {
@@ -86,6 +86,7 @@ describe('GET /api/national-lede', () => {
         spcCalls = 0;
         generateCalls = 0;
         generateArgs = [];
+        coldBudget.reset();
         mockGenerateText = async () => ({
             text: 'Severe storms are possible from the Ohio Valley to the central High Plains this evening.',
             finishReason: 'stop',
@@ -186,40 +187,33 @@ describe('GET /api/national-lede', () => {
         expect(generateCalls).toBe(0);
     });
 
-    it('ignores every client-supplied parameter — none reaches the prompt, the response, or the cache key', async () => {
-        // 1. paramless call on its own issuance
-        const issuedA = setSpc(nextIssuance());
-        const paramless = await call();
-        expect(paramless.body.cached).toBe(false);
-        const promptA = generateArgs[0].prompt;
-
-        // 2. hostile params on a DIFFERENT issuance (same product text): the
-        //    model must see a byte-identical prompt and the response must match
-        //    the paramless one everywhere except the issuance it reported.
-        const issuedB = setSpc(nextIssuance());
+    it('rejects every client-supplied parameter (400 unknown_param) — none reaches the model or the CDN', async () => {
+        // The endpoint reads no input, so a param can only ever be a CDN
+        // cache-bust (Sep 28 2026 audit): it used to be ignored and served,
+        // making every distinct junk URL an edge miss that reached the function.
+        setSpc(nextIssuance());
         const withParams = await call(createReq({ query: { office: 'LOT', evil: 'x', id: '../../etc/passwd' } }));
-        expect(generateCalls).toBe(2);
-        const promptB = generateArgs[1].prompt;
+        expect(withParams.statusCode).toBe(400);
+        expect(withParams.body.code).toBe('unknown_param');
+        expect(withParams.headers['cache-control']).toBe('no-store');
+        expect(generateCalls).toBe(0);
+        expect(spcCalls).toBe(0);
+        expect(JSON.stringify(withParams.body)).not.toContain('passwd');
+    });
 
-        expect(promptB).toBe(promptA);
-        expect(promptB).not.toContain('LOT');
-        expect(promptB).not.toContain('evil');
-        expect(promptB).not.toContain('passwd');
-        expect(generateArgs[1].system).toBe(generateArgs[0].system);
-        expect(generateArgs[1].model).toBe(generateArgs[0].model);
-
-        expect(withParams.statusCode).toBe(paramless.statusCode);
-        expect(withParams.headers['cache-control']).toBe(paramless.headers['cache-control']);
-        expect({ ...withParams.body, issued: null }).toEqual({ ...paramless.body, issued: null });
-        expect(withParams.body.issued).toBe(issuedB); // the SPC issuance, never a param
-        expect(paramless.body.issued).toBe(issuedA);
-
-        // 3. params are not part of the cache key: a param-laden call on an
-        //    already-summarized issuance is a cache hit, not a fresh model call.
-        setSpc(issuedA);
-        const cachedWithParams = await call(createReq({ query: { office: 'LOT', evil: 'x' } }));
-        expect(generateCalls).toBe(2); // unchanged
-        expect(cachedWithParams.body).toEqual({ deck: paramless.body.deck, issued: issuedA, cached: true });
+    it('503s (over_capacity, no-store) once the instance-wide cold budget is spent', async () => {
+        coldBudget.reset();
+        for (let i = 0; i < 10; i++) {
+            setSpc(nextIssuance());
+            expect((await call()).statusCode).toBe(200);
+        }
+        setSpc(nextIssuance());
+        const over = await call();
+        expect(generateCalls).toBe(10);
+        expect(over.statusCode).toBe(503);
+        expect(over.body.code).toBe('over_capacity');
+        expect(over.headers['cache-control']).toBe('no-store');
+        coldBudget.reset();
     });
 
     it('dedups concurrent cold misses — one SPC fetch, one model call', async () => {

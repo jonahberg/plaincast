@@ -8,6 +8,27 @@
 import { generateText } from 'ai';
 import { fetchAlertById } from './_utils.js';
 import { sendError as sendJsonError } from './_errors.js';
+import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
+
+// Instance-wide cap on cold model calls per minute: alert ids are enumerable
+// from the public feed, so rotating IPs could otherwise bill one call per id.
+export const coldBudget = createColdBudget(30);
+
+// Prompt input cap. Real alerts' event+headline+areas+description+instruction
+// fit comfortably; the cap bounds the per-call cost of a pathological one.
+export const PROMPT_MAX_CHARS = 6000;
+
+// An alert is over when the LATER of `ends` (event end, often null) and
+// `expires` (this message's expiry) has passed. Taking the later of the two
+// avoids false 410s on a warning whose message expired but whose event hasn't.
+// Unparseable/missing times → treated as not expired (fail open).
+export function alertIsExpired(alert, now = Date.now()) {
+    const times = [alert?.ends, alert?.expires]
+        .map(t => (typeof t === 'string' ? Date.parse(t) : NaN))
+        .filter(Number.isFinite);
+    if (times.length === 0) return false;
+    return Math.max(...times) < now;
+}
 
 const cache = new Map(); // alert id -> { explanation, time }
 const CACHE_TTL = 4 * 60 * 60 * 1000;
@@ -59,11 +80,13 @@ const SYSTEM = `You translate National Weather Service alerts into calm, plain E
 // HTTP responses the endpoint has always produced. Shared by the fresh path
 // and the piggybacking-awaiter path so both react to a shared failure identically.
 function sendError(res, e) {
+    if (e?.code === 'over_capacity') return sendOverCapacity(res, e);
     if (e?.statusCode) {
         if (e.cacheHeader) res.setHeader('Cache-Control', e.cacheHeader);
         // Map the thrown status onto a machine code; `error` and `reason` keep
         // the exact values this endpoint has always returned.
-        const code = e.statusCode === 429 ? 'rate_limited'
+        const code = e.code ? e.code
+            : e.statusCode === 429 ? 'rate_limited'
             : e.statusCode === 404 ? 'not_found'
             : e.statusCode >= 500 ? 'upstream_error'
             : 'invalid_request';
@@ -79,6 +102,7 @@ function sendError(res, e) {
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') return sendJsonError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
+    if (rejectUnknownParams(req, res, ['id'])) return;
 
     const id = typeof req.query.id === 'string' ? req.query.id.trim() : '';
     // NWS alert ids are URNs like urn:oid:2.49.0.1.840.0.<digits>...
@@ -119,6 +143,11 @@ export default async function handler(req, res) {
         if (!alert) {
             throw Object.assign(new Error('not found'), { statusCode: 404, publicMessage: 'Alert not found', cacheHeader: 'public, s-maxage=600' });
         }
+        // Any historical URN used to be explainable, so every id NWS still
+        // retains was a billable cold key. Only live alerts get a model call.
+        if (alertIsExpired(alert)) {
+            throw Object.assign(new Error('expired'), { statusCode: 410, code: 'alert_expired', publicMessage: 'Alert has expired', cacheHeader: 'public, s-maxage=3600' });
+        }
 
         const parts = [
             alert.event && `Event: ${alert.event}`,
@@ -128,11 +157,12 @@ export default async function handler(req, res) {
             alert.description && `Description:\n${alert.description}`,
             alert.instruction && `Instructions:\n${alert.instruction}`,
         ].filter(Boolean);
-        const prompt = parts.join('\n\n').slice(0, 12000);
+        const prompt = parts.join('\n\n').slice(0, PROMPT_MAX_CHARS);
         if (prompt.length < 40) {
             throw Object.assign(new Error('no text'), { statusCode: 502, publicMessage: 'Alert has no explainable text' });
         }
 
+        if (!coldBudget.take()) throw overCapacityError();
         const result = await generateText({
             model: 'anthropic/claude-haiku-4.5',
             system: SYSTEM,
