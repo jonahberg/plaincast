@@ -103,7 +103,7 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 
 - **shadcn/ui frontend** - React + Vite SPA in `shadcn/`, built into `shadcn/dist` on deploy; shared data modules (glossary, offices, abbreviations, diff) live in `docs/js/`
 - **NWS API** - Pulls directly from `api.weather.gov` (no API key needed)
-- **AI summaries** - Claude Haiku via Vercel AI Gateway with OIDC auth
+- **AI summaries** - Claude Haiku 5.5 on the Claude API (`api/_model.js`), billed to the Max plan's monthly API credits
 - **Forecast diff** - Paragraph-level comparison showing what changed between AFD versions
 - **One look sitewide** - shadcn/ui components and tokens on every page (see `DESIGN.md`)
 - **Light/dark mode** - Follows the system setting, with a toggle that persists across pages

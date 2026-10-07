@@ -165,7 +165,7 @@ export const PAGES = {
             { h: 'What leaves your browser' },
             { ul: [
                 'Forecast requests go to the National Weather Service API (api.weather.gov) from your browser. Those requests reach NOAA directly and are subject to the [NWS privacy policy](https://www.weather.gov/privacy).',
-                'Forecast text is sent to Anthropic\'s Claude, through the Vercel AI Gateway, to be summarized. What is sent is the National Weather Service\'s published forecast text — never anything you typed, and never anything identifying you. Plaincast has no input field.',
+                'Forecast text is sent to Anthropic\'s Claude API to be summarized. What is sent is the National Weather Service\'s published forecast text — never anything you typed, and never anything identifying you. Plaincast has no input field.',
                 'The site is hosted on Vercel, which terminates every request and keeps standard server logs, including IP addresses. Vercel is also where the per-IP rate limit on the translation endpoint is enforced, using the forwarded IP for the length of that check only.',
                 'Vercel Web Analytics and Speed Insights run on the page. Both are configured by Vercel to be cookie-free and to record aggregate page and performance data without a cross-site identifier.',
             ] },
