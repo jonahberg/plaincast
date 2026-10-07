@@ -169,7 +169,7 @@ export default async function handler(req, res) {
             providerOptions: PROVIDER_OPTIONS,
             system: SYSTEM,
             prompt,
-            maxOutputTokens: 400,
+            maxOutputTokens: 800,
             abortSignal: AbortSignal.timeout(15000),
         });
         if (result.finishReason === 'content-filter') {

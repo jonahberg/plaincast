@@ -119,7 +119,7 @@ export default async function handler(req, res) {
             providerOptions: PROVIDER_OPTIONS,
             system,
             prompt,
-            maxOutputTokens: 120,
+            maxOutputTokens: 240,
             abortSignal: AbortSignal.timeout(15000),
         });
 

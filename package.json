@@ -6,6 +6,7 @@
     "test": "bun test tests/"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.128",
     "@vercel/blob": "^2.8.0",
     "@vercel/og": "1.0.1",
     "ai": "^6.0.293"

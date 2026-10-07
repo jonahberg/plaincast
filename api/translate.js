@@ -121,7 +121,7 @@ function checkDegradedGlobalBudget() {
     return true;
 }
 const DEGRADED_TEXT_MAX = 6000;    // chars (normal mode: 10000)
-const DEGRADED_MAX_TOKENS = 512;   // output tokens (normal mode: 1024)
+const DEGRADED_MAX_TOKENS = 1024;  // output tokens (normal mode: 2048)
 
 function checkDegradedRateLimit(ip) {
     const now = Date.now();
@@ -523,7 +523,7 @@ export default async function handler(req, res) {
             providerOptions: PROVIDER_OPTIONS,
             system: systemPrompt,
             prompt: annotateZuluTimes(text, officeCode, promptIssuanceTime),
-            maxOutputTokens: degraded ? DEGRADED_MAX_TOKENS : 1024,
+            maxOutputTokens: degraded ? DEGRADED_MAX_TOKENS : 2048,
             abortSignal: AbortSignal.timeout(15000),
         });
 

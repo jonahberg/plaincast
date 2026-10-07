@@ -165,7 +165,7 @@ export default async function handler(req, res) {
                     providerOptions: PROVIDER_OPTIONS,
                     system: buildSystemPrompt({ section: s.key, office, issuanceTime }),
                     prompt: annotateZuluTimes(s.text, office, issuanceTime),
-                    maxOutputTokens: 1024,
+                    maxOutputTokens: 2048,
                     abortSignal: AbortSignal.timeout(15000),
                 });
                 if (result.finishReason === 'content-filter') return null;
