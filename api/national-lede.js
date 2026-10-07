@@ -9,6 +9,7 @@ import { generateText } from 'ai';
 import { fetchSpcDy1 } from './_utils.js';
 import { parseSpcOutlook } from './_national.js';
 import { sendError } from './_errors.js';
+import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
 
 // Instance-wide cap on cold model calls per minute. One national answer per
@@ -114,7 +115,8 @@ export default async function handler(req, res) {
 
         if (!coldBudget.take()) throw overCapacityError();
         const result = await generateText({
-            model: 'anthropic/claude-haiku-4.5',
+            model: MODEL,
+            providerOptions: PROVIDER_OPTIONS,
             system,
             prompt,
             maxOutputTokens: 120,

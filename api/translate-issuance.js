@@ -10,6 +10,7 @@ import { extractSections } from './_afd-sections.js';
 import { annotateZuluTimes, buildSystemPrompt } from './translate.js';
 import { getSnapshot, putSnapshot } from './_snapshots.js';
 import { sendError } from './_errors.js';
+import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
 
 // Instance-wide cap on cold model calls per minute (each cold issuance costs
@@ -160,7 +161,8 @@ export default async function handler(req, res) {
         const settled = await Promise.all(sections.map(async (s) => {
             try {
                 const result = await generateText({
-                    model: 'anthropic/claude-haiku-4.5',
+                    model: MODEL,
+                    providerOptions: PROVIDER_OPTIONS,
                     system: buildSystemPrompt({ section: s.key, office, issuanceTime }),
                     prompt: annotateZuluTimes(s.text, office, issuanceTime),
                     maxOutputTokens: 1024,

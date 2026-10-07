@@ -7,6 +7,7 @@ import { OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { sendError } from './_errors.js';
 import { extractSections } from './_afd-sections.js';
+import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 // The client parser, imported so verification matches what browsers send.
 // Pure module (relative imports only); shadcn/package.json is type:module.
 import { parseSections } from '../shadcn/src/lib/afd.js';
@@ -518,7 +519,8 @@ export default async function handler(req, res) {
 
     try {
         const result = await generateText({
-            model: 'anthropic/claude-haiku-4.5',
+            model: MODEL,
+            providerOptions: PROVIDER_OPTIONS,
             system: systemPrompt,
             prompt: annotateZuluTimes(text, officeCode, promptIssuanceTime),
             maxOutputTokens: degraded ? DEGRADED_MAX_TOKENS : 1024,
