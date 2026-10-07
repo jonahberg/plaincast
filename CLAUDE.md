@@ -36,7 +36,7 @@ api/               Vercel serverless functions
   _snapshots.js    Blob-backed edition snapshots (inert unless BLOB_READ_WRITE_TOKEN is set)
   _utils.js        shared fetch/cache/rate-limit helpers
   *-shell.html     committed HTML shells (generated; see Routing rule)
-  translate.js     AI translation of one section (AI Gateway + Claude)
+  translate.js     AI translation of one section (Claude API; model in _model.js)
   translate-issuance.js  AI translation of a whole edition
   changelog.js     AI one-liner on what changed between issuances
   explain-alert.js AI explanation of an active alert

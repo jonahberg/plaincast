@@ -113,11 +113,13 @@ describe('GET /api/national-lede', () => {
         expect(first.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
         expect(generateCalls).toBe(1);
 
-        // The model call itself: pinned model string, both headline and summary
-        // fed to it, and nothing else.
+        // The model call itself: pinned model (direct Claude API) with thinking
+        // off, both headline and summary fed to it, and nothing else.
         const args = generateArgs[0];
-        expect(args.model).toBe('anthropic/claude-haiku-4.5');
-        expect(args.maxOutputTokens).toBe(120);
+        expect(args.model.provider).toBe('anthropic.messages');
+        expect(args.model.modelId).toBe('claude-haiku-5-5');
+        expect(args.providerOptions).toEqual({ anthropic: { thinking: { type: 'disabled' } } });
+        expect(args.maxOutputTokens).toBe(240);
         expect(args.system).toMatch(/Storm Prediction Center/);
         expect(args.prompt).toContain('THERE IS A SLIGHT RISK OF SEVERE THUNDERSTORMS');
         expect(args.prompt).toContain('Thunderstorms with severe wind gusts');

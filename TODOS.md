@@ -3,13 +3,17 @@
 ## Open
 
 ### Owner actions (Vercel dashboard / CLI, not code)
-- **AI Gateway budget for the plaincast project.** None exists, so the Gateway
-  credit balance is the only ceiling on LLM spend. A daily budget caps an
-  attack at one day's limit: `vercel ai-gateway budgets set project plaincast --limit 5 --refresh-period daily`.
+- **Keep the Claude API capped.** AI calls bill to the Console org that gets
+  the Max plan's monthly API credits; with no card or auto-reload behind them,
+  the credits ARE the cap (requests stop, endpoints fall back). If purchased
+  credits or auto-reload are ever added, set a workspace spend limit first
+  (Console → Settings → Limits) so an attack can't drain them.
 - **WAF rate-limit rule** on `/api/(translate|translate-issuance|changelog|explain-alert)`,
   ~20 req/min per IP → 429. The in-code limiters are per instance only.
-- **Remove the unused `ANTHROPIC_API_KEY`** from Production env and revoke it at
-  Anthropic (the Gateway authenticates via OIDC; nothing references the key).
+- **Swap `ANTHROPIC_API_KEY` for a workspace-scoped key.** The current key is a
+  personal multi-workspace key, so `ANTHROPIC_WORKSPACE_ID` has to name the
+  workspace. A key created inside that one workspace needs no header and can't
+  reach the others; once it's in, `ANTHROPIC_WORKSPACE_ID` can be deleted.
 
 ### Code follow-ups
 - **Shared cache for AI results.** Caches are in-memory per instance; Blob is not

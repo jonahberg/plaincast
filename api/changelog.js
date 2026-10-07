@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { sendError } from './_errors.js';
+import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
 
 // Instance-wide cap on cold model calls per minute (rotating IPs defeat the
@@ -184,10 +185,11 @@ export default async function handler(req, res) {
 
         if (!coldBudget.take()) throw overCapacityError();
         const result = await generateText({
-            model: 'anthropic/claude-haiku-4.5',
+            model: MODEL,
+            providerOptions: PROVIDER_OPTIONS,
             system,
             prompt,
-            maxOutputTokens: 120,
+            maxOutputTokens: 240,
             abortSignal: AbortSignal.timeout(15000),
         });
 

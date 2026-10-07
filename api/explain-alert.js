@@ -8,6 +8,7 @@
 import { generateText } from 'ai';
 import { fetchAlertById } from './_utils.js';
 import { sendError as sendJsonError } from './_errors.js';
+import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
 
 // Instance-wide cap on cold model calls per minute: alert ids are enumerable
@@ -164,10 +165,11 @@ export default async function handler(req, res) {
 
         if (!coldBudget.take()) throw overCapacityError();
         const result = await generateText({
-            model: 'anthropic/claude-haiku-4.5',
+            model: MODEL,
+            providerOptions: PROVIDER_OPTIONS,
             system: SYSTEM,
             prompt,
-            maxOutputTokens: 400,
+            maxOutputTokens: 800,
             abortSignal: AbortSignal.timeout(15000),
         });
         if (result.finishReason === 'content-filter') {

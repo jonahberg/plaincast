@@ -561,7 +561,7 @@ describe('POST /api/translate — degraded mode (NWS unreachable)', () => {
         const res = createRes();
         await handler(createReq({ body: freshBody({ office: 'BOX', text: 'Some unverifiable forecast text long enough to pass the length validation.' }) }), res);
         expect(res.statusCode).toBe(200);
-        expect(aiArgs.maxOutputTokens).toBeLessThanOrEqual(512);
+        expect(aiArgs.maxOutputTokens).toBeLessThanOrEqual(1024);
     });
 
     it('rejects oversized text that normal mode would accept', async () => {
@@ -581,7 +581,7 @@ describe('POST /api/translate — degraded mode (NWS unreachable)', () => {
         const res = createRes();
         await handler(createReq({ body: freshBody() }), res);
         expect(res.statusCode).toBe(200);
-        expect(aiArgs.maxOutputTokens).toBe(1024);
+        expect(aiArgs.maxOutputTokens).toBe(2048);
     });
 });
 
