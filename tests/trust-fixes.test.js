@@ -80,9 +80,10 @@ describe('sanitizeTranslation — weekday/date pairs', () => {
             .toBe('Rain arrives Monday in the evening.');
     });
 
-    it('window is office-local: -1..+10 days from Nov 11 PST, not the UTC Nov 12', () => {
-        // Nov 22 really is a Sunday — it is rejected only because it is +11 days.
-        expect(sanitizeTranslation('Saturday, November 21 looks dry.', ctx)).toBe('Saturday, November 21 looks dry.');
+    it('window is office-local: -1..+8 days from Nov 11 PST, not the UTC Nov 12', () => {
+        // Nov 22 really is a Sunday — it is rejected because it is outside the window.
+        expect(sanitizeTranslation('Thursday, November 19 looks dry.', ctx)).toBe('Thursday, November 19 looks dry.');
+        expect(sanitizeTranslation('Friday, November 20 looks dry.', ctx)).toBe('Friday looks dry.');
         expect(sanitizeTranslation('Sunday, November 22 looks dry.', ctx)).toBe('Sunday looks dry.');
         // One day before the local issuance date is still in the window.
         expect(sanitizeTranslation('Tuesday, November 10 was warm.', ctx)).toBe('Tuesday, November 10 was warm.');
@@ -203,6 +204,8 @@ describe('glossary: PoP matches only the abbreviation, never the word "pop"', ()
         expect(expandAll('days with essentially zero PoPs for the week ahead')).toBe('days with essentially zero chance of rain for the week ahead');
         expect(expandAll('POPs remain low')).toBe('chance of rain remain low');
         expect(expandAll('pops will increase')).toBe('chance of rain will increase');
+        // "up to" after the abbreviation is a quantity, not "pop-up".
+        expect(expandAll('PoPs up to 40 percent')).toBe('chance of rain up to 40 percent');
         expect(expandAll('a 30 percent PoP')).toBe('a 30 percent chance of rain');
         expect(expandAll('POP of 40 percent')).toBe('chance of rain of 40 percent');
         expect(expandAll('Pops rise Friday')).toBe('chance of rain rise Friday');

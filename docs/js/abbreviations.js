@@ -51,7 +51,8 @@ export const BASIC_ABBREVIATIONS = [
     // "a little pop up ridge" became "a little chance of rain up ridge" (LOX,
     // Nov 11 2026). So no lowercase singular "pop", and nothing followed by
     // "up"/"-up" (pop-up showers); \s+ because AFD text is hard-wrapped.
-    [/\b(?:P[oO]P[sS]?|[Pp]ops)\b(?!(?:\s+|-)[Uu][Pp]\b)/g, 'chance of rain'],
+    // "PoPs up to 40 percent" is the abbreviation, so "up to" still expands.
+    [/\b(?:P[oO]P[sS]?|[Pp]ops)\b(?!(?:\s+|-)[Uu][Pp]\b(?!\s+to\b))/g, 'chance of rain'],
     [/\bCAPE\b/g, 'storm energy'],
     [/\bCIN\b/g, 'convective cap'],
     [/\bRH\b/g, 'humidity'],

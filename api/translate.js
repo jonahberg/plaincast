@@ -422,7 +422,9 @@ const DATE_TAIL = `(${MONTH_ALT})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(20\
 // "Sunday, **Nov. 22**". Capitalised and case-sensitive: "may" is also a verb.
 const WEEKDAY_DATE_RE = new RegExp(
     `\\b(${WEEKDAYS.join('|')})(\\*\\*)?(?:,?[ \\t]+)(?:\\*\\*${DATE_TAIL}\\*\\*|${DATE_TAIL}\\b)`, 'g');
-const DATE_WINDOW = { before: 1, after: 10 }; // days around the LOCAL issuance date
+// An AFD looks 7 days out, so +8 leaves a day of slack and keeps real
+// calendar coincidences further out (Nov 22 2026 IS a Sunday) outside it.
+const DATE_WINDOW = { before: 1, after: 8 }; // days around the LOCAL issuance date
 
 function forecastWindow(office, issuanceTime) {
     const timeZone = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
