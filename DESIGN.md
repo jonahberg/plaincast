@@ -2,7 +2,11 @@
 
 ## CURRENT SYSTEM — shadcn/ui, reading-first (2026-11-11)
 
-Approved by Jonah as part of the Nov 11 2026 polish pass. It builds on the shadcn/ui
+Built in the Nov 11 2026 polish pass, which Jonah commissioned ("let's do it all") and
+approves by merging PR #47. Three calls in it were made for him and are his to overrule:
+the Active Alerts section sits last unless a Severe/Extreme warning is live, calm offices
+show a muted "No active alerts" status line, and the National Desk body defaults to the
+plain-English version. It builds on the shadcn/ui
 decision of 2026-09-25 and stays inside shadcn: the same components and the same neutral
 tokens. What it adds is a reading layout and an identity. It covers the whole site: the
 React app at `/` and `/o/CODE/`, its server-rendered digest (`#ssr-root`), and the
