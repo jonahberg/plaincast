@@ -20,11 +20,21 @@ export function selfOrigin() {
     return null;
 }
 
-export async function fetchSelfJson(path, { timeoutMs = 400 } = {}) {
+// "Peek" marks a request that must only READ what already exists. A page
+// render is triggered by crawlers as well as readers, so it must never start a
+// model run: on a CDN hit the header is irrelevant (the cached answer comes
+// back), and on a miss the endpoint sees it and declines with a `no-store`
+// non-answer instead of generating. A reader's own browser request (no header)
+// is what pays for a translation, exactly as before these pages embedded one.
+export const PEEK_HEADER = 'x-plaincast-peek';
+export const isPeek = (req) => req?.headers?.[PEEK_HEADER] === '1';
+
+export async function fetchSelfJson(path, { timeoutMs = 400, peek = false } = {}) {
     const origin = selfOrigin();
     if (!origin || typeof path !== 'string' || !path.startsWith('/api/')) return null;
     try {
         const headers = { accept: 'application/json' };
+        if (peek) headers[PEEK_HEADER] = '1';
         // Preview deployments sit behind Deployment Protection; Vercel exposes
         // this secret to the function when automation bypass is enabled.
         const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;

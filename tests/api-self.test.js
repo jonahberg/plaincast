@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'bun:test';
-import { selfOrigin, fetchSelfJson } from '../api/_self.js';
+import { selfOrigin, fetchSelfJson, isPeek, PEEK_HEADER } from '../api/_self.js';
 
 const ENV_KEYS = ['VERCEL_ENV', 'VERCEL_URL', 'VERCEL_AUTOMATION_BYPASS_SECRET'];
 const savedEnv = Object.fromEntries(ENV_KEYS.map(k => [k, process.env[k]]));
@@ -49,6 +49,19 @@ describe('api/_self.js', () => {
         await fetchSelfJson('/api/national-lede');
         expect(calls[0].url).toBe('https://plaincast-abc123.vercel.app/api/national-lede');
         expect(calls[0].init.headers['x-vercel-protection-bypass']).toBe('secret');
+    });
+
+    it('sends the peek header only when asked', async () => {
+        process.env.VERCEL_ENV = 'production';
+        const calls = stubFetch(() => Response.json({}));
+        await fetchSelfJson('/api/national-lede');
+        await fetchSelfJson('/api/changelog?office=LOX', { peek: true });
+        expect(calls[0].init.headers[PEEK_HEADER]).toBeUndefined();
+        expect(calls[1].init.headers[PEEK_HEADER]).toBe('1');
+        expect(isPeek({ headers: { [PEEK_HEADER]: '1' } })).toBe(true);
+        expect(isPeek({ headers: { [PEEK_HEADER]: 'true' } })).toBe(false);
+        expect(isPeek({ headers: {} })).toBe(false);
+        expect(isPeek(undefined)).toBe(false);
     });
 
     it('only fetches /api/ paths', async () => {

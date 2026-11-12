@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { sendError } from './_errors.js';
+import { isPeek } from './_self.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
 
@@ -101,7 +102,9 @@ export default async function handler(req, res) {
     }
 
     const clientIp = req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
-    if (!checkRateLimit(clientIp)) {
+    // A peek can never reach the model, so it is not charged to the limiter.
+    const peek = isPeek(req);
+    if (!peek && !checkRateLimit(clientIp)) {
         return sendError(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
     }
 
@@ -111,6 +114,14 @@ export default async function handler(req, res) {
             res.setHeader('Cache-Control', LATEST_CACHE);
             return res.status(200).json({ ...memo.payload, cached: true });
         }
+    }
+
+    // Peek (api/_self.js): a page render reads what already exists and never
+    // starts, or waits on, the cold pass (NWS fetches + a model call).
+    // `no-store` keeps this non-answer out of the CDN.
+    if (peek) {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(200).json({ changelog: null, peek: true });
     }
 
     // In-flight dedup: N readers hitting the same cold (office, issuance) in the

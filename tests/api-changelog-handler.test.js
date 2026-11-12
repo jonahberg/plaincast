@@ -193,6 +193,18 @@ describe('GET /api/changelog', () => {
         expect(second.body.changelog).toMatch(/cold front/i);
     });
 
+    it('peek: a cold office gets a no-store non-answer with no list fetch and no model call', async () => {
+        setScenario({ items: [{ id: `peek-${idCounter++}` }, { id: 'prev-peek' }] });
+        mockGenerateText = async () => { throw new Error('a page render started a model run'); };
+        const before = generateCalls;
+        const res = createRes();
+        await handler(createReq({ query: { office: 'SEW' }, headers: { 'x-plaincast-peek': '1' } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ changelog: null, peek: true });
+        expect(res.headers['cache-control']).toBe('no-store');
+        expect(generateCalls).toBe(before);
+    });
+
     it('returns null when the model judges the change trivial (NONE)', async () => {
         setScenario();
         mockGenerateText = async () => ({ text: 'NONE', finishReason: 'stop' });

@@ -148,6 +148,39 @@ describe('GET /api/translate-issuance', () => {
         expect(second.body.sections.Synopsis).toBeTruthy();
     });
 
+    it('peek: a cold issuance gets a no-store non-answer and never reaches the model or NWS', async () => {
+        const id = freshId();
+        mockList = [{ id }];
+        mockListThrows = true; // any upstream fetch would throw
+        mockGenerateText = async () => { throw new Error('a page render started a model run'); };
+        const req = createReq({ office: 'LOX', id });
+        req.headers['x-plaincast-peek'] = '1';
+        const res = createRes();
+        await handler(req, res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ office: 'LOX', id, sections: null, complete: false, peek: true });
+        expect(res.headers['cache-control']).toBe('no-store');
+    });
+
+    it('peek: a cached issuance is served in full, and peeks are never rate limited', async () => {
+        const id = freshId();
+        mockList = [{ id }];
+        await handler(createReq({ office: 'LOX', id }), createRes());
+
+        mockGenerateText = async () => { throw new Error('re-billed: cache miss'); };
+        const ip = uniqueIp();
+        for (let i = 0; i < 40; i++) {
+            const req = createReq({ office: 'LOX', id }, ip);
+            req.headers['x-plaincast-peek'] = '1';
+            const res = createRes();
+            await handler(req, res);
+            expect(res.statusCode).toBe(200);
+            expect(res.body.sections.Synopsis).toBeTruthy();
+            expect(res.body.cached).toBe(true);
+            expect(res.headers['cache-control']).toContain('s-maxage=86400');
+        }
+    });
+
     it('tolerates individual section failures (missing key, others intact)', async () => {
         const id = freshId();
         mockList = [{ id }];

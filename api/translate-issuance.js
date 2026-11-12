@@ -10,6 +10,7 @@ import { extractSections } from './_afd-sections.js';
 import { annotateZuluTimes, buildSystemPrompt, sanitizeTranslation, stripHeaderStamp } from './translate.js';
 import { getSnapshot, putSnapshot } from './_snapshots.js';
 import { sendError } from './_errors.js';
+import { isPeek } from './_self.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
 
@@ -96,7 +97,10 @@ export default async function handler(req, res) {
     }
 
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
-    if (!checkRateLimit(clientIp)) {
+    // A peek can never reach the model, so it is not charged to the limiter
+    // (page renders all share the function's own egress IP).
+    const peek = isPeek(req);
+    if (!peek && !checkRateLimit(clientIp)) {
         return sendError(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
     }
 
@@ -105,6 +109,15 @@ export default async function handler(req, res) {
     if (hit && Date.now() - hit.time < CACHE_TTL) {
         res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=2592000');
         return res.status(200).json({ ...hit.payload, cached: true });
+    }
+
+    // Peek (api/_self.js): a server-rendered page asking only for what already
+    // exists. Nothing cached here means "not yet": never start, or wait on, a
+    // model run for a page render. `no-store` keeps this non-answer out of the
+    // CDN, so the canonical URL still caches the real translation later.
+    if (peek) {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(200).json({ office, id, sections: null, complete: false, peek: true });
     }
 
     // In-flight dedup: N readers arriving in the cold window (a new issuance,

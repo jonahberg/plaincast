@@ -104,8 +104,10 @@ export function pickChangelog(res, issuanceTime) {
 export function fetchBootExtras(office, id, { timeoutMs = 400 } = {}) {
     const q = `office=${encodeURIComponent(office)}`;
     return Promise.all([
-        fetchSelfJson(`/api/translate-issuance?${q}&id=${encodeURIComponent(id)}`, { timeoutMs }),
-        fetchSelfJson(`/api/changelog?${q}`, { timeoutMs }),
+        // peek: a page render (crawlers included) reads cached AI text only and
+        // never starts a model run; see api/_self.js.
+        fetchSelfJson(`/api/translate-issuance?${q}&id=${encodeURIComponent(id)}`, { timeoutMs, peek: true }),
+        fetchSelfJson(`/api/changelog?${q}`, { timeoutMs, peek: true }),
     ]).then(([translation, changelog]) => ({ translation, changelog }));
 }
 
