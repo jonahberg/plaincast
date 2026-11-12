@@ -319,7 +319,7 @@ export function buildRailHtml(rails) {
         const note = clipNote(r?.caption ?? r?.note);
         const noteHtml = note ? `<p class="desk-rail-note">${escHtml(note)}</p>` : '';
         return `        <div class="desk-rail-day${i === 0 ? ' now' : ''}">` +
-            `<h3 class="desk-rail-label">${escHtml(r?.label ?? '')}</h3>` +
+            `<p class="desk-rail-label">${escHtml(r?.label ?? '')}</p>` +
             `<p class="desk-rail-level"${r?.level ? ` data-level="${escHtml(String(r.level).toLowerCase())}"` : ''}>${level}</p>${noteHtml}</div>`;
     });
     return `<section class="desk-rail" aria-label="Three-day severe outlook">
