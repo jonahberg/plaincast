@@ -452,10 +452,12 @@ function fixWeekdayDates(text, office, issuanceTime) {
 }
 
 // Commentary about the source or the prompt, never forecast content. Specific
-// phrases only: "the source of the moisture", "the original forecast" and
-// "Note that winds will be strongest..." are real weather prose.
+// phrases only: "the source of the moisture", "the original forecast", "changes
+// to the original discussion" (UPDATE sections) and "Note that winds will be
+// strongest..." are real weather prose.
 const ASIDE_RES = [
-    /\bthe (?:source|original) (?:text|AFD|product|discussion|wording)\b/i,
+    /\bthe (?:source|original) (?:text|wording)\b/i,
+    /\bthe source (?:AFD|product|discussion)\b/i,
     /\bthe (?:source|original) (?:reads|says|states|lists|uses)\b/i,
     /\b(?:appears|seems) to be (?:the|an?) (?:issuance|issue) time\b/i,
     /\bthese instructions\b/i,

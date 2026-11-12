@@ -154,6 +154,12 @@ describe('sanitizeTranslation — asides about the source', () => {
         expect(sanitizeTranslation(text, ctx)).toBe(text);
     });
 
+    it('keeps update-section prose about the original discussion/product/AFD', () => {
+        // A plain sentence first, so the never-empty fallback can't mask a removal.
+        const text = 'Rain ends Friday. Only minor changes were made to the original discussion. Updated the original AFD to add patchy fog. The original product called for drizzle.';
+        expect(sanitizeTranslation(text, ctx)).toBe(text);
+    });
+
     it('is byte-identical on clean text', () => {
         const clean = 'A **significant cooling trend** begins **Thursday**, with temperatures near normal by **Friday**.  \n\nRain is likely **Thursday night** into early **Saturday**, with **0.50 to 1 inch** possible.\n\n';
         expect(sanitizeTranslation(clean, ctx)).toBe(clean);
