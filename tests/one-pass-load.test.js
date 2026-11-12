@@ -277,6 +277,70 @@ describe('App boot path', () => {
     });
 });
 
+// ─── Phone and controls pass ────────────────────────────────────────
+// Touch hit areas are CSS (measured in a browser); these pin the wiring so
+// a refactor cannot silently drop them.
+describe('touch hit areas (pointer: coarse)', () => {
+    const css = read('shadcn/src/index.css');
+
+    it('.tap-target grows an invisible ≥44px ::after, only on a coarse pointer', () => {
+        const block = css.slice(css.indexOf('@media (pointer: coarse)'));
+        expect(block).toContain('.tap-target::after');
+        expect(block).toContain('width: max(100%, 44px);');
+        expect(block).toContain('height: max(100%, 44px);');
+        // no rule for it outside the media query (a fine pointer is untouched)
+        const before = css.slice(0, css.indexOf('@media (pointer: coarse)'));
+        expect(before).not.toMatch(/\.tap-target(::after)?\s*\{/);
+    });
+
+    it('header controls are 44px on touch and unchanged on desktop', () => {
+        const header = read('shadcn/src/components/Header.jsx');
+        expect(header.match(/md:size-8 pointer-coarse:size-11/g)).toHaveLength(5);
+        // data-[size=sm]:h-8 outranks a bare variant (attribute selector), so
+        // the picker's touch height must stack the same attribute.
+        expect(header).toContain('pointer-coarse:data-[size=sm]:h-11');
+        expect(header).toContain('pointer-coarse:min-h-11');
+    });
+
+    it('section nav, tabs, edition picker, alert status and intro links have targets', () => {
+        expect(read('shadcn/src/components/SectionNav.jsx')).toContain('pointer-coarse:py-3');
+        const section = read('shadcn/src/components/ForecastSection.jsx');
+        expect(section.match(/<TabsTrigger value="[a-z]+" className="tap-target /g)).toHaveLength(3);
+        const intro = read('shadcn/src/components/PageIntro.jsx');
+        expect(intro.match(/tap-target/g).length).toBeGreaterThanOrEqual(4);
+    });
+});
+
+describe('footer office index on phones', () => {
+    const footer = read('shadcn/src/components/Footer.jsx');
+
+    it('is a collapsed accordion below sm, with 44px region rows and office rows', () => {
+        expect(footer).toContain('<Accordion type="single" collapsible className="mt-2 border-t sm:hidden">');
+        expect(footer).toContain('<AccordionTrigger className="min-h-11 ');
+        expect(footer).toContain('<ul className="grid grid-cols-2 ');
+        expect(footer).toContain('className="flex min-h-11 items-center"');
+    });
+
+    it('keeps the multi-column grid from sm up', () => {
+        expect(footer).toContain('className="mt-4 hidden grid-cols-2 gap-x-6 gap-y-5 sm:grid sm:grid-cols-3"');
+    });
+
+    it('leaves the server-rendered office index alone (crawlers read it)', () => {
+        for (const p of ['shadcn/index.html', 'api/_home-shell.html', 'docs/o/LOT/index.html']) {
+            const html = read(p);
+            expect(html).toContain('<ul class="office-index-list mt-4 list-none columns-2 gap-6 text-sm leading-6 sm:columns-3">');
+            expect(html.match(/<li><a href="\/o\/[A-Z]{3}\/"/g).length).toBe(68);
+        }
+    });
+});
+
+describe('phone intro', () => {
+    it('the eyebrow names the office only from sm up (the h1 says it on phones)', () => {
+        const intro = read('shadcn/src/components/PageIntro.jsx');
+        expect(intro).toContain('<span className="hidden whitespace-nowrap sm:inline">NWS {OFFICE_NAMES[office]} ({office})</span>');
+    });
+});
+
 describe('"Since the … update" holds its place while it loads', () => {
     it('the intro reserves the callout (skeleton lines) while the sentence is pending', () => {
         const intro = read('shadcn/src/components/PageIntro.jsx');

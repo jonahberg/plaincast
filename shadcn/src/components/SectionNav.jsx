@@ -23,7 +23,7 @@ export function SectionNav({ sections, activeKey, onJump }) {
                             onClick={() => onJump(s.key)}
                             aria-current={active ? 'true' : undefined}
                             className={cn(
-                                'shrink-0 border-b-2 py-2 text-sm whitespace-nowrap transition-colors outline-none focus-visible:rounded-sm focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                                'shrink-0 border-b-2 py-2 text-sm whitespace-nowrap pointer-coarse:py-3 transition-colors outline-none focus-visible:rounded-sm focus-visible:ring-[3px] focus-visible:ring-ring/50',
                                 active
                                     // No weight change: the scrollspy flips this
                                     // as you read, and the row must not jitter.

@@ -138,7 +138,7 @@ function Entry({ entry, office, tz, isLatest, onOpenEdition }) {
                 {entry.changed.length > 0 && (
                     <Accordion type="single" collapsible>
                         <AccordionItem value="diff" className="border-b-0">
-                            <AccordionTrigger className="py-1.5 text-[13px] text-muted-foreground hover:text-foreground">Compare the text</AccordionTrigger>
+                            <AccordionTrigger className="py-1.5 text-[13px] text-muted-foreground hover:text-foreground pointer-coarse:min-h-11 pointer-coarse:items-center">Compare the text</AccordionTrigger>
                             <AccordionContent>
                                 <div className="space-y-4 pt-2">
                                     {entry.changed.map(d => (
@@ -163,7 +163,7 @@ function Entry({ entry, office, tz, isLatest, onOpenEdition }) {
                     e.preventDefault();
                     onOpenEdition(isLatest ? null : entry.id);
                 }}
-                className="mt-3 inline-block text-[13px] font-medium text-brand underline decoration-brand/40 underline-offset-4 hover:decoration-brand"
+                className="tap-target mt-3 inline-block text-[13px] font-medium text-brand underline decoration-brand/40 underline-offset-4 hover:decoration-brand"
             >
                 Read this edition
             </a>
@@ -251,7 +251,7 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
                         e.preventDefault();
                         onBack();
                     }}
-                    className="inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                    className="inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline pointer-coarse:min-h-11"
                 >
                     <ArrowLeft className="size-3.5" aria-hidden="true" />
                     Back to the forecast
@@ -282,7 +282,7 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
                     <AlertTitle>Couldn't load the changelog</AlertTitle>
                     <AlertDescription>
                         <p>{state.message}</p>
-                        <Button variant="outline" size="sm" className="mt-2" onClick={() => setAttempt(a => a + 1)}>
+                        <Button variant="outline" size="sm" className="tap-target mt-2" onClick={() => setAttempt(a => a + 1)}>
                             Try again
                         </Button>
                     </AlertDescription>
@@ -308,7 +308,7 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
                     ))}
                     {state.more && (
                         <div className="flex justify-center border-t py-6">
-                            <Button variant="outline" onClick={loadMore} disabled={state.loadingMore}>
+                            <Button variant="outline" onClick={loadMore} disabled={state.loadingMore} className="tap-target">
                                 {state.loadingMore && <Loader2 className="animate-spin" aria-hidden="true" />}
                                 Earlier editions
                             </Button>

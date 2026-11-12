@@ -56,7 +56,7 @@ function AlertLead({ id }) {
         <div className="mb-3">
             <p className="mb-1 text-xs font-medium text-muted-foreground">
                 In plain English · via{' '}
-                <a className="underline underline-offset-2" href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a>
+                <a className="tap-target underline underline-offset-2" href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a>
             </p>
             <div className="plain-prose" dangerouslySetInnerHTML={{ __html: state.html }} />
         </div>

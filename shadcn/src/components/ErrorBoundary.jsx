@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component {
                         <Button
                             variant="outline"
                             size="sm"
-                            className="mt-2"
+                            className="tap-target mt-2"
                             onClick={() => (scoped ? this.setState({ error: null }) : location.reload())}
                         >
                             {scoped ? 'Try again' : 'Reload'}

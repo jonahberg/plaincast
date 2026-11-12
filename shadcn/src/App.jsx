@@ -675,11 +675,11 @@ export default function App() {
                                     <AlertTitle>A newer edition has been issued</AlertTitle>
                                     <AlertDescription className="w-full">
                                         <div className="flex w-full items-center justify-between gap-2">
-                                            <Button size="sm" onClick={() => { setNewerEdition(null); load(office, null); }}>
+                                            <Button size="sm" className="tap-target" onClick={() => { setNewerEdition(null); load(office, null); }}>
                                                 Read it
                                             </Button>
                                             <Button
-                                                variant="ghost" size="icon" className="size-7"
+                                                variant="ghost" size="icon" className="tap-target size-7"
                                                 aria-label="Dismiss"
                                                 onClick={() => setNewerEdition(null)}
                                             >
@@ -714,7 +714,7 @@ export default function App() {
                             <AlertTitle>Couldn't fetch the forecast</AlertTitle>
                             <AlertDescription>
                                 <p>{state.message}</p>
-                                <Button variant="outline" size="sm" className="mt-2" onClick={() => load(office, editionId)}>
+                                <Button variant="outline" size="sm" className="tap-target mt-2" onClick={() => load(office, editionId)}>
                                     Try again
                                 </Button>
                             </AlertDescription>
@@ -732,13 +732,13 @@ export default function App() {
                                 </p>
                                 <p className="mt-2 flex flex-wrap gap-2">
                                     {state.rawUrl && (
-                                        <Button asChild size="sm">
+                                        <Button asChild size="sm" className="tap-target">
                                             <a href={state.rawUrl} target="_blank" rel="noopener noreferrer">
                                                 Read the original NWS text
                                             </a>
                                         </Button>
                                     )}
-                                    <Button variant="outline" size="sm" onClick={() => load(office, editionId)}>
+                                    <Button variant="outline" size="sm" className="tap-target" onClick={() => load(office, editionId)}>
                                         Try again
                                     </Button>
                                 </p>

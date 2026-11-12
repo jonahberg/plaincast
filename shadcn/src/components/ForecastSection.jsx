@@ -119,11 +119,14 @@ export const ForecastSection = memo(function ForecastSection({
                             </Badge>
                         )}
                     </h2>
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:shrink-0 sm:flex-nowrap">
+                    {/* On touch screens a wrapped "via Claude" line sits a full
+                        44px target below the tabs (row gap applies only when
+                        it wraps). */}
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 pointer-coarse:gap-y-5 sm:shrink-0 sm:flex-nowrap">
                         <TabsList className="h-auto min-h-8 max-w-full flex-wrap p-[2px]">
-                            <TabsTrigger value="plain" className="px-2.5 py-1 text-[13px]">Plain English</TabsTrigger>
-                            <TabsTrigger value="original" className="px-2.5 py-1 text-[13px]">Original</TabsTrigger>
-                            {changed && <TabsTrigger value="diff" className="px-2.5 py-1 text-[13px]">What changed</TabsTrigger>}
+                            <TabsTrigger value="plain" className="tap-target px-2.5 py-1 text-[13px]">Plain English</TabsTrigger>
+                            <TabsTrigger value="original" className="tap-target px-2.5 py-1 text-[13px]">Original</TabsTrigger>
+                            {changed && <TabsTrigger value="diff" className="tap-target px-2.5 py-1 text-[13px]">What changed</TabsTrigger>}
                         </TabsList>
                         {/* Beside the Plain English tab it credits (before the
                             tabs at sm+, after them on phones). Fixed width:
@@ -140,7 +143,7 @@ export const ForecastSection = memo(function ForecastSection({
                                     <span>
                                         via{' '}
                                         <a
-                                            className="underline underline-offset-2 hover:text-foreground"
+                                            className="tap-target underline underline-offset-2 hover:text-foreground"
                                             href="https://www.anthropic.com/claude/haiku"
                                             target="_blank"
                                             rel="noopener noreferrer"

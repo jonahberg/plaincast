@@ -81,7 +81,7 @@ export function Header({
                 where the site nav joins the row, the icon buttons tighten to
                 32px so the longest office names still fit it. */}
             <div className="mx-auto flex h-14 max-w-reading items-center gap-2 px-4 sm:px-6">
-                <a href="/" className="flex shrink-0 items-center gap-2 font-semibold" aria-label="Plaincast home">
+                <a href="/" className="flex shrink-0 items-center gap-2 font-semibold pointer-coarse:-ml-3 pointer-coarse:min-h-11 pointer-coarse:px-3" aria-label="Plaincast home">
                     <CloudSun className="size-5" aria-hidden="true" />
                     <span className="hidden sm:inline">Plaincast</span>
                 </a>
@@ -92,10 +92,10 @@ export function Header({
                     md+ only: below that the picker needs the room, and the footer
                     carries the National Desk link at every width. */}
                 <nav aria-label="Site" className="hidden shrink-0 items-center gap-1 md:flex">
-                    <a href="/" aria-current="page" className="inline-flex h-8 items-center whitespace-nowrap rounded-md bg-accent px-2.5 text-sm font-medium text-foreground">
+                    <a href="/" aria-current="page" className="inline-flex h-8 items-center whitespace-nowrap rounded-md pointer-coarse:h-11 bg-accent px-2.5 text-sm font-medium text-foreground">
                         Forecast
                     </a>
-                    <a href="/national/" className="inline-flex h-8 items-center whitespace-nowrap rounded-md px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+                    <a href="/national/" className="inline-flex h-8 items-center whitespace-nowrap rounded-md pointer-coarse:h-11 px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
                         National Desk
                     </a>
                 </nav>
@@ -104,7 +104,7 @@ export function Header({
                     <SelectTrigger
                         ref={selectRef}
                         size="sm"
-                        className="w-auto min-w-0 flex-1 sm:max-w-56 md:px-2.5"
+                        className="w-auto min-w-0 flex-1 sm:max-w-56 md:px-2.5 pointer-coarse:data-[size=sm]:h-11"
                         aria-label="NWS forecast office"
                     >
                         <SelectValue placeholder="Choose an office" />
@@ -132,7 +132,7 @@ export function Header({
                 <div className="ml-auto flex shrink-0 items-center gap-0.5 md:gap-0">
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={locate} aria-label="Use my location" className="md:size-8">
+                            <Button variant="ghost" size="icon" onClick={locate} aria-label="Use my location" className="md:size-8 pointer-coarse:size-11">
                                 <LocateFixed />
                             </Button>
                         </TooltipTrigger>
@@ -140,7 +140,7 @@ export function Header({
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={share} aria-label="Share forecast link" className="md:size-8">
+                            <Button variant="ghost" size="icon" onClick={share} aria-label="Share forecast link" className="md:size-8 pointer-coarse:size-11">
                                 <Share2 />
                             </Button>
                         </TooltipTrigger>
@@ -150,7 +150,7 @@ export function Header({
                         <TooltipTrigger asChild>
                             <Button
                                 variant="ghost" size="icon" onClick={onShowKbd}
-                                aria-label="Keyboard shortcuts" className="hidden sm:inline-flex md:size-8"
+                                aria-label="Keyboard shortcuts" className="hidden sm:inline-flex md:size-8 pointer-coarse:size-11"
                             >
                                 <Keyboard />
                             </Button>
@@ -159,7 +159,7 @@ export function Header({
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" asChild className="hidden sm:inline-flex md:size-8">
+                            <Button variant="ghost" size="icon" asChild className="hidden sm:inline-flex md:size-8 pointer-coarse:size-11">
                                 <a
                                     href="https://github.com/jonahberg/plaincast"
                                     target="_blank"
@@ -174,7 +174,7 @@ export function Header({
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={onToggleTheme} aria-label="Toggle dark mode" className="md:size-8">
+                            <Button variant="ghost" size="icon" onClick={onToggleTheme} aria-label="Toggle dark mode" className="md:size-8 pointer-coarse:size-11">
                                 {theme === 'dark' ? <Sun /> : <Moon />}
                             </Button>
                         </TooltipTrigger>

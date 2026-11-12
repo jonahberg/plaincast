@@ -147,7 +147,7 @@ function AlertStatus({ row, onJump }) {
                 onJump?.();
             }}
             className={cn(
-                'inline-flex min-w-0 items-center gap-1.5 rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                'tap-target inline-flex min-w-0 items-center gap-1.5 rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50',
                 live && row.severe ? 'text-destructive' : 'text-foreground'
             )}
         >
@@ -214,7 +214,7 @@ export function PageIntro({
         >
             <SelectTrigger
                 size="sm"
-                className="h-auto shrink-0 gap-1 rounded-sm border-none bg-transparent p-0 text-[13px] text-muted-foreground shadow-none hover:text-foreground dark:bg-transparent dark:hover:bg-transparent"
+                className="tap-target h-auto shrink-0 gap-1 rounded-sm border-none bg-transparent p-0 text-[13px] text-muted-foreground shadow-none hover:text-foreground dark:bg-transparent dark:hover:bg-transparent"
                 aria-label="Forecast edition"
             >
                 <SelectValue placeholder="Archived edition" />
@@ -234,17 +234,17 @@ export function PageIntro({
     const hasStatus = Boolean(alertRow) && !['pending', 'unavailable'].includes(alertRow.kind);
 
     const links = (
-        <p className={cn('flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] leading-5', since || sinceHeld ? 'mt-2' : 'mt-4')}>
+        <p className={cn('flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] leading-5', since || sinceHeld ? 'mt-2' : 'mt-4 pointer-coarse:mt-5')}>
             <a
                 href={changelogHref}
                 onClick={onOpenChangelog}
-                className="font-medium text-brand underline decoration-brand/40 underline-offset-4 hover:decoration-brand"
+                className="tap-target font-medium text-brand underline decoration-brand/40 underline-offset-4 hover:decoration-brand"
             >
                 See every revision
             </a>
             <a
                 href={officeFeedHref(office)}
-                className="inline-flex items-center gap-1 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                className="tap-target inline-flex items-center gap-1 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
                 type="application/rss+xml"
             >
                 <Rss className="size-3" aria-hidden="true" />
@@ -258,8 +258,10 @@ export function PageIntro({
             {/* Wraps only at the separator (each half is unbreakable), and
                 the separator stays at the end of the first line. */}
             <p className="text-xs leading-5 font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                <span className="whitespace-nowrap">Area Forecast Discussion ·</span>{' '}
-                <span className="whitespace-nowrap">NWS {OFFICE_NAMES[office]} ({office})</span>
+                {/* Phones: just the kind of document (one line); the office
+                    is the h1 right below. */}
+                <span className="whitespace-nowrap">Area Forecast Discussion<span className="hidden sm:inline"> ·</span></span>{' '}
+                <span className="hidden whitespace-nowrap sm:inline">NWS {OFFICE_NAMES[office]} ({office})</span>
                 {viewingHistorical && (
                     <Badge variant="outline" className="ml-2 align-[1px] normal-case tracking-normal">Archived edition</Badge>
                 )}

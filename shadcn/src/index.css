@@ -311,6 +311,27 @@
         @apply text-brand decoration-brand/40 hover:text-brand hover:decoration-brand;
     }
 
+    /* Touch hit areas. On a coarse pointer every control gets at least a
+       44×44 CSS px target. `.tap-target` keeps the control's visual size
+       and grows an invisible ::after centred on it (never smaller than the
+       control itself); controls in rows that can afford it grow their own
+       box instead, with `pointer-coarse:` utilities in the component. A fine
+       pointer (desktop) is untouched. */
+    @media (pointer: coarse) {
+        .tap-target {
+            position: relative;
+        }
+        .tap-target::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: max(100%, 44px);
+            height: max(100%, 44px);
+            transform: translate(-50%, -50%);
+        }
+    }
+
     /* "What changed" diff view (lib renderDiffHTML classes) */
     .diff-prose p {
         @apply mb-3 rounded-sm px-2 py-1 break-words last:mb-0;

@@ -84,7 +84,8 @@ server-rendered `/national/`, `/about`, `/contact`, `/privacy`, `/developers` an
   dialogs and popovers. Prose is never boxed. On the trust pages the article is not a card,
   and the National Desk story is a ruled block.
 - **Intro block order:**
-  1. Eyebrow ("Area Forecast Discussion · NWS City (CODE)").
+  1. Eyebrow ("Area Forecast Discussion · NWS City (CODE)"; below `sm` just "Area Forecast
+     Discussion", one line — the h1 names the office).
   2. The serif `<h1>`, with the code muted and lighter.
   3. **The key takeaway as the lede**, unboxed, in full foreground. It sits under a small
      "Key takeaway" / "Key messages" eyebrow.
@@ -108,6 +109,13 @@ server-rendered `/national/`, `/about`, `/contact`, `/privacy`, `/developers` an
     while loading, a dash if no reading comes).
   - The "A newer edition has been issued" notice floats over the bottom of the viewport
     instead of entering the flow above the forecast.
+- **Touch targets:** on a coarse pointer every control has at least a 44×44 CSS px hit area.
+  Compact controls (tabs, intro links, the edition picker, "via Claude") keep their look and grow
+  an invisible `.tap-target` ::after (`src/index.css`); header buttons, the section nav and footer
+  links grow their own box with `pointer-coarse:` utilities. A fine pointer is unchanged.
+- **Footer office index:** below `sm` a collapsed accordion, one 44px row per region opening to a
+  two-column list of 44px rows; from `sm` up the multi-column grid. The server-rendered index in
+  `#ssr-root` is separate and unchanged.
 - **Confidence is words, never a meter:** "Confidence: low" plus a small neutral dot. The
   dot's fill steps through foreground opacities (hollow for Low, solid for High). Never a
   progress bar, and never destructive red.
