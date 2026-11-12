@@ -9,12 +9,16 @@
 // standfirst, running copy, day rail, severe wire, outlook clock — with no
 // AI and no client JS required.
 //
-// NO AI HERE, DELIBERATELY: the standfirst is the SPC's own SUMMARY paragraph
-// run through regexTranslate (abbreviation expansion only), and the running
-// copy is the SPC's own post-summary discussion. The AI-written deck arrives
-// later, client-side, and swaps #desk-deck — which is why the SSR lede must
-// render that id even though this file never calls a model, and why the
-// de-dup fallback leaves the slot EMPTY rather than dropping it.
+// NO MODEL CALL HERE, DELIBERATELY: the deterministic standfirst is the SPC's
+// own SUMMARY run through regexTranslate (abbreviation expansion only), and
+// the original running copy is the SPC's own post-summary discussion. The AI
+// deck and the plain-English copy come from /api/national-lede (cached per
+// issuance), read here through the edge with a 400 ms budget and embedded
+// when they are for the same outlook. When they are not ready the page ships
+// the original copy, a short CDN window, and /js/national.js swaps the AI
+// text in later — which is why the SSR lede must render #desk-deck even when
+// it is empty (the de-dup fallback leaves the slot EMPTY rather than dropping
+// it).
 //
 // ROUTING: /national and /national/ rewrite here (vercel.json). Rewrites are
 // evaluated AFTER `handle: filesystem`, so a static docs/national/index.html
@@ -44,12 +48,14 @@ import { fetchSevereAlerts, fetchAlertTotals, fetchSpcOutlook } from './_utils.j
 import { regexTranslate } from './_afd-sections.js';
 import {
     groupDispatches, buildCensus, parseSpcOutlook, parseRiskCategory,
-    parseDiscussionBody, digestArea, formatExpiry, nextOutlookTime, calmHeadline,
+    parseDiscussionBody, digestArea, formatExpiry, nextOutlookAt, calmHeadline,
+    riskAreaLine, formatClock,
 } from './_national.js';
 import {
     sendNegotiated, send406, setVary, selectRepresentation, acceptHeader, HTML, MARKDOWN,
 } from './_negotiate.js';
 import { sendError } from './_errors.js';
+import { fetchSelfJson } from './_self.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -84,6 +90,28 @@ const DESK_COUNT = Object.keys(OFFICE_NAMES).length;
 const FETCH_TIMEOUT_MS = 8000;
 const sig = () => ({ signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
 
+// The AI deck and plain-English copy, read from the CDN-cached
+// /api/national-lede. A short budget: this is an edge cache read when warm,
+// and when it is cold the page must not wait on a model call — it ships the
+// original copy and /js/national.js swaps the AI text in instead.
+const LEDE_TIMEOUT_MS = 400;
+
+// Page caching. With the AI text embedded the page is final for this outlook
+// and keeps the long window. Without it (cold lede, model failure, local dev)
+// the edge revalidates soon, so the next render can embed the AI text.
+const PAGE_CACHE = 'public, s-maxage=600, stale-while-revalidate=1800';
+const PAGE_CACHE_NO_AI = 'public, s-maxage=120, stale-while-revalidate=1800';
+
+// Bounds on what the page will embed from the lede endpoint. It is our own
+// endpoint, but its JSON is still untrusted input to an HTML page.
+const AI_DECK_MAX = 600;
+const AI_COPY_PARAS_MAX = 12;
+const AI_COPY_PARA_MAX = 1500;
+
+// Exact strings /js/national.js also writes when it swaps the copy in.
+const COPY_LABEL = "From the forecasters' discussion, in their words";
+const ORIGINAL_SUMMARY = "Read the Storm Prediction Center's original discussion";
+
 // Lazy shell load (never at module scope: a boot-time throw would take down
 // the fail-safe path too).
 let templateCache = null;
@@ -117,20 +145,46 @@ function sentenceWord(s) {
     return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-// The outlook is national, so a local time zone would be a lie. SPC's own
-// convention is HHMM UTC ("1942 UTC"). Returns null — not a broken string —
-// for a missing or unparseable timestamp, so the caller can omit the whole
-// fragment (note: `new Date(null)` is the epoch, not Invalid Date).
-function formatIssuedUtc(iso) {
+// A clock time on the page. The page is national and CDN-cached, so the
+// server cannot know the reader's zone: the text is US Eastern ("12:23 AM
+// EST"), and /js/national.js rewrites every <time data-local-time> into the
+// reader's own zone from its datetime attribute. Returns null — not a broken
+// string — for a missing or unparseable timestamp, so the caller can omit the
+// whole fragment.
+function isoOf(iso) {
     if (!iso) return null;
-    try {
-        const d = new Date(iso);
-        if (Number.isNaN(d.getTime())) return null;
-        const hhmm = d.toLocaleString('en-US', {
-            hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC',
-        }).replace(':', '');
-        return `${hhmm} UTC`;
-    } catch { return null; }
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+function timeHtml(iso) {
+    const text = formatClock(iso);
+    const at = isoOf(iso);
+    if (!text || !at) return null;
+    return `<time datetime="${escHtml(at)}" data-local-time>${escHtml(text)}</time>`;
+}
+
+// Same instant, however each side spelled it. Both must be real dates: a
+// missing issuance never matches, so nothing is embedded against it.
+function sameInstant(a, b) {
+    const x = isoOf(a), y = isoOf(b);
+    return x !== null && x === y;
+}
+
+// The lede endpoint's answer, reduced to what this page may embed for THIS
+// outlook: {deck, copy}, each null when absent, malformed, or for another
+// issuance (a cached page and a fresh endpoint can straddle a new outlook).
+export function pickLede(lede, issuanceTime) {
+    const none = { deck: null, copy: null };
+    if (!lede || typeof lede !== 'object' || !sameInstant(lede.issued, issuanceTime)) return none;
+    const deck = typeof lede.deck === 'string' && lede.deck.trim() && lede.deck.length <= AI_DECK_MAX
+        ? lede.deck.trim() : null;
+    let copy = null;
+    if (Array.isArray(lede.copy) && lede.copy.length <= AI_COPY_PARAS_MAX
+        && lede.copy.every(p => typeof p === 'string' && p.length <= AI_COPY_PARA_MAX)) {
+        const paras = lede.copy.map(p => p.trim()).filter(Boolean);
+        copy = paras.length ? paras : null;
+    }
+    return { deck, copy };
 }
 
 // Clip on whole text, BEFORE escaping — clipping escaped markup could cut an
@@ -172,9 +226,12 @@ export function buildStripHtml(census, totals, quiet) {
 // the UNCAPPED event census: with anything in it (a hurricane watch, a flood
 // warning) the sky is not "quiet", only thunderstorm-free — see calmHeadline.
 //
-// The regions string arrives as SPC wrote it (SHOUTED, often with a leading
-// article that reads wrong once the display is lowercased): strip the leading
-// "THE " here, and let the stylesheet do the lowercasing.
+// The area arrives as SPC wrote it (SHOUTED, "..."-joined). riskAreaLine
+// cases it in the source text — sentence case, commas, proper names from an
+// explicit list — so the line reads as a sentence with no help from CSS:
+// "Risk of severe thunderstorms today across parts of southeastern
+// Pennsylvania, much of Delaware, adjacent eastern Maryland and southern
+// through central New Jersey."
 export function buildRiskHtml(risk, census = []) {
     if (!risk?.level) {
         const calm = calmHeadline(census);
@@ -183,11 +240,9 @@ export function buildRiskHtml(risk, census = []) {
         <p class="desk-risk-quiet">${escHtml(calm.title)}</p>${note}
     </section>`;
     }
-    const regions = String(risk.regions ?? '').replace(/^THE\s+/i, '').replace(/\s+/g, ' ').trim();
-    const tail = regions ? ` · ${escHtml(regions)}` : '';
     return `<section class="desk-risk">
         <p class="desk-risk-word" data-level="${escHtml(risk.level.toLowerCase())}">${escHtml(sentenceWord(risk.level))}</p>
-        <p class="desk-risk-of">risk of severe thunderstorms${tail}</p>
+        <p class="desk-risk-of">${escHtml(riskAreaLine(risk))}</p>
     </section>`;
 }
 
@@ -201,28 +256,61 @@ export function buildRiskHtml(risk, census = []) {
 // slot must not say the same thing a second time. The <p> still ships, empty,
 // because /js/national.js swaps it by id — dropping it would break the AI
 // deck for every reader on a no-discussion product.
-export function buildLedeHtml({ summary, issuanceTime, deckSuppressed = false }) {
+//
+// `aiDeck` is the AI deck from /api/national-lede for this same issuance,
+// embedded so the reader gets the final text in the first response; it is
+// marked data-ai so the client leaves it alone. The spec allows it even on
+// the de-dup fallback (the AI deck always distills the summary). The credit
+// says "Simplified by AI." only when AI text is actually on the page
+// (`simplified`: the AI deck or the AI copy). data-issued is the outlook the
+// page was rendered from — the client swaps nothing in for any other.
+export function buildLedeHtml({ summary, issuanceTime, deckSuppressed = false, aiDeck = null, simplified = false }) {
     if (!summary) throw new Error('national-desk: no outlook summary');
-    const issuedAt = formatIssuedUtc(issuanceTime);
-    const issued = issuedAt ? ` · issued ${escHtml(issuedAt)}` : '';
-    const deck = deckSuppressed ? '' : escHtml(regexTranslate(summary));
-    return `<section class="desk-lede">
-        <p class="desk-deck" id="desk-deck">${deck}</p>
-        <p class="desk-attrib">From the Storm Prediction Center's Day 1 Convective Outlook${issued}.</p>
+    const issuedAt = timeHtml(issuanceTime);
+    const issued = issuedAt ? ` · issued ${issuedAt}` : '';
+    const at = isoOf(issuanceTime);
+    const deck = aiDeck ? escHtml(aiDeck) : (deckSuppressed ? '' : escHtml(regexTranslate(summary)));
+    return `<section class="desk-lede"${at ? ` data-issued="${escHtml(at)}"` : ''}>
+        <p class="desk-deck" id="desk-deck"${aiDeck ? ' data-ai' : ''}>${deck}</p>
+        <p class="desk-attrib">From the Storm Prediction Center's Day 1 Convective Outlook${issued}.${simplified ? ' Simplified by AI.' : ''}</p>
     </section>`;
 }
 
-// The running copy: the SPC's own discussion narrative, abbreviation-expanded
-// and nothing more. regexTranslate lives here rather than at the call site so
-// both sources (discussion body, and the SUMMARY on the fallback path) get
-// identical treatment.
-export function buildCopyHtml(paragraphs) {
+// The running copy. Two shapes:
+//
+//   - With `aiCopy` (plain-English paragraphs from /api/national-lede for
+//     this issuance, translated from these same discussion paragraphs): the
+//     AI text is the visible copy, and the forecasters' own words sit one tap
+//     away in a native <details> directly beneath it.
+//   - Without: the SPC's own words, visible, under a small label saying so.
+//
+// The original is the SPC discussion abbreviation-expanded and nothing more.
+// regexTranslate lives here rather than at the call site so both sources
+// (discussion body, and the SUMMARY on the fallback path) get identical
+// treatment. `source` ("discussion" | "summary") tells /js/national.js
+// whether an AI copy may ever replace this section: never the summary.
+export function buildCopyHtml(paragraphs, { aiCopy = null, source = null } = {}) {
     const paras = (paragraphs || []).filter(Boolean);
     if (paras.length === 0) return '';
-    const items = paras.map(p => `        <p>${escHtml(regexTranslate(p))}</p>`);
-    return `<section class="desk-copy">
-${items.join('\n')}
+    const original = paras.map(p => `<p>${escHtml(regexTranslate(p))}</p>`);
+    const src = source ? ` data-source="${escHtml(source)}"` : '';
+    const ai = (aiCopy || []).filter(p => typeof p === 'string' && p.trim());
+    if (ai.length === 0) {
+        return `<section class="desk-copy"${src}>
+        <p class="desk-copy-label">${escHtml(COPY_LABEL)}</p>
+${original.map(p => `        ${p}`).join('\n')}
     </section>`;
+    }
+    return `<section class="desk-copy"${src} data-ai>
+${ai.map(p => `        <p>${escHtml(p.trim())}</p>`).join('\n')}
+    </section>
+
+    <details class="desk-original">
+        <summary>${escHtml(ORIGINAL_SUMMARY)}</summary>
+        <div class="desk-original-body">
+${original.map(p => `            ${p}`).join('\n')}
+        </div>
+    </details>`;
 }
 
 // The day rail: today, tomorrow, and the day after. Cell shape is
@@ -289,9 +377,21 @@ ${body}
 
 // The clock: when the next Day 1 outlook lands, and how often this page
 // re-inks. Pure arithmetic from the fixed SPC issuance schedule, no fetch.
-export function buildClockHtml(nextTime) {
-    return `<p class="desk-clock">Next Day 1 outlook expected by ${escHtml(nextTime)}` +
-        ` · this page re-inks every 10 minutes.</p>`;
+// `nextAt` is the slot's instant (nextOutlookAt); a bad one drops the
+// "expected by" clause rather than printing a broken time.
+export function buildClockHtml(nextAt) {
+    const t = timeHtml(nextAt);
+    return t
+        ? `<p class="desk-clock">Next Day 1 outlook expected by ${t} · this page re-inks every 10 minutes.</p>`
+        : '<p class="desk-clock">This page re-inks every 10 minutes.</p>';
+}
+
+// The Markdown twin's clock line: the same words, Eastern time as text.
+function clockText(nextAt) {
+    const t = formatClock(nextAt);
+    return t
+        ? `Next Day 1 outlook expected by ${t} · this page re-inks every 10 minutes.`
+        : 'This page re-inks every 10 minutes.';
 }
 
 // The Markdown twin of the composed desk. Same data, same order, same words —
@@ -299,13 +399,13 @@ export function buildClockHtml(nextTime) {
 // consume rather than from their output, so there is no HTML to strip and no
 // second parse to drift.
 export function buildDeskMarkdown({
-    census, fullCensus, totals, quiet, risk, summary, copy, rail, rows, issuanceTime, nextTime,
+    census, fullCensus, totals, quiet, risk, summary, copy, rail, rows, issuanceTime, nextAt,
 }) {
     const lines = [];
     lines.push('# The National Desk — where the weather is today');
     lines.push('');
 
-    const issuedAt = formatIssuedUtc(issuanceTime);
+    const issuedAt = formatClock(issuanceTime);
     lines.push(`> The Storm Prediction Center's Day 1 Convective Outlook in plain English, and every `
         + `National Weather Service forecast office under an active severe warning`
         + `${issuedAt ? `. Outlook issued ${issuedAt}` : ''}.`);
@@ -378,7 +478,7 @@ export function buildDeskMarkdown({
         }
     }
     lines.push('');
-    lines.push(`Next Day 1 outlook expected by ${nextTime} · this page re-inks every 10 minutes.`);
+    lines.push(clockText(nextAt));
     lines.push('');
     lines.push('---');
     lines.push('');
@@ -443,6 +543,10 @@ export default async function handler(req, res) {
             fetchSpcOutlook('DY2', sig()),
             fetchSpcOutlook('DY3', sig()),
         ]);
+        // The AI deck + copy from the edge-cached lede endpoint, in parallel.
+        // fetchSelfJson never rejects (null off-Vercel, on timeout, non-200),
+        // so a bail to the baked shell below leaves nothing unhandled.
+        const ledePromise = fetchSelfJson('/api/national-lede', { timeoutMs: LEDE_TIMEOUT_MS });
 
         // HARD set: no severe feed or no Day 1 product means no front page.
         const [features, outlook] = await Promise.all([
@@ -466,6 +570,18 @@ export default async function handler(req, res) {
         const deckSuppressed = body.length === 0;
         const copy = deckSuppressed ? [summary] : body;
 
+        // AI text is embedded only for the outlook this page is rendering.
+        // The AI copy translates the post-summary discussion, so on the
+        // fallback path (the SUMMARY runs as copy) there is none to embed —
+        // copy never comes from the summary, AI or not.
+        const issuanceTime = outlook?.issuanceTime || null;
+        const ai = pickLede(await ledePromise, issuanceTime);
+        const aiDeck = ai.deck;
+        const aiCopy = deckSuppressed ? null : ai.copy;
+        // Final for this outlook: the deck is AI, and so is the copy whenever
+        // there is a discussion to translate.
+        const aiComplete = Boolean(aiDeck) && (deckSuppressed || Boolean(aiCopy));
+
         const rows = groupDispatches(features, OFFICE_NAMES);
         // Desks with nothing on the wire. Only COVERED offices can be quiet —
         // an uncovered office has no desk to be quiet at.
@@ -481,15 +597,18 @@ export default async function handler(req, res) {
 
         const census = buildCensus(features);
         const fullCensus = buildCensus(features, Infinity);
-        const nextTime = nextOutlookTime(new Date().toISOString());
+        const nextAt = nextOutlookAt(new Date().toISOString());
 
         // The story (risk moment, standfirst, running copy) reads as one
         // ruled editorial block; the wrapper is presentational and changes
         // no section order.
         const story = [
             buildRiskHtml(risk, fullCensus),
-            buildLedeHtml({ summary, issuanceTime: outlook?.issuanceTime || null, deckSuppressed }),
-            buildCopyHtml(copy),
+            buildLedeHtml({
+                summary, issuanceTime, deckSuppressed, aiDeck,
+                simplified: Boolean(aiDeck || aiCopy),
+            }),
+            buildCopyHtml(copy, { aiCopy, source: deckSuppressed ? 'summary' : 'discussion' }),
         ].filter(Boolean).join('\n\n    ');
         const ssr = [
             buildStripHtml(census, totals, quiet),
@@ -499,21 +618,24 @@ export default async function handler(req, res) {
             // Request-time clock. Near a slot boundary a CDN-cached copy can name a
             // slot up to ~30 min past (600s fresh + SWR); "expected by" tolerates it
             // and the next origin render self-corrects. Accepted staleness, not a bug.
-            buildClockHtml(nextTime),
+            buildClockHtml(nextAt),
         ].filter(Boolean).join('\n\n    ');
 
         if (!baked.includes(MARKER)) throw new Error('skeleton marker missing from shell');
 
+        // The Markdown twin stays deterministic: the SPC's own words, no AI.
         const markdown = buildDeskMarkdown({
             census, fullCensus, totals, quiet, risk, summary, copy, rail, rows,
-            issuanceTime: outlook?.issuanceTime || null, nextTime,
+            issuanceTime, nextAt,
         });
 
-        // replacer fn: `$`-sequences in NWS/SPC text must not be interpreted
+        // replacer fn: `$`-sequences in NWS/SPC text must not be interpreted.
+        // One Cache-Control for both bodies (one URL, Vary: Accept): the
+        // short window only costs the Markdown twin an earlier re-render.
         return sendNegotiated(req, res, {
             [HTML]: baked.replace(MARKER, () => ssr),
             [MARKDOWN]: markdown,
-        }, { cacheControl: 'public, s-maxage=600, stale-while-revalidate=1800' });
+        }, { cacheControl: aiComplete ? PAGE_CACHE : PAGE_CACHE_NO_AI });
     } catch (err) {
         // NWS down, format drift, marker drift, anything: exact baked shell,
         // shorter CDN window so recovery is quick. The Markdown twin has no
@@ -525,7 +647,7 @@ export default async function handler(req, res) {
             [MARKDOWN]: buildDeskMarkdown({
                 census: [], totals: null, quiet: DESK_COUNT, risk: null, summary: null,
                 copy: [], rail: [], rows: [], issuanceTime: null,
-                nextTime: nextOutlookTime(new Date().toISOString()),
+                nextAt: nextOutlookAt(new Date().toISOString()),
             }),
         }, { cacheControl: 'public, s-maxage=300' });
     }
