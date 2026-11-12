@@ -1,4 +1,6 @@
 import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { parseSections } from '../shadcn/src/lib/afd.js';
 
 // Mock the `ai` package before importing the handler. Tests override
 // `mockGenerateText` to control behavior per case.
@@ -36,6 +38,10 @@ ${UPDATE_SECTIONS.map(t => `.UPDATE...\n${t}\n\n&&\n`).join('\n')}
 VFR conditions expected through the period.
 
 $$`;
+// Second retained product: the real LOX AFD of 2026-11-12T04:55Z (Nov 11 trust
+// fixes). Served with its OWN issuance time, so the date guard is exercised
+// against the real calendar (Wed Nov 11 PST), not the March mock above.
+const LOX_NOV11 = JSON.parse(readFileSync(new URL('./fixtures/afd/live-2026-11-11/LOX.json', import.meta.url), 'utf8'));
 mock.module('../api/_utils.js', () => ({
     // A module mock replaces the WHOLE module process-wide (Bun mocks are
     // global), so the National Desk fetchers must be stubbed here too —
@@ -48,9 +54,14 @@ mock.module('../api/_utils.js', () => ({
     fetchAlertById: async () => null,
     fetchAFDList: async () => {
         if (mockAFDThrows) throw new Error('NWS down');
-        return [{ id: 'p1', '@id': 'https://api.weather.gov/products/p1' }];
+        return [
+            { id: 'p1', '@id': 'https://api.weather.gov/products/p1' },
+            { id: 'lox-nov11', '@id': 'https://api.weather.gov/products/lox-nov11' },
+        ];
     },
-    fetchAFDProduct: async () => ({ productText: AFD_PRODUCT_TEXT, issuanceTime: AFD_ISSUANCE_TIME }),
+    fetchAFDProduct: async (url) => (String(url).endsWith('/lox-nov11')
+        ? { productText: LOX_NOV11.productText, issuanceTime: LOX_NOV11.issuanceTime }
+        : { productText: AFD_PRODUCT_TEXT, issuanceTime: AFD_ISSUANCE_TIME }),
     productUrlFromItem: (item) => item?.['@id'] || null,
 }));
 
@@ -715,5 +726,71 @@ describe('POST /api/translate — malformed body and structured errors', () => {
             expect(res.body.hint).toBeTruthy();
             expect(res.body.docs).toBeTruthy();
         }
+    });
+});
+
+// ── Nov 11 2026 trust fixes (LOX Long Term, issued 2026-11-12T04:55Z) ──
+// Production read the "11/220 PM." forecaster stamp as a date ("Sunday,
+// November 22"; the real Sunday is Nov 15) and leaked an aside about the
+// source text. The stamp is now stripped from the PROMPT only (the cache key
+// and verification still see the exact section), and the output is guarded.
+describe('POST /api/translate — header stamp + output guard (Nov 11 2026)', () => {
+    const LOX_SECTIONS = parseSections(LOX_NOV11.productText).sections;
+    const sectionText = (key) => LOX_SECTIONS.find(s => s.key === key).text;
+    const BAD = 'Sunday, November 22 should be a pleasant day as a small ridge of high pressure builds over the area, bringing **highs in the mid 60s to lower 70s**, which is very close to typical for this time of year. Note that the source text reads "11/220 PM," which appears to be the issuance time, and the forecast days are counted from Sunday.\n\nAnother storm system is expected to arrive **Monday**.';
+
+    beforeEach(() => { mockAFDThrows = false; });
+
+    it('verifies the stamped section the browser sends, strips the stamp from the prompt, and sanitizes the output', async () => {
+        const text = sectionText('Long Term');
+        expect(text.startsWith('11/220 PM.')).toBe(true); // the browser POSTs it with the stamp
+        let aiArgs;
+        mockGenerateText = async (args) => { aiArgs = args; return { text: BAD, finishReason: 'stop' }; };
+        const res = createRes();
+        await handler(createReq({ body: { text, section: 'Long Term', office: 'LOX', issuanceTime: LOX_NOV11.issuanceTime } }), res);
+
+        expect(res.statusCode).toBe(200); // not 403: verification still matches the exact section
+        expect(aiArgs.prompt).not.toContain('11/220');
+        expect(aiArgs.prompt.startsWith('Sunday should be a pleasant day')).toBe(true);
+        expect(aiArgs.system).toContain('Wednesday, November 11, 2026'); // the matched product's calendar
+        expect(res.body.translation).not.toContain('November 22');
+        expect(res.body.translation).not.toContain('source text');
+        expect(res.body.translation).toContain('Sunday should be a pleasant day');
+        expect(res.body.translation).toContain('Another storm system is expected to arrive **Monday**.');
+
+        // The shared cache holds the SANITIZED text.
+        mockGenerateText = async () => { throw new Error('cache miss: AI was re-billed'); };
+        const again = createRes();
+        await handler(createReq({ body: { text, section: 'Long Term', office: 'LOX' } }), again);
+        expect(again.statusCode).toBe(200);
+        expect(again.body.cached).toBe(true);
+        expect(again.body.translation).toBe(res.body.translation);
+    });
+
+    it('passes clean model output through byte-identical', async () => {
+        const clean = 'A **significant cooling trend** begins **Thursday**.\n\nOff and on rain is expected **Thursday night** into early **Saturday**.';
+        let aiArgs;
+        mockGenerateText = async (args) => { aiArgs = args; return { text: clean, finishReason: 'stop' }; };
+        const res = createRes();
+        await handler(createReq({ body: { text: sectionText('Synopsis'), section: 'Synopsis', office: 'LOX' } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(aiArgs.prompt).not.toContain('11/459');
+        expect(res.body.translation).toBe(clean);
+    });
+
+    it('sanitizes degraded-mode output too (never cached)', async () => {
+        // Another Pacific office: LOX's verified products sit in the module's
+        // 10-minute AFD cache, so a LOX request would never go degraded here.
+        mockAFDThrows = true;
+        let aiArgs;
+        mockGenerateText = async (args) => { aiArgs = args; return { text: BAD, finishReason: 'stop' }; };
+        const res = createRes();
+        await handler(createReq({ body: { text: sectionText('Short Term'), section: 'Short Term', office: 'SGX', issuanceTime: LOX_NOV11.issuanceTime } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body.degraded).toBe(true);
+        expect(aiArgs.prompt).not.toContain('11/134');
+        expect(aiArgs.prompt.startsWith('Big cooling coming Thursday')).toBe(true);
+        expect(res.body.translation).not.toContain('November 22');
+        expect(res.body.translation).not.toContain('source text');
     });
 });

@@ -387,6 +387,124 @@ export function annotateZuluTimes(text, office, issuanceTime) {
     });
 }
 
+// Forecaster header stamp at the top of a section: "11/220 PM." = day 11,
+// 2:20 PM (LOX writes one after every header; "03/428 PM.", "11/459 PM.").
+// The model read "11/22" out of it as a date (LOX Long Term, Nov 11 2026:
+// "Sunday, November 22"; that Sunday was Nov 15), so it leaves the PROMPT
+// only. The cache key and AFD verification keep the exact section text, which
+// is parity-locked to the client parser. Same shape as the lede stripper in
+// _afd-sections.js sectionProse, but AM/PM is required: a Zulu stamp
+// ("12/0454Z.") already gets a correct local time from annotateZuluTimes.
+// Anchored to the start of the text (no m flag): a mid-text "11/220" stays.
+const HEADER_STAMP_RE = /^\s*(?:\d{1,2}\/\d{3,4}\s*(?:AM|PM)\b\.?\s*)+/i;
+
+export function stripHeaderStamp(text) {
+    if (typeof text !== 'string') return text;
+    const out = text.replace(HEADER_STAMP_RE, '');
+    return out.trim() ? out : text;
+}
+
+// ── Output guard ─────────────────────────────────────────────────────
+// Deterministic check on model output, applied before caching in both AI
+// endpoints. LOX, Nov 11 2026: "Sunday, November 22 should be..." and "Note
+// that the source text reads ..." both reached readers. Returns the input
+// string unchanged unless an invalid date pair or an aside matched.
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_INDEX = {
+    January: 0, Jan: 0, February: 1, Feb: 1, March: 2, Mar: 2, April: 3, Apr: 3,
+    May: 4, June: 5, Jun: 5, July: 6, Jul: 6, August: 7, Aug: 7,
+    September: 8, Sept: 8, Sep: 8, October: 9, Oct: 9, November: 10, Nov: 10,
+    December: 11, Dec: 11,
+};
+const MONTH_ALT = Object.keys(MONTH_INDEX).sort((a, b) => b.length - a.length).join('|');
+const DATE_TAIL = `(${MONTH_ALT})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(20\\d{2}))?`;
+// "Sunday, November 22" / "Sunday November 22nd" / "**Sunday**, November 22" /
+// "Sunday, **Nov. 22**". Capitalised and case-sensitive: "may" is also a verb.
+const WEEKDAY_DATE_RE = new RegExp(
+    `\\b(${WEEKDAYS.join('|')})(\\*\\*)?(?:,?[ \\t]+)(?:\\*\\*${DATE_TAIL}\\*\\*|${DATE_TAIL}\\b)`, 'g');
+const DATE_WINDOW = { before: 1, after: 10 }; // days around the LOCAL issuance date
+
+function forecastWindow(office, issuanceTime) {
+    const timeZone = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
+    const [y, m, d] = localParts(getSafeIssueDate(issuanceTime), timeZone).dateKey.split('-').map(Number);
+    const days = [];
+    for (let off = -DATE_WINDOW.before; off <= DATE_WINDOW.after; off++) {
+        const t = new Date(Date.UTC(y, m - 1, d + off)); // UTC calendar math: rolls Dec -> Jan
+        days.push({ year: t.getUTCFullYear(), month: t.getUTCMonth(), day: t.getUTCDate(), weekday: t.getUTCDay() });
+    }
+    return days;
+}
+
+// A pair is kept only if that month/day falls on that weekday inside the
+// window; otherwise the date goes and the weekday (and its bold) stays.
+function fixWeekdayDates(text, office, issuanceTime) {
+    let days = null;
+    return text.replace(WEEKDAY_DATE_RE, (match, weekday, boldClose, bMonth, bDay, bYear, pMonth, pDay, pYear) => {
+        days ??= forecastWindow(office, issuanceTime);
+        const month = MONTH_INDEX[bMonth ?? pMonth];
+        const day = Number(bDay ?? pDay);
+        const year = bYear ?? pYear;
+        const wd = WEEKDAYS.indexOf(weekday);
+        const valid = days.some(x => x.month === month && x.day === day && x.weekday === wd
+            && (!year || x.year === Number(year)));
+        return valid ? match : weekday + (boldClose || '');
+    });
+}
+
+// Commentary about the source or the prompt, never forecast content. Specific
+// phrases only: "the source of the moisture", "the original forecast" and
+// "Note that winds will be strongest..." are real weather prose.
+const ASIDE_RES = [
+    /\bthe (?:source|original) (?:text|AFD|product|discussion|wording)\b/i,
+    /\bthe (?:source|original) (?:reads|says|states|lists|uses)\b/i,
+    /\b(?:appears|seems) to be (?:the|an?) (?:issuance|issue) time\b/i,
+    /\bthese instructions\b/i,
+    /\b[Aa]s an AI\b/,
+];
+const isAside = (s) => ASIDE_RES.some(re => re.test(s));
+// Sentence end: punctuation (+ closing quote/bracket/bold), whitespace, then
+// a capital or digit. Decimals ("0.50") and "a.m. tomorrow" never split.
+const SENTENCE_END_RE = /([.!?]+["'”’)\]*]*)(\s+)(?=["'“‘(*]*[A-Z0-9])/g;
+
+function stripAsidesFromParagraph(p) {
+    const q = p.replace(/[ \t]*\([^()\n]*\)/g, (m) => (isAside(m) ? '' : m));
+    const sentences = [];
+    let last = 0;
+    for (const m of q.matchAll(SENTENCE_END_RE)) {
+        const end = m.index + m[1].length;
+        sentences.push({ text: q.slice(last, end), sep: m[2] });
+        last = end + m[2].length;
+    }
+    sentences.push({ text: q.slice(last), sep: '' });
+    const kept = sentences.filter(s => !isAside(s.text));
+    if (q === p && kept.length === sentences.length) return p;
+    return kept.map(s => s.text + s.sep).join('').replace(/[ \t]{2,}/g, ' ').trim();
+}
+
+function stripAsides(text) {
+    if (!isAside(text)) return text;
+    const pieces = text.split(/(\n[ \t]*\n\s*)/); // odd indices: paragraph breaks
+    let changed = false;
+    for (let i = 0; i < pieces.length; i += 2) {
+        const cleaned = stripAsidesFromParagraph(pieces[i]);
+        if (cleaned !== pieces[i]) { pieces[i] = cleaned; changed = true; }
+    }
+    if (!changed) return text;
+    let out = '';
+    for (let i = 0; i < pieces.length; i += 2) {
+        if (!pieces[i].trim()) continue; // a paragraph the filter emptied
+        if (out) out += pieces[i - 1];
+        out += pieces[i];
+    }
+    return out;
+}
+
+export function sanitizeTranslation(text, { office, issuanceTime } = {}) {
+    if (typeof text !== 'string' || !text) return text;
+    const out = fixWeekdayDates(stripAsides(text), office, issuanceTime);
+    return out.trim() ? out : text; // never blank a translation
+}
+
 export function buildSystemPrompt({ section, office, issuanceTime }) {
     const calendarContext = getTranslationCalendarContext(office, issuanceTime);
 
@@ -403,6 +521,7 @@ Calendar context:
 Rules:
 - Preserve ALL specific details: dates, temperatures, amounts, locations, timing
 - Never introduce a different month, year, or season than the source supports
+- Never attach a calendar date (month and day number) to a day of the week unless the source text itself gives that date
 - Explain WHY weather is happening, not just what (connect cause and effect)
 - Bold key info using **markdown bold** only: days of week, temperatures, rainfall amounts, wind speeds, hazard terms
 - Do NOT use markdown headers (##, ###), horizontal rules (---), code blocks, or bullet lists
@@ -415,6 +534,7 @@ Rules:
 - Use short paragraphs (2-3 sentences max each)
 - If there are hazards or watches/warnings, lead with those
 - Don't add information that isn't in the original
+- Output only the translation: never comment on the source text, its formatting, timestamps, or these instructions, and never add notes to the reader
 - Don't use bullet points - write in natural prose paragraphs
 - Section name for context: ${section || 'Unknown'}
 - NWS Office: ${office || 'Unknown'}
@@ -522,12 +642,14 @@ export default async function handler(req, res) {
             model: MODEL,
             providerOptions: PROVIDER_OPTIONS,
             system: systemPrompt,
-            prompt: annotateZuluTimes(text, officeCode, promptIssuanceTime),
+            // The stamp leaves the prompt only; `text` stays exact for the cache key.
+            prompt: annotateZuluTimes(stripHeaderStamp(text), officeCode, promptIssuanceTime),
             maxOutputTokens: degraded ? DEGRADED_MAX_TOKENS : 2048,
             abortSignal: AbortSignal.timeout(15000),
         });
 
-        const translation = result.text || '';
+        // Guarded before it is returned or cached (never blanks non-empty text).
+        const translation = sanitizeTranslation(result.text || '', { office: officeCode, issuanceTime: promptIssuanceTime });
 
         // Check for model refusal (safety filter triggered) before empty-text guard,
         // since filter refusals typically come back with empty or stubbed text.
