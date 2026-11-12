@@ -329,6 +329,28 @@ describe('parseDiscussionBody', () => {
         expect(paras[0]).toMatch(/^Severe storms will develop/);
     });
 
+    // Live 20Z Day 1 update paragraphs, Nov 5-12 2026: housekeeping that
+    // points at the PREV block we cut. Each product falls back to the summary.
+    test('a 20Z update that only points at the discussion below is dropped', () => {
+        const live = [
+            'The forecast remains on track, and no changes were needed with this update. See the previous discussion below for details.',
+            'No changes are needed to the D1 Convective Outlook. See previous discussion below for more information.',
+            'No changes are needed to the current D1 Convective Outlook. See previous discussion below for more information.',
+            'Only minor adjustments were made to clear behind ongoing convection. See previous discussion below for more information.',
+            'Only minor adjustments were made to thunderstorm coverage based on trends in radar. See previous discussion below for more information.',
+        ];
+        for (const para of live) {
+            const text = `...SUMMARY...\nA summary paragraph long enough to survive the length filter here.\n\n...20z Update...\n${para}\n\n..Halbert-E.. 11/07/2026\n\n.PREV DISCUSSION... /ISSUED 1026 AM CST Sat Nov 07 2026/\n\n...Synopsis...\nStale prose that is also comfortably past the forty character floor.\n`;
+            expect(parseDiscussionBody(text)).toEqual([]);
+        }
+    });
+
+    test('a 20Z update with real meteorology and no pointer is kept', () => {
+        const para = 'The Marginal Risk along the lower Texas coast was removed with this update. Temperatures have been gradually cooling with the air mass inland becoming overworked by ongoing rain/thunderstorm activity.';
+        const text = `...SUMMARY...\nA summary paragraph long enough to survive the length filter here.\n\n...20z Update...\n${para}\n`;
+        expect(parseDiscussionBody(text)).toEqual([para]);
+    });
+
     test('the PREV marker matches 1-3 dots, any case', () => {
         const body = (mark) => `...SUMMARY...\nA summary paragraph long enough to survive the length filter here.\n\n...20Z Update...\nCurrent prose that is comfortably past the forty character floor.\n\n${mark} /ISSUED 1135 AM CDT/\n\n...Front Range...\nStale prose that is also comfortably past the forty character floor.\n`;
         for (const mark of ['.PREV DISCUSSION...', '..PREV DISCUSSION...', '...PREV DISCUSSION...', '.prev discussion...']) {

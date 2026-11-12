@@ -297,6 +297,16 @@ const PREV_DISCUSSION = /^\s*\.{1,3}PREV DISCUSSION/im;
 // sentence. If that empties the list, the caller's summary fallback covers it.
 const REISSUE_PREAMBLE = /^(?:the )?previous (?:forecast|outlook|discussion)\b.{0,120}?\b(?:remains?|see below|on track|unchanged)\b/i;
 
+// The other shape of reissue housekeeping: a 20Z update that says what (if
+// anything) changed and then sends the reader to the discussion below — the
+// PREV block we cut, so the pointer dangles. Every 20Z Day 1 of Nov 5–12 2026
+// that the preamble rule missed ended this way ("No changes are needed to the
+// current D1 Convective Outlook. See previous discussion below for more
+// information."). Same whole-paragraph policy; an update paragraph with real
+// meteorology and no pointer (Nov 8: "The Marginal Risk along the lower Texas
+// coast was removed...") is kept.
+const REISSUE_POINTER = /\bsee (?:the )?(?:previous|prior) (?:discussion|outlook|forecast) below\b/i;
+
 // Narrative paragraphs AFTER the ...SUMMARY... block — the standfirst already
 // covers the summary, so the running copy must never repeat it (spec §5).
 export function parseDiscussionBody(productText) {
@@ -326,7 +336,7 @@ export function parseDiscussionBody(productText) {
             .replace(/\s+/g, ' ')
             .trim())
         .filter(p => p.length >= 40 && !/^(ATTN|\.\.\.)/.test(p))
-        .filter(p => !REISSUE_PREAMBLE.test(p))
+        .filter(p => !REISSUE_PREAMBLE.test(p) && !REISSUE_POINTER.test(p))
         .slice(0, 3);
 }
 
