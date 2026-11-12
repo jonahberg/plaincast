@@ -19,7 +19,9 @@
 // the piece that failed. At most two Haiku calls per SPC issuance.
 import { generateText } from 'ai';
 import { fetchSpcDy1 } from './_utils.js';
-import { parseSpcOutlook, parseDiscussionBody, DESK_TIME_ZONE } from './_national.js';
+import {
+    parseSpcOutlook, parseDiscussionBody, DESK_TIME_ZONE, LEDE_COPY_MAX_PARAS, LEDE_COPY_MAX_CHARS,
+} from './_national.js';
 import { annotateZuluTimes, sanitizeTranslation } from './translate.js';
 import { sendError } from './_errors.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
@@ -123,12 +125,11 @@ async function generateDeck(headline, summary) {
 // ── The copy ─────────────────────────────────────────────────────────
 // The post-summary discussion runs 100–3,200 characters (three paragraphs at
 // most, measured on every Day 1 outlook Nov 5–12 2026), about 800 tokens in at
-// the top end; the plain-English version is about as long. 1,200 output tokens
-// covers the longest with room, and a reply cut off at the limit is treated as
-// a failure (a paragraph ending mid-sentence is not publishable).
-export const COPY_MAX_TOKENS = 1200;
-// More than this many paragraphs is a sign the model ignored the brief.
-const COPY_MAX_PARAS = 10;
+// the top end. "Explain why" can lengthen dense forecaster prose, and a reply
+// cut off at the limit is a failure that is never cached (so a low ceiling
+// would re-bill the same issuance), hence the section translator's 2,048.
+// Unmeasured against the model: no API key in development.
+export const COPY_MAX_TOKENS = 2048;
 
 function easternIssueTime(issued) {
     try {
@@ -206,7 +207,8 @@ async function generateCopy(body, issued) {
         // about the source go before anything is cached or returned.
         const clean = sanitizeTranslation((result.text || '').trim(), { issuanceTime: issued, timeZone: DESK_TIME_ZONE });
         const paras = splitCopy(clean);
-        if (paras.length === 0 || paras.length > COPY_MAX_PARAS) return null;
+        if (paras.length === 0 || paras.length > LEDE_COPY_MAX_PARAS
+            || paras.join('').length > LEDE_COPY_MAX_CHARS) return null;
         return paras;
     } catch (err) {
         console.error('National lede (copy) error:', err?.message || err);

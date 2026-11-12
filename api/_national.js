@@ -176,15 +176,22 @@ const REGION_NAMES = [
     'Puget Sound', 'Long Island', 'Cape Cod', 'Outer Banks', 'Mogollon Rim', 'Wasatch',
     'Bootheel', 'Coastal Bend', 'Concho Valley', 'Big Country', 'Rolling Plains',
     'Continental Divide', 'Canadian Prairies', 'Alleghenies',
+    'Mexico', 'Canada', 'Canadian', 'Puerto Rico', 'New York City', 'East Coast', 'West Coast',
+    'Carolina', 'Gulf Stream', 'Lake Champlain', 'San Joaquin Valley', 'Sacramento Valley',
+    'Rocky Mountains', 'Adirondacks', 'Catskills', 'Poconos', 'Berkshires', 'Green Mountains',
+    'White Mountains', 'Great Smoky Mountains', 'Smoky Mountains', 'Ozark Plateau',
 ];
 // A river or landform word right after a proper name is part of that name:
 // "western Tennessee Valleys", "Kansas River", "Nebraska Panhandle".
-const NAME_SUFFIXES = new Set(['valley', 'valleys', 'river', 'rivers', 'basin', 'panhandle', 'peninsula', 'plateau', 'delta']);
+const NAME_SUFFIXES = new Set(['valley', 'valleys', 'river', 'rivers', 'basin', 'panhandle', 'panhandles', 'peninsula', 'plateau', 'delta']);
 // Postal codes stay uppercase. Codes that are also everyday words are left
 // out, because in an all-caps headline "IN" is far likelier to be the
-// preposition than Indiana (likewise OR, ME, HI, OK).
+// preposition than Indiana (likewise OR, ME, HI, OK) — unless one is
+// slash-joined to another code ("TX/OK PANHANDLES"), where it can only be
+// the state.
 const POSTAL_CODES = new Set(('AL AK AZ AR CA CO CT DE DC FL GA IA ID IL KS KY LA MA MD MI MN MO MS MT NC '
     + 'ND NE NH NJ NM NV NY OH PA RI SC SD TN TX UT VA VT WA WI WV WY').split(' '));
+const WORDLIKE_CODES = new Set(['IN', 'OR', 'ME', 'HI', 'OK']);
 // Acronyms that must not be lowercased.
 const ACRONYMS = new Map([['us', 'US'], ['u.s', 'U.S'], ['conus', 'CONUS']]);
 
@@ -202,10 +209,12 @@ const NAME_RE = new RegExp(`(?<!\\w)(?:${[...AREA_PROPER_NOUNS]
     .map(n => n.split(/[\s-]+/).map(escRe).join('[\\s-]+'))
     .join('|')})(?!\\w)`, 'gi');
 const capWord = (w) => w.charAt(0).toUpperCase() + w.slice(1);
-// The words a suffix may follow: the last word of every listed name, and the
-// suffixes themselves once capitalised ("Connecticut River Valley").
+// The words a suffix may follow: the last word of every listed name, a
+// postal code ("lower MS Valley"), and the suffixes themselves once
+// capitalised ("Connecticut River Valley").
 const NAME_LAST_WORDS = new Set([
     ...AREA_PROPER_NOUNS.map(n => n.split(/[\s-]+/).pop()),
+    ...POSTAL_CODES, ...WORDLIKE_CODES,
     ...[...NAME_SUFFIXES].map(capWord),
 ]);
 const SUFFIX_RE = /(?<=(?<!\w)([A-Z]\w*)[\s-]+)([a-z]+)(?!\w)/g;
@@ -228,14 +237,16 @@ export function caseArea(text) {
         let i = 0;
         return m.replace(/[^\s-]+/g, () => words[i++] ?? '');
     });
-    // Suffix words after a name ("western Tennessee valleys" -> Valleys);
-    // repeated so a chain resolves left to right.
+    s = s.replace(/(?<![\w.])[a-z]{2}(?![\w.])/g, (m) => (POSTAL_CODES.has(m.toUpperCase()) ? m.toUpperCase() : m));
+    s = s.replace(/(?<=(?<!\w)[A-Z]{2}\/)[a-z]{2}(?!\w)|(?<!\w)[a-z]{2}(?=\/[A-Z]{2}(?!\w))/g,
+        (m) => (WORDLIKE_CODES.has(m.toUpperCase()) ? m.toUpperCase() : m));
+    // Suffix words after a name or code ("western Tennessee valleys" ->
+    // Valleys); repeated so a chain resolves left to right.
     for (let prev = null; prev !== s;) {
         prev = s;
         s = s.replace(SUFFIX_RE, (word, name) =>
             (NAME_SUFFIXES.has(word) && NAME_LAST_WORDS.has(name) ? capWord(word) : word));
     }
-    s = s.replace(/(?<![\w.])[a-z]{2}(?![\w.])/g, (m) => (POSTAL_CODES.has(m.toUpperCase()) ? m.toUpperCase() : m));
     s = s.replace(/(?<![\w.])(?:u\.s|us|conus)(?!\w)/g, (m) => ACRONYMS.get(m) ?? m);
     s = s.replace(COMPASS_REGION_RE, (m) => m.toLowerCase());
     return s;
@@ -358,6 +369,16 @@ export function formatExpiry(iso, tz) {
         return `until ${t}`;
     } catch { return null; }
 }
+
+// What /api/national-lede may return and api/national-desk.js will embed: one
+// definition, so the page never rejects an answer the endpoint cached (the
+// page would then sit on its short cache window for the whole issuance).
+// Generous on purpose: the prompt asks for short paragraphs, so the longest
+// discussion measured (3,179 characters, ~24 sentences) can fairly come back
+// as a dozen. The output-token ceilings bound the sizes long before these do.
+export const LEDE_DECK_MAX_CHARS = 2000;
+export const LEDE_COPY_MAX_PARAS = 20;
+export const LEDE_COPY_MAX_CHARS = 16000;
 
 // Fixed SPC Day-1 issuance slots (UTC). Next slot strictly after `nowIso`.
 const SPC_SLOTS = [1, 6, 13, 16.5, 20]; // 0100, 0600, 1300, 1630, 2000 UTC

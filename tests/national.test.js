@@ -197,10 +197,22 @@ describe('riskAreaLine / caseArea', () => {
         expect(caseArea('PARTS OF THE U.S. INTERMOUNTAIN WEST')).toBe('parts of the U.S. Intermountain West');
     });
 
-    test('postal codes that are also words stay words', () => {
+    test('postal codes that are also words stay words — unless slash-joined to a code', () => {
         expect(caseArea('EASTERN KS/WESTERN MO')).toBe('eastern KS/western MO');
         expect(caseArea('IN AND AROUND SOUTHERN OH')).toBe('in and around southern OH');
         expect(caseArea('OKLAHOMA OR TEXAS')).toBe('Oklahoma or Texas');
+        expect(caseArea('THE TX/OK PANHANDLES')).toBe('the TX/OK Panhandles');
+        expect(caseArea('THE LOWER MS VALLEY')).toBe('the lower MS Valley');
+    });
+
+    test('names beyond the states: neighbours, coasts, ranges, cities on the list', () => {
+        expect(caseArea('NORTHERN MEXICO')).toBe('northern Mexico');
+        expect(caseArea('NEAR THE CANADIAN BORDER')).toBe('near the Canadian border');
+        expect(caseArea('THE CAROLINA COAST')).toBe('the Carolina coast');
+        expect(caseArea('THE EAST COAST')).toBe('the East Coast');
+        expect(caseArea('NEW YORK CITY')).toBe('New York City');
+        expect(caseArea('THE ADIRONDACKS AND WHITE MOUNTAINS')).toBe('the Adirondacks and White Mountains');
+        expect(caseArea('SAN JOAQUIN VALLEY')).toBe('San Joaquin Valley');
     });
 
     test('a bare place gets "across"; an empty tail is a bare sentence', () => {

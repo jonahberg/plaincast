@@ -305,7 +305,15 @@ describe('pickLede', () => {
         expect(pickLede(null, ISS)).toEqual(none);
         expect(pickLede({ deck: 5, copy: 'A', issued: ISS }, ISS)).toEqual(none);
         expect(pickLede({ deck: 'D', copy: ['A', 7], issued: ISS }, ISS)).toEqual({ deck: 'D', copy: null });
-        expect(pickLede({ deck: 'x'.repeat(601), copy: [], issued: ISS }, ISS)).toEqual(none);
+        expect(pickLede({ deck: 'x'.repeat(2001), copy: [], issued: ISS }, ISS)).toEqual(none);
+        expect(pickLede({ deck: 'D', copy: Array(21).fill('A.'), issued: ISS }, ISS)).toEqual({ deck: 'D', copy: null });
+    });
+    // One definition of an acceptable answer (LEDE_* in _national.js): the
+    // page must embed anything the endpoint can cache, or it would sit on its
+    // short window all issuance.
+    test('accepts a long copy the endpoint can legitimately return', () => {
+        const twelve = Array.from({ length: 12 }, (_, i) => `Paragraph ${i + 1} explains one more step of the setup in two short sentences. ${'More detail follows here. '.repeat(8)}`);
+        expect(pickLede({ deck: 'D', copy: twelve, issued: ISS }, ISS).copy.length).toBe(12);
     });
 });
 
@@ -711,6 +719,19 @@ describe('GET /api/national-desk (SSR /national/)', () => {
         expect(res.body).toContain('class="desk-rail"');
         expect(res.body).toContain('class="desk-clock"');
         expect(res.body).not.toContain('Setting the type…');
+    });
+
+    it('the Markdown twin says the fallback summary once, not twice', async () => {
+        mockOutlooks.DY1 = { productText: swody1.productText, issuanceTime: swody1.issuanceTime };
+        const res = createRes();
+        await handler(createReq({ headers: { accept: 'text/markdown' } }), res);
+        expect((res.body.match(/Thunderstorms with severe wind gusts/g) || []).length).toBe(1);
+        // the fresh product still carries summary + discussion
+        mockOutlooks.DY1 = { productText: swody1Fresh.productText, issuanceTime: swody1Fresh.issuanceTime };
+        const fresh = createRes();
+        await handler(createReq({ headers: { accept: 'text/markdown' } }), fresh);
+        expect((fresh.body.match(/Thunderstorms with damaging wind gusts/g) || []).length).toBe(1);
+        expect(fresh.body).toContain('Satellite and regional radar imagery');
     });
 
     it('falls back to the summary as running copy, with the deck slot left EMPTY', async () => {

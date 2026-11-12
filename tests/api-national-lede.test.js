@@ -275,7 +275,7 @@ describe('GET /api/national-lede', () => {
         // thinking off via _model.js, a sized output budget
         expect(copyArgs.providerOptions).toEqual({ anthropic: { thinking: { type: 'disabled' } } });
         expect(copyArgs.maxOutputTokens).toBe(COPY_MAX_TOKENS);
-        expect(COPY_MAX_TOKENS).toBe(1200);
+        expect(COPY_MAX_TOKENS).toBe(2048);
         // the prompt is exactly the post-summary discussion — never the summary
         const body = parseDiscussionBody(swody1Fresh.productText);
         const { summary } = parseSpcOutlook(swody1Fresh.productText);
@@ -389,6 +389,18 @@ describe('GET /api/national-lede', () => {
             'Storms will build over the Ohio Valley this afternoon. They may produce damaging gusts.',
             'Drier air arrives by Sunday, ending the threat.',
         ]);
+    });
+
+    it('a long but legitimate copy (12 short paragraphs) is returned and cached, not rejected', async () => {
+        setSpc(nextIssuance(), swody1Fresh.productText);
+        const twelve = Array.from({ length: 12 }, (_, i) => `Paragraph ${i + 1} explains one more step of the setup.`).join('\n\n');
+        stubModel({ copy: async () => ({ text: twelve, finishReason: 'stop' }) });
+        const res = await call();
+        expect(res.body.copy.length).toBe(12);
+        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        const again = await call();
+        expect(copyCalls()).toBe(1);
+        expect(again.body.copy.length).toBe(12);
     });
 
     it('strips markdown the prompt forbids, since the page prints it as text', () => {

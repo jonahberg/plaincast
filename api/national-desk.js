@@ -50,6 +50,7 @@ import {
     groupDispatches, buildCensus, parseSpcOutlook, parseRiskCategory,
     parseDiscussionBody, digestArea, formatExpiry, nextOutlookAt, calmHeadline,
     riskAreaLine, areaCaption, formatClock,
+    LEDE_DECK_MAX_CHARS, LEDE_COPY_MAX_PARAS, LEDE_COPY_MAX_CHARS,
 } from './_national.js';
 import {
     sendNegotiated, send406, setVary, selectRepresentation, acceptHeader, HTML, MARKDOWN,
@@ -101,12 +102,6 @@ const LEDE_TIMEOUT_MS = 400;
 // the edge revalidates soon, so the next render can embed the AI text.
 const PAGE_CACHE = 'public, s-maxage=600, stale-while-revalidate=1800';
 const PAGE_CACHE_NO_AI = 'public, s-maxage=120, stale-while-revalidate=1800';
-
-// Bounds on what the page will embed from the lede endpoint. It is our own
-// endpoint, but its JSON is still untrusted input to an HTML page.
-const AI_DECK_MAX = 600;
-const AI_COPY_PARAS_MAX = 12;
-const AI_COPY_PARA_MAX = 1500;
 
 // Exact strings /js/national.js also writes when it swaps the copy in.
 const COPY_LABEL = "From the forecasters' discussion, in their words";
@@ -173,14 +168,18 @@ function sameInstant(a, b) {
 // The lede endpoint's answer, reduced to what this page may embed for THIS
 // outlook: {deck, copy}, each null when absent, malformed, or for another
 // issuance (a cached page and a fresh endpoint can straddle a new outlook).
+// It is our own endpoint, but its JSON is still untrusted input to an HTML
+// page; the size bounds are the endpoint's own (LEDE_* in _national.js), so
+// nothing it can cache is refused here.
 export function pickLede(lede, issuanceTime) {
     const none = { deck: null, copy: null };
     if (!lede || typeof lede !== 'object' || !sameInstant(lede.issued, issuanceTime)) return none;
-    const deck = typeof lede.deck === 'string' && lede.deck.trim() && lede.deck.length <= AI_DECK_MAX
+    const deck = typeof lede.deck === 'string' && lede.deck.trim() && lede.deck.length <= LEDE_DECK_MAX_CHARS
         ? lede.deck.trim() : null;
     let copy = null;
-    if (Array.isArray(lede.copy) && lede.copy.length <= AI_COPY_PARAS_MAX
-        && lede.copy.every(p => typeof p === 'string' && p.length <= AI_COPY_PARA_MAX)) {
+    if (Array.isArray(lede.copy) && lede.copy.length <= LEDE_COPY_MAX_PARAS
+        && lede.copy.every(p => typeof p === 'string')
+        && lede.copy.join('').length <= LEDE_COPY_MAX_CHARS) {
         const paras = lede.copy.map(p => p.trim()).filter(Boolean);
         copy = paras.length ? paras : null;
     }
@@ -626,8 +625,10 @@ export default async function handler(req, res) {
         if (!baked.includes(MARKER)) throw new Error('skeleton marker missing from shell');
 
         // The Markdown twin stays deterministic: the SPC's own words, no AI.
+        // It always prints the summary itself, so on the fallback path (the
+        // summary IS the copy) it gets no copy — else it said it twice.
         const markdown = buildDeskMarkdown({
-            census, fullCensus, totals, quiet, risk, summary, copy, rail, rows,
+            census, fullCensus, totals, quiet, risk, summary, copy: deckSuppressed ? [] : copy, rail, rows,
             issuanceTime, nextAt,
         });
 
