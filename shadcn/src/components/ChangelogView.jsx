@@ -101,8 +101,8 @@ function EntrySummary({ office, id }) {
                     <Loader2 className="size-3 animate-spin" aria-hidden="true" /> Summarizing…
                 </p>
             )}
-            {state.status === 'done' && <p className="max-w-[68ch] font-serif text-[1.0625rem] leading-[1.6] text-pretty">{state.text}</p>}
-            {state.status === 'quiet' && <p className="max-w-[68ch] font-serif text-[1.0625rem] leading-[1.6] text-muted-foreground">{state.text}</p>}
+            {state.status === 'done' && <p className="max-w-[65ch] font-serif text-[1.0625rem] leading-[1.6] text-pretty">{state.text}</p>}
+            {state.status === 'quiet' && <p className="max-w-[65ch] font-serif text-[1.0625rem] leading-[1.6] text-muted-foreground">{state.text}</p>}
         </div>
     );
 }

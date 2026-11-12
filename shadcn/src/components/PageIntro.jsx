@@ -248,7 +248,7 @@ export function PageIntro({
 
             {since ? (
                 <div className="mt-6 border-l-2 border-brand pl-4">
-                    <p className="max-w-[68ch] font-serif text-[1.0625rem] leading-[1.6] text-pretty">
+                    <p className="max-w-[65ch] font-serif text-[1.0625rem] leading-[1.6] text-pretty">
                         <span className="font-semibold">Since {sinceText(since.since, tz)}:</span>{' '}
                         {since.changelog}
                     </p>

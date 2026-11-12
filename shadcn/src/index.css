@@ -166,7 +166,7 @@
        characters a line. Lining, proportional figures (longhand
        font-variant-numeric only — never the font-variant shorthand). */
     .plain-prose {
-        max-width: 68ch;
+        max-width: 65ch;
         font-family: var(--font-reading);
         font-size: 1.0625rem;
         line-height: 1.7;
@@ -259,7 +259,7 @@
     }
     #ssr-root .ssr-standfirst,
     #ssr-root .forecast-section.ssr p {
-        max-width: 68ch;
+        max-width: 65ch;
         font-family: var(--font-reading);
         font-size: 1.0625rem;
         line-height: 1.7;
@@ -277,7 +277,7 @@
         @apply mt-4;
     }
     #ssr-root .ssr-changelog {
-        max-width: 68ch;
+        max-width: 65ch;
         font-family: var(--font-reading);
         font-size: 1.0625rem;
         line-height: 1.6;

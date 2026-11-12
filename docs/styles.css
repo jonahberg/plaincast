@@ -246,7 +246,7 @@ code, pre { font-family: var(--font-mono); }
 }
 
 /* ── Prose pages (/about, /contact, /privacy, /developers, 404) ──────── */
-/* Reading text, not a card: Source Serif 4 at 17px / 1.7 on a ~68ch
+/* Reading text, not a card: Source Serif 4 at 17px / 1.7 on a ~65ch
    measure, headings as hairline-ruled editorial breaks (like the SPA's
    forecast sections). Lists of definitions and code stay sans/mono. */
 .page-prose {
@@ -257,7 +257,7 @@ code, pre { font-family: var(--font-mono); }
 }
 .page-prose > * + * { margin-top: 1.1em; }
 /* The measure applies to running text; heading rules span the column. */
-.page-prose > p, .page-prose > ul, .page-prose > ol { max-width: 68ch; }
+.page-prose > p, .page-prose > ul, .page-prose > ol { max-width: 65ch; }
 .page-prose strong { font-weight: 600; }
 .page-prose a {
     color: var(--brand); text-decoration: underline; text-underline-offset: 3px;
@@ -355,7 +355,7 @@ code, pre { font-family: var(--font-mono); }
 .desk-deck:empty { display: none; }
 .desk-attrib { margin-top: 0.625rem; font-size: 0.75rem; color: var(--muted-foreground); }
 .desk-copy {
-    max-width: 68ch;
+    max-width: 65ch;
     font-family: var(--font-reading);
     font-size: 1.0625rem; line-height: 1.7; text-wrap: pretty;
     font-variant-numeric: lining-nums proportional-nums;

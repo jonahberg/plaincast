@@ -17,7 +17,7 @@ export function Explainer() {
                 >
                     What is an Area Forecast Discussion?
                 </AccordionTrigger>
-                <AccordionContent className="max-w-[68ch] leading-6 text-muted-foreground">
+                <AccordionContent className="max-w-[65ch] leading-6 text-muted-foreground">
                     Area Forecast Discussions are the real forecasts, written 3 to 4 times daily
                     by NWS meteorologists reading the models and interpreting what they mean for
                     your area. They offer far deeper insight than any weather app, but they're

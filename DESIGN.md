@@ -73,7 +73,7 @@ server-rendered `/national/`, `/about`, `/contact`, `/privacy`, `/developers` an
 - **One centered reading column**, `max-w-reading` = 46rem, with 24px side padding at sm and
   up and 16px on phones. The header bar, the page and the footer all share its edges, on
   the server-rendered pages too (`.container`).
-- **Measure:** prose is capped at `68ch`. At 1440px that is about 72 characters per line.
+- **Measure:** prose is capped at `65ch`. At 1440px that is about 69 characters per line.
 - **Forecast sections are ruled editorial blocks, not cards.**
   - Each has a hairline `border-t` and about 2.5rem of vertical padding.
   - The serif `<h2>` title sits on the left. On the right of the same row sit the
