@@ -58,6 +58,9 @@ export const HTML_BODY = `<!DOCTYPE html>
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <!-- The reading face (Source Serif 4, self-hosted; @font-face in
+         /styles.css), preloaded like the SPA's shell. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/source-serif-4-latin.woff2">
     <script src="/js/theme-init.js"></script>
     <script defer src="/js/site-chrome.js"></script>
     <link rel="stylesheet" href="/styles.css">
@@ -90,13 +93,13 @@ export const HTML_BODY = `<!DOCTYPE html>
         </div>
     </div>
 </header>
-<main class="container container-narrow main" id="page">
+<main class="container main" id="page">
     <div class="page-intro">
         <p class="page-kicker">404</p>
         <h1 class="page-title">No such page<span class="sr-only"> · Plaincast</span></h1>
         <p class="page-description">That path does not exist. Plaincast is a small site; here is all of it.</p>
     </div>
-    <article class="card page-prose">
+    <article class="page-prose">
         <ul class="page-list">
             <li><a href="/">Home</a> — your local edition, the latest NWS Area Forecast Discussion in plain English</li>
             <li><a href="/national/">The National Desk</a> — where the weather is today: the SPC outlook and every office under a severe warning</li>

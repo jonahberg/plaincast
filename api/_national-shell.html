@@ -15,6 +15,9 @@
     <!-- The same resource, in Markdown, under content negotiation (RFC 8288). -->
     <link rel="alternate" type="text/markdown" href="https://plaincast.live/national/">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <!-- The reading face (Source Serif 4, self-hosted; @font-face in
+         /styles.css), preloaded like the SPA's shell. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/source-serif-4-latin.woff2">
     <!-- api.weather.gov gates all forecast content; warm the connection early -->
     <link rel="preconnect" href="https://api.weather.gov" crossorigin>
     <link rel="modulepreload" href="/js/national.js">

@@ -484,7 +484,8 @@ export default async function handler(req, res) {
         const nextTime = nextOutlookTime(new Date().toISOString());
 
         // The story (risk moment, standfirst, running copy) reads as one
-        // card; the wrapper is presentational and changes no section order.
+        // ruled editorial block; the wrapper is presentational and changes
+        // no section order.
         const story = [
             buildRiskHtml(risk, fullCensus),
             buildLedeHtml({ summary, issuanceTime: outlook?.issuanceTime || null, deckSuppressed }),
@@ -492,7 +493,7 @@ export default async function handler(req, res) {
         ].filter(Boolean).join('\n\n    ');
         const ssr = [
             buildStripHtml(census, totals, quiet),
-            `<div class="desk-story card">\n    ${story}\n    </div>`,
+            `<div class="desk-story">\n    ${story}\n    </div>`,
             buildRailHtml(rail),
             buildWireHtml(rows),
             // Request-time clock. Near a slot boundary a CDN-cached copy can name a

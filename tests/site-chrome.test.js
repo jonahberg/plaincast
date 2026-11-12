@@ -34,12 +34,17 @@ describe('shared site chrome', () => {
     });
 
     for (const [name, html] of Object.entries(SHELLS)) {
-        it(`${name}: shadcn stylesheet + theme scripts, no serif webfonts`, () => {
+        // One webfont only, as in the SPA: the Source Serif 4 reading face
+        // (DESIGN.md, Nov 11 2026), preloaded; never the legacy fonts.css
+        // bundle (Fraunces / DM Sans / JetBrains Mono).
+        it(`${name}: shadcn stylesheet + theme scripts, only the reading webfont`, () => {
             expect(html).toContain('href="/styles.css"');
             expect(html).toContain('<script src="/js/theme-init.js"></script>');
             expect(html).toContain('<script defer src="/js/site-chrome.js"></script>');
             expect(html).not.toContain('/fonts/fonts.css');
-            expect(html).not.toContain('.woff2');
+            expect(html).toContain('<link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/source-serif-4-latin.woff2">');
+            const woff2 = [...html.matchAll(/[\w/.-]+\.woff2/g)].map(m => m[0]);
+            expect(new Set(woff2)).toEqual(new Set(['/fonts/source-serif-4-latin.woff2']));
         });
 
         // CSP is script-src 'self' (tests/csp.test.js): inline handlers and
@@ -92,7 +97,7 @@ describe('stylesheet mirrors the SPA tokens', () => {
         it(`${sel} tokens used here equal the SPA's`, () => {
             const mine = tokens(block(css, sel));
             const theirs = tokens(block(spa, sel));
-            for (const k of ['background', 'foreground', 'card', 'muted', 'muted-foreground', 'border', 'destructive', 'primary']) {
+            for (const k of ['background', 'foreground', 'card', 'muted', 'muted-foreground', 'border', 'destructive', 'primary', 'brand', 'ring', 'font-reading']) {
                 expect(mine[k]).toBe(theirs[k]);
             }
         });
