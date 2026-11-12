@@ -24,6 +24,7 @@ import {
 } from './_national.js';
 import { annotateZuluTimes, sanitizeTranslation } from './translate.js';
 import { sendError } from './_errors.js';
+import { ledeKey, sharedGet, sharedSet, LEDE_TTL } from './_shared-cache.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
 
@@ -34,6 +35,11 @@ export const coldBudget = createColdBudget(10);
 
 // issuanceTime -> { deck?, copy?, time }. Each piece is stored only once it
 // has succeeded; a failed piece stays absent so the next request retries it.
+// A product with no discussion has no copy entry at all: "copy: null" is a
+// verdict re-derived from the product on every request, never stored.
+// The same pieces are mirrored into the shared store (api/_shared-cache.js)
+// as { issued, deck?, copy? } under ledeKey(issued), which is what
+// api/national-desk.js reads to embed them.
 const cache = new Map();
 // One national answer means one flight: N concurrent cold readers share ONE
 // pass (SPC fetch + model calls) rather than each firing their own.
@@ -97,7 +103,38 @@ const TRANSIENT_CACHE = 'public, s-maxage=60';
 const TRANSIENT_BODY = { deck: null, copy: null, transient: true };
 const TRANSIENT = { status: 200, cacheHeader: TRANSIENT_CACHE, body: TRANSIENT_BODY };
 
+// A shared-store entry → the pieces it may contribute for THIS issuance
+// ({deck, copy}, each null when absent or malformed). The value carries its
+// issuance; any other instant is a miss.
+function sharedPieces(entry, issued) {
+    const none = { deck: null, copy: null };
+    const key = ledeKey(issued);
+    if (!key || !entry || typeof entry !== 'object' || ledeKey(entry.issued) !== key) return none;
+    const deck = typeof entry.deck === 'string' && entry.deck.trim() ? entry.deck : null;
+    const copy = Array.isArray(entry.copy) && entry.copy.length > 0
+        && entry.copy.every(p => typeof p === 'string' && p) ? entry.copy : null;
+    return { deck, copy };
+}
+
+// Read-modify-write: re-read the entry just before writing so a piece
+// another instance stored meanwhile is kept, then store the union. Only
+// pieces that succeeded are ever passed in.
+async function storeShared(issued, pieces) {
+    const key = ledeKey(issued);
+    if (!key) return;
+    const current = sharedPieces(await sharedGet(key), issued);
+    const deck = pieces.deck || current.deck;
+    const copy = pieces.copy || current.copy;
+    await sharedSet(key, {
+        issued,
+        ...(deck ? { deck } : {}),
+        ...(copy ? { copy } : {}),
+    }, { ttl: LEDE_TTL });
+}
+
 // ── The deck ─────────────────────────────────────────────────────────
+// Stored in the shared cache, which survives deploys: bump the version in
+// api/_shared-cache.js when this output's rules change.
 const DECK_SYSTEM = `You rewrite the U.S. Storm Prediction Center's Day 1 Convective Outlook summary as ONE plain-English sentence (max ~35 words) for a general reader: where severe weather is expected today and what kind. Warm, concrete, no jargon, no preamble, no markdown. If the outlook is quiet nationwide, say so plainly.`;
 const DECK_MAX_TOKENS = 240;
 
@@ -145,6 +182,9 @@ function easternIssueTime(issued) {
 // Voice rules follow the section translator's (api/translate.js
 // buildSystemPrompt), adapted: the source is the SPC, times are Eastern, and
 // the page sets the copy as plain paragraphs, so no bold.
+// The copy is stored in the shared cache, which survives deploys: bump the
+// version in api/_shared-cache.js when this output's rules change (this
+// prompt, buildCopyPrompt, splitCopy, or sanitizeTranslation).
 export function buildCopySystemPrompt(issued) {
     const when = easternIssueTime(issued) || 'unknown';
     return `You are a weather translator. Convert the forecasters' discussion from the U.S. Storm Prediction Center's Day 1 Convective Outlook into clear, natural plain English that anyone can understand.
@@ -260,6 +300,18 @@ export default async function handler(req, res) {
         const hit = issued ? getCache(issued) : null;
         let deck = hit?.deck ?? null;
         let copy = hit?.copy ?? null;
+
+        // Shared store: before deciding which model calls are still needed,
+        // take any piece another instance in this region already produced
+        // (and keep it in memory). Skipped when memory already has it all.
+        if (issued && (!deck || (body.length > 0 && !copy))) {
+            const shared = sharedPieces(await sharedGet(ledeKey(issued)), issued);
+            const found = {};
+            if (!deck && shared.deck) deck = found.deck = shared.deck;
+            if (!copy && shared.copy) copy = found.copy = shared.copy;
+            if (found.deck || found.copy) setCache(issued, found);
+        }
+
         const needDeck = !deck;
         const needCopy = body.length > 0 && !copy;
 
@@ -273,6 +325,9 @@ export default async function handler(req, res) {
             if (newCopy) copy = newCopy;
             if (issued && (newDeck || newCopy)) {
                 setCache(issued, { ...(newDeck ? { deck: newDeck } : {}), ...(newCopy ? { copy: newCopy } : {}) });
+                // Every piece held now has succeeded (cached or new). Awaited:
+                // a write left running after the response can be lost.
+                await storeShared(issued, { deck, copy });
             }
         }
 

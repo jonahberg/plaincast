@@ -536,12 +536,17 @@ function stripAsides(text) {
 // `timeZone` (optional) dates the forecast window in an explicit zone rather
 // than the office's — the National Desk passes America/New_York. Office
 // callers do not pass it and behave as before.
+// Its output is stored in the shared cache (translate-issuance, national-lede):
+// bump the version in api/_shared-cache.js when this output's rules change.
 export function sanitizeTranslation(text, { office, issuanceTime, timeZone } = {}) {
     if (typeof text !== 'string' || !text) return text;
     const out = fixWeekdayDates(stripAsides(text), office, issuanceTime, timeZone);
     return out.trim() ? out : text; // never blank a translation
 }
 
+// Translate-issuance results are stored in the shared cache, which survives
+// deploys: bump the version in api/_shared-cache.js when this output's rules
+// change.
 export function buildSystemPrompt({ section, office, issuanceTime }) {
     const calendarContext = getTranslationCalendarContext(office, issuanceTime);
 

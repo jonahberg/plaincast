@@ -1,4 +1,5 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { memoryBackend } from './shared-cache-backend.js';
 
 // Mirrors tests/api-changelog-handler.test.js mechanics: mock the `ai` module
 // (with a call counter, so "did this cost a model call?" is assertable) and
@@ -46,6 +47,10 @@ const { default: swody1Fresh } = await import('./fixtures/national/swody1-fresh.
 // Live Nov 12 05:23Z product: its discussion says "by 12Z Friday".
 const { default: swody1Nov12 } = await import('./fixtures/national/swody1-nov12.json');
 const { parseSpcOutlook, parseDiscussionBody } = await import('../api/_national.js');
+const { __setSharedCacheBackendForTests, ledeKey, LEDE_TTL } = await import('../api/_shared-cache.js');
+
+// The shared store is module state shared by every test file: always reset.
+afterEach(() => __setSharedCacheBackendForTests(null));
 
 // The two model calls are told apart by their system prompt.
 const isCopyCall = (args) => /forecasters' discussion/.test(args?.system || '');
@@ -84,7 +89,12 @@ const createReq = (o = {}) => ({
 // Distinct issuance per test: the module cache is keyed on it and lives for the
 // whole file, so reusing one would leak cache hits across tests.
 let issCounter = 0;
-const nextIssuance = () => `2026-08-15T19:${String(issCounter++).padStart(2, '0')}:00+00:00`;
+// Rolls into the next hour past :59, so every call stays a real instant
+// (the shared store keys on the parsed issuance).
+const nextIssuance = () => {
+    const n = issCounter++;
+    return `2026-08-15T${19 + Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}:00+00:00`;
+};
 function setSpc(issuanceTime, productText = swody1.productText) {
     mockSpc = { productText, issuanceTime };
     return issuanceTime;
@@ -447,5 +457,131 @@ describe('GET /api/national-lede', () => {
         const limited = await call(createReq({ headers }));
         expect(limited.statusCode).toBe(429);
         expect(generateCalls).toBe(1); // the burst was all cache hits
+    });
+});
+
+// ── Shared store (api/_shared-cache.js), Nov 2026 ──
+// The deck and copy are mirrored per issuance as { issued, deck?, copy? }
+// under ledeKey(issued) — what api/national-desk.js embeds. A piece is stored
+// only once it has succeeded; "no discussion" stores no copy at all, exactly
+// like the in-memory entry (the verdict is re-derived from the product).
+describe('GET /api/national-lede — shared store', () => {
+    let backend;
+    const COPY_PARAS = [
+        'Several pockets of spinning air in the jet stream will help set off storms later today.',
+        'The storms will move east into the Mid-Atlantic by early evening, bringing damaging gusts.',
+    ];
+    beforeEach(() => {
+        spcThrows = false;
+        spcDelay = 0;
+        spcCalls = 0;
+        generateCalls = 0;
+        generateArgs = [];
+        coldBudget.reset();
+        backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        stubModel();
+    });
+
+    it('both pieces already stored by another instance: no model call, served as cached', async () => {
+        const issued = setSpc(nextIssuance(), swody1Fresh.productText);
+        backend.seed(ledeKey(issued), { issued, deck: 'Stored deck.', copy: ['Stored copy.'] });
+        stubModel({
+            deck: async () => { throw new Error('deck re-billed'); },
+            copy: async () => { throw new Error('copy re-billed'); },
+        });
+        const res = await call();
+        expect(res.body).toEqual({ deck: 'Stored deck.', copy: ['Stored copy.'], issued, cached: true });
+        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        expect(generateCalls).toBe(0);
+        expect(backend.writes).toEqual([]);
+    });
+
+    it('a deck-only entry: only the copy call runs, and the entry gains the copy', async () => {
+        const issued = setSpc(nextIssuance(), swody1Fresh.productText);
+        backend.seed(ledeKey(issued), { issued, deck: 'Stored deck.' });
+        const res = await call();
+        expect(deckCalls()).toBe(0);
+        expect(copyCalls()).toBe(1);
+        expect(res.body).toEqual({ deck: 'Stored deck.', copy: COPY_PARAS, issued, cached: false });
+        expect(backend.peek(ledeKey(issued))).toEqual({ issued, deck: 'Stored deck.', copy: COPY_PARAS });
+        expect(backend.writes).toEqual([{ key: ledeKey(issued), options: { tags: ['lede'], ttl: LEDE_TTL } }]);
+    });
+
+    it('the same instant spelled differently is the same entry', async () => {
+        const issued = setSpc('2026-08-15T21:07:00+00:00', swody1Fresh.productText);
+        backend.seed(ledeKey('2026-08-15T21:07:00Z'), { issued: '2026-08-15T21:07:00Z', deck: 'Stored deck.', copy: ['Stored copy.'] });
+        const res = await call();
+        expect(generateCalls).toBe(0);
+        expect(res.body.deck).toBe('Stored deck.');
+        expect(res.body.issued).toBe(issued);
+    });
+
+    it('a cold run stores both pieces with a 2-day TTL', async () => {
+        const issued = setSpc(nextIssuance(), swody1Fresh.productText);
+        await call();
+        expect(backend.peek(ledeKey(issued))).toEqual({ issued, deck: DECK_TEXT, copy: COPY_PARAS });
+        expect(backend.writes.map(w => w.options)).toEqual([{ tags: ['lede'], ttl: LEDE_TTL }]);
+    });
+
+    it('a failed piece is never stored; the next instance re-runs only that piece', async () => {
+        const issued = setSpc(nextIssuance(), swody1Fresh.productText);
+        stubModel({ copy: async () => { throw new Error('upstream 529'); } });
+        await call();
+        expect(backend.peek(ledeKey(issued))).toEqual({ issued, deck: DECK_TEXT });
+
+        // Deck-only failure the other way round: copy stored, no deck.
+        const issued2 = setSpc(nextIssuance(), swody1Fresh.productText);
+        stubModel({ deck: async () => ({ text: '', finishReason: 'content-filter' }) });
+        await call();
+        expect(backend.peek(ledeKey(issued2))).toEqual({ issued: issued2, copy: COPY_PARAS });
+    });
+
+    it('no discussion: the entry holds the deck and no copy (the verdict comes from the product)', async () => {
+        const issued = setSpc(nextIssuance(), swody1.productText);
+        const res = await call();
+        expect(res.body.copy).toBeNull();
+        expect(backend.peek(ledeKey(issued))).toEqual({ issued, deck: DECK_TEXT });
+        // Read back by a fresh instance: still no copy call, long header.
+        const issued2 = setSpc(nextIssuance(), swody1.productText);
+        backend.seed(ledeKey(issued2), { issued: issued2, deck: 'Stored deck.' });
+        stubModel({ deck: async () => { throw new Error('deck re-billed'); } });
+        const again = await call();
+        expect(again.body).toEqual({ deck: 'Stored deck.', copy: null, issued: issued2, cached: true });
+        expect(again.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        expect(copyCalls()).toBe(0);
+    });
+
+    it('ignores an entry for another issuance, or with malformed pieces', async () => {
+        for (const bogus of [
+            () => ({ issued: '2026-01-01T00:00:00Z', deck: 'Old deck.', copy: ['Old copy.'] }),
+            (issued) => ({ issued, deck: 42, copy: 'not an array' }),
+            (issued) => ({ issued, deck: '   ', copy: [7] }),
+        ]) {
+            const issued = setSpc(nextIssuance(), swody1Fresh.productText);
+            backend.seed(ledeKey(issued), bogus(issued));
+            generateArgs = [];
+            const res = await call();
+            expect(deckCalls()).toBe(1);
+            expect(copyCalls()).toBe(1);
+            expect(res.body.deck).toBe(DECK_TEXT);
+            expect(res.body.cached).toBe(false);
+        }
+    });
+
+    it('read-modify-write keeps a piece another instance stored meanwhile', async () => {
+        const issued = setSpc(nextIssuance(), swody1Fresh.productText);
+        stubModel({ copy: async () => { throw new Error('upstream 529'); } });
+        // First read (before the model calls) misses; by the time this
+        // instance writes its deck, another one has stored the copy.
+        let reads = 0;
+        const realGet = backend.get.bind(backend);
+        backend.get = async (key) => {
+            reads += 1;
+            if (reads === 2) backend.seed(key, { issued, copy: ['Copy from the other instance.'] });
+            return realGet(key);
+        };
+        await call();
+        expect(backend.peek(ledeKey(issued))).toEqual({ issued, deck: DECK_TEXT, copy: ['Copy from the other instance.'] });
     });
 });

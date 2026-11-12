@@ -1,4 +1,5 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { memoryBackend } from './shared-cache-backend.js';
 
 let generateCalls = 0;
 let mockGenerateText = async () => ({
@@ -15,6 +16,7 @@ let mockListThrows = false;
 let listCalls = 0;
 let mockListDelay = 0; // ms: widen the cold window so concurrent misses overlap
 let mockItemsByOffice = null; // office -> items, so distinct offices get distinct issuances
+let productCalls = 0;
 mock.module('../api/_utils.js', () => ({
     // A module mock replaces the WHOLE module process-wide (Bun mocks are
     // global), so the National Desk fetchers must be stubbed here too —
@@ -31,11 +33,15 @@ mock.module('../api/_utils.js', () => ({
         if (mockListThrows) throw new Error('NWS down');
         return (mockItemsByOffice && mockItemsByOffice[office]) || mockItems;
     },
-    fetchAFDProduct: async (url) => mockProducts[url] || {},
+    fetchAFDProduct: async (url) => { productCalls += 1; return mockProducts[url] || {}; },
     productUrlFromItem: (item) => item?.id || null,
 }));
 
 const { default: handler, changedParagraphs, coldBudget } = await import('../api/changelog.js');
+const { __setSharedCacheBackendForTests, changelogKey, CHANGELOG_TTL } = await import('../api/_shared-cache.js');
+
+// The shared store is module state shared by every test file: always reset.
+afterEach(() => __setSharedCacheBackendForTests(null));
 
 function createRes() {
     return {
@@ -193,18 +199,6 @@ describe('GET /api/changelog', () => {
         expect(second.body.changelog).toMatch(/cold front/i);
     });
 
-    it('peek: a cold office gets a no-store non-answer with no list fetch and no model call', async () => {
-        setScenario({ items: [{ id: `peek-${idCounter++}` }, { id: 'prev-peek' }] });
-        mockGenerateText = async () => { throw new Error('a page render started a model run'); };
-        const before = generateCalls;
-        const res = createRes();
-        await handler(createReq({ query: { office: 'SEW' }, headers: { 'x-plaincast-peek': '1' } }), res);
-        expect(res.statusCode).toBe(200);
-        expect(res.body).toEqual({ changelog: null, peek: true });
-        expect(res.headers['cache-control']).toBe('no-store');
-        expect(generateCalls).toBe(before);
-    });
-
     it('returns null when the model judges the change trivial (NONE)', async () => {
         setScenario();
         mockGenerateText = async () => ({ text: 'NONE', finishReason: 'stop' });
@@ -229,6 +223,122 @@ describe('GET /api/changelog', () => {
         await handler(createReq({ query: { office: 'PBZ' } }), res);
         expect(res.statusCode).toBe(200);
         expect(res.body.changelog).toBeNull();
+    });
+});
+
+// ── Shared store (api/_shared-cache.js), Nov 2026 ──
+// Replaces the page self-fetch + peek mode. The store mirrors exactly what
+// the in-memory cache keeps, keyed by office + the pair's CURRENT issuance;
+// the page functions read the same entry for their boot data. Each test uses
+// an office no other test warms (the per-office latestMemo would answer
+// first otherwise).
+describe('GET /api/changelog — shared store', () => {
+    let backend;
+    beforeEach(() => {
+        coldBudget.reset();
+        mockListThrows = false;
+        mockListDelay = 0;
+        mockItemsByOffice = null;
+        generateCalls = 0;
+        productCalls = 0;
+        backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        mockGenerateText = async () => ({ text: 'A cold front Thursday brings showers and cooler air.', finishReason: 'stop' });
+    });
+
+    it('serves a verdict another instance stored: no product fetch, no model call', async () => {
+        const items = setScenario({ items: [{ id: `sh-${idCounter++}` }, { id: 'prev-sh' }] });
+        backend.seed(changelogKey('TBW', items[0].id), {
+            office: 'TBW', id: items[0].id, changelog: 'Rain chances rose for Friday.',
+            since: '2026-03-24T10:25:00+00:00', updated: '2026-03-24T18:25:00+00:00',
+        });
+        mockGenerateText = async () => { throw new Error('re-billed: another instance already summarized this'); };
+        const res = createRes();
+        await handler(createReq({ query: { office: 'TBW' } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({
+            changelog: 'Rain chances rose for Friday.', since: '2026-03-24T10:25:00+00:00',
+            updated: '2026-03-24T18:25:00+00:00', cached: true,
+        });
+        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        expect(generateCalls).toBe(0);
+        expect(productCalls).toBe(0);
+    });
+
+    it('serves a stored "trivial change" verdict (null) the same way', async () => {
+        const mid = `sh-mid-${idCounter++}`;
+        mockItems = [{ id: `sh-new-${idCounter++}` }, { id: mid }, { id: `sh-old-${idCounter++}` }];
+        backend.seed(changelogKey('JAX', mid), { office: 'JAX', id: mid, changelog: null, since: 'b0', updated: 'b1', trivial: true });
+        mockGenerateText = async () => { throw new Error('should not be called'); };
+        const res = createRes();
+        await handler(createReq({ query: { office: 'JAX', id: mid } }), res);
+        expect(res.body).toEqual({ changelog: null, since: 'b0', updated: 'b1', cached: true });
+        expect(res.headers['cache-control']).toBe('public, s-maxage=86400, stale-while-revalidate=604800');
+        expect(generateCalls).toBe(0);
+    });
+
+    it('writes the model verdict, keyed by office + current issuance, with a 7-day TTL', async () => {
+        const items = setScenario({ items: [{ id: `wr-${idCounter++}` }, { id: 'prev-wr' }] });
+        const res = createRes();
+        await handler(createReq({ query: { office: 'HGX' } }), res);
+        expect(res.body.cached).toBe(false);
+        const key = changelogKey('HGX', items[0].id);
+        expect(backend.writes).toEqual([{ key, options: { tags: ['cl'], ttl: CHANGELOG_TTL } }]);
+        expect(backend.peek(key)).toEqual({
+            office: 'HGX', id: items[0].id, changelog: 'A cold front Thursday brings showers and cooler air.',
+            since: '2026-03-24T10:25:00+00:00', updated: '2026-03-24T18:25:00+00:00',
+        });
+    });
+
+    it('writes the "trivial" and "nothing changed" verdicts too (both are cached in memory)', async () => {
+        let items = setScenario({ items: [{ id: `tv-${idCounter++}` }, { id: 'prev-tv' }] });
+        mockGenerateText = async () => ({ text: 'NONE', finishReason: 'stop' });
+        await handler(createReq({ query: { office: 'EWX' } }), createRes());
+        expect(backend.peek(changelogKey('EWX', items[0].id))).toEqual({
+            office: 'EWX', id: items[0].id, changelog: null,
+            since: '2026-03-24T10:25:00+00:00', updated: '2026-03-24T18:25:00+00:00', trivial: true,
+        });
+
+        items = setScenario({ curr: CURR, prev: CURR, items: [{ id: `nc-${idCounter++}` }, { id: 'prev-nc' }] });
+        await handler(createReq({ query: { office: 'ABQ' } }), createRes());
+        expect(backend.peek(changelogKey('ABQ', items[0].id))).toEqual({
+            office: 'ABQ', id: items[0].id, changelog: null,
+            since: '2026-03-24T10:25:00+00:00', updated: '2026-03-24T18:25:00+00:00',
+        });
+    });
+
+    it('never writes a transient failure (empty model output, NWS down, no predecessor)', async () => {
+        setScenario({ items: [{ id: `tr-${idCounter++}` }, { id: 'prev-tr' }] });
+        mockGenerateText = async () => ({ text: '   ', finishReason: 'stop' });
+        const empty = createRes();
+        await handler(createReq({ query: { office: 'PSR' } }), empty);
+        expect(empty.body.transient).toBe(true);
+
+        mockListThrows = true;
+        await handler(createReq({ query: { office: 'FFC' } }), createRes());
+        mockListThrows = false;
+
+        mockItems = [{ id: `solo-sh-${idCounter++}` }];
+        await handler(createReq({ query: { office: 'GJT' } }), createRes());
+
+        expect(backend.writes).toEqual([]);
+    });
+
+    it('ignores an entry for another office or issuance, or with a malformed verdict', async () => {
+        for (const [office, bogus] of [
+            ['BMX', (id) => ({ office: 'LOX', id, changelog: 'Wrong office.' })],
+            ['OHX', () => ({ office: 'OHX', id: 'some-other-id', changelog: 'Wrong pair.' })],
+            ['MRX', (id) => ({ office: 'MRX', id, changelog: 42 })],
+        ]) {
+            const items = setScenario({ items: [{ id: `bg-${idCounter++}` }, { id: 'prev-bg' }] });
+            backend.seed(changelogKey(office, items[0].id), bogus(items[0].id));
+            const before = generateCalls;
+            const res = createRes();
+            await handler(createReq({ query: { office } }), res);
+            expect(res.body.cached).toBe(false);
+            expect(res.body.changelog).toMatch(/cold front/i);
+            expect(generateCalls).toBe(before + 1);
+        }
     });
 });
 

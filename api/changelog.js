@@ -6,7 +6,7 @@ import { generateText } from 'ai';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { sendError } from './_errors.js';
-import { isPeek } from './_self.js';
+import { changelogKey, sharedGet, sharedSet, CHANGELOG_TTL } from './_shared-cache.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
 
@@ -58,6 +58,27 @@ function setCache(id, payload) {
     cache.set(id, { ...payload, time: Date.now() });
 }
 
+// The shared store mirrors exactly what the in-memory cache keeps: the
+// "nothing changed" verdict and the model's verdict (a sentence, or null for
+// a trivial change). Never a transient failure. The value carries the office
+// and id it answers for; a reader treats any other entry as a miss.
+function storeShared(office, currentId, payload) {
+    return sharedSet(changelogKey(office, currentId), { office, id: currentId, ...payload }, { ttl: CHANGELOG_TTL });
+}
+
+function sharedVerdict(entry, office, currentId) {
+    if (!entry || typeof entry !== 'object') return null;
+    if (entry.office !== office || entry.id !== currentId) return null;
+    if (entry.changelog !== null && typeof entry.changelog !== 'string') return null;
+    if (entry.transient) return null;
+    return {
+        changelog: entry.changelog,
+        since: entry.since ?? null,
+        updated: entry.updated ?? null,
+        ...(entry.trivial ? { trivial: true } : {}),
+    };
+}
+
 function paragraphs(text) {
     return String(text || '')
         .split(/\n\s*\n+/)
@@ -102,9 +123,7 @@ export default async function handler(req, res) {
     }
 
     const clientIp = req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
-    // A peek can never reach the model, so it is not charged to the limiter.
-    const peek = isPeek(req);
-    if (!peek && !checkRateLimit(clientIp)) {
+    if (!checkRateLimit(clientIp)) {
         return sendError(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
     }
 
@@ -114,14 +133,6 @@ export default async function handler(req, res) {
             res.setHeader('Cache-Control', LATEST_CACHE);
             return res.status(200).json({ ...memo.payload, cached: true });
         }
-    }
-
-    // Peek (api/_self.js): a page render reads what already exists and never
-    // starts, or waits on, the cold pass (NWS fetches + a model call).
-    // `no-store` keeps this non-answer out of the CDN.
-    if (peek) {
-        res.setHeader('Cache-Control', 'no-store');
-        return res.status(200).json({ changelog: null, peek: true });
     }
 
     // In-flight dedup: N readers hitting the same cold (office, issuance) in the
@@ -172,6 +183,15 @@ export default async function handler(req, res) {
         if (hit && Date.now() - hit.time < CACHE_TTL) {
             return { status: 200, cacheHeader, body: { changelog: hit.changelog, since: hit.since, updated: hit.updated, cached: true } };
         }
+        // Shared store (api/_shared-cache.js): a verdict another instance in
+        // this region already reached is served like an in-memory hit (and
+        // kept in memory), so it costs no product fetches and no model call.
+        // The page functions read the same entry for their boot data.
+        const shared = currentId ? sharedVerdict(await sharedGet(changelogKey(office, currentId)), office, currentId) : null;
+        if (shared) {
+            setCache(currentId, shared);
+            return { status: 200, cacheHeader, body: { changelog: shared.changelog, since: shared.since, updated: shared.updated, cached: true } };
+        }
 
         const [currProd, prevProd] = await Promise.all([
             fetchAFDProduct(productUrlFromItem(items[0]), { signal: AbortSignal.timeout(8000) }),
@@ -186,11 +206,17 @@ export default async function handler(req, res) {
         const changes = changedParagraphs(prevText, currText).slice(0, 6);
         if (changes.length === 0) {
             const payload = { changelog: null, since, updated };
-            if (currentId) setCache(currentId, payload);
+            if (currentId) {
+                setCache(currentId, payload);
+                await storeShared(office, currentId, payload);
+            }
             if (!pinnedId) latestMemo.set(office, { payload, time: Date.now() });
             return { status: 200, cacheHeader, body: { ...payload, cached: false } };
         }
 
+        // Verdicts are stored in the shared cache, which survives deploys:
+        // bump the version in api/_shared-cache.js when this output's rules
+        // change.
         const system = `You summarize what changed between two consecutive National Weather Service Area Forecast Discussions. Given the NEW or CHANGED passages from the latest update, write ONE warm, plain-English sentence (max ~30 words) describing what changed for a general reader: shifts in timing, rain or snow chances, temperatures, hazards, or forecaster confidence. No preamble, no markdown, no lists, no quotes. If the changes are purely administrative or trivial (minor wording, aviation/TAF codes only), respond with exactly: NONE`;
         const prompt = `Forecast office: ${OFFICE_NAMES[office]}.\n\nNEW OR CHANGED PASSAGES FROM THE LATEST UPDATE:\n\n${changes.join('\n\n')}`;
 
@@ -216,7 +242,10 @@ export default async function handler(req, res) {
         }
 
         const payload = { changelog, since, updated, ...(trivial ? { trivial } : {}) };
-        if (currentId) setCache(currentId, payload);
+        if (currentId) {
+            setCache(currentId, payload);
+            await storeShared(office, currentId, payload);
+        }
         if (!pinnedId) latestMemo.set(office, { payload, time: Date.now() });
         return { status: 200, cacheHeader, body: { ...payload, cached: false } };
     })();

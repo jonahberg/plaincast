@@ -10,7 +10,7 @@ import { extractSections } from './_afd-sections.js';
 import { annotateZuluTimes, buildSystemPrompt, sanitizeTranslation, stripHeaderStamp } from './translate.js';
 import { getSnapshot, putSnapshot } from './_snapshots.js';
 import { sendError } from './_errors.js';
-import { isPeek } from './_self.js';
+import { sharedGet, sharedSet, translationKey, TRANSLATION_TTL } from './_shared-cache.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
 
@@ -71,6 +71,19 @@ const rateLimitCleanupTimer = setInterval(() => {
 }, 5 * 60 * 1000);
 rateLimitCleanupTimer.unref?.();
 
+// A shared-store entry is served only when it is a complete translation of
+// exactly this office + id (the store is keyed by hash; the value proves
+// itself). Anything else is a miss.
+function completeSharedPayload(entry, office, id) {
+    if (!entry || typeof entry !== 'object') return null;
+    if (entry.office !== office || entry.id !== id || entry.complete !== true) return null;
+    const s = entry.sections;
+    if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+    const values = Object.values(s);
+    if (values.length === 0 || !values.every(v => typeof v === 'string' && v)) return null;
+    return entry;
+}
+
 // Mirror the client parser's section keying (SECTION_NAMES map, else Title Case)
 // so returned keys line up with what app.js renders.
 function displayKey(rawKey) {
@@ -97,27 +110,33 @@ export default async function handler(req, res) {
     }
 
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
-    // A peek can never reach the model, so it is not charged to the limiter
-    // (page renders all share the function's own egress IP).
-    const peek = isPeek(req);
-    if (!peek && !checkRateLimit(clientIp)) {
+    if (!checkRateLimit(clientIp)) {
         return sendError(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
     }
 
     const cacheKey = `${office}|${id}`;
-    const hit = cache.get(cacheKey);
-    if (hit && Date.now() - hit.time < CACHE_TTL) {
-        res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=2592000');
-        return res.status(200).json({ ...hit.payload, cached: true });
-    }
+    const memoryHit = () => {
+        const hit = cache.get(cacheKey);
+        return hit && Date.now() - hit.time < CACHE_TTL ? hit.payload : null;
+    };
+    let payloadHit = memoryHit();
 
-    // Peek (api/_self.js): a server-rendered page asking only for what already
-    // exists. Nothing cached here means "not yet": never start, or wait on, a
-    // model run for a page render. `no-store` keeps this non-answer out of the
-    // CDN, so the canonical URL still caches the real translation later.
-    if (peek) {
-        res.setHeader('Cache-Control', 'no-store');
-        return res.status(200).json({ office, id, sections: null, complete: false, peek: true });
+    // Shared store (api/_shared-cache.js): an issuance another instance in
+    // this region already translated is served like an in-memory hit, so a
+    // cold instance never re-bills it. Only complete payloads are ever
+    // written there. Re-check memory after the await: a concurrent request
+    // in this instance may have finished the cold path meanwhile.
+    if (!payloadHit) {
+        const shared = completeSharedPayload(await sharedGet(translationKey(office, id)), office, id);
+        payloadHit = memoryHit();
+        if (!payloadHit && shared) {
+            setCache(cacheKey, shared);
+            payloadHit = shared;
+        }
+    }
+    if (payloadHit) {
+        res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=2592000');
+        return res.status(200).json({ ...payloadHit, cached: true });
     }
 
     // In-flight dedup: N readers arriving in the cold window (a new issuance,
@@ -171,6 +190,8 @@ export default async function handler(req, res) {
         // Translate the whole issuance in one parallel pass. Individual
         // section failures degrade gracefully — the client falls back to
         // per-section POST /api/translate for any key missing here.
+        // The prompt and sanitizer live in translate.js: bump the version in
+        // api/_shared-cache.js when this output's rules change.
         const settled = await Promise.all(sections.map(async (s) => {
             try {
                 const result = await generateText({
@@ -212,10 +233,15 @@ export default async function handler(req, res) {
         }
 
         // A PARTIAL result (some sections failed) must not be frozen: no
-        // snapshot, no long CDN window, no in-memory entry — a retry heals it.
+        // snapshot, no shared entry, no long CDN window, no in-memory entry —
+        // a retry heals it. The shared write is awaited: a write left running
+        // after the response can be lost when the function is frozen.
         if (payload.complete) {
             setCache(cacheKey, payload);
-            await putSnapshot(office, id, payload);
+            await Promise.all([
+                putSnapshot(office, id, payload),
+                sharedSet(translationKey(office, id), { ...payload, office, id, complete: true }, { ttl: TRANSLATION_TTL }),
+            ]);
             res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=2592000');
         } else {
             res.setHeader('Cache-Control', 'public, s-maxage=300');
