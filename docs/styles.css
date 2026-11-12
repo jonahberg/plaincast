@@ -376,16 +376,23 @@ code, pre { font-family: var(--font-mono); }
 /* The original discussion, one tap under the plain-English copy: a native
    <details> behind a hairline, its summary a 44px-tall sans link, its body
    the reading serif one step down and muted. */
-.desk-original { max-width: 65ch; border-top-width: 1px; }
+/* 65ch measured in the copy's own face and size, so the rule ends where the
+   copy's lines do. */
+.desk-original {
+    max-width: 65ch; border-top-width: 1px;
+    font-family: var(--font-reading); font-size: 1.0625rem;
+}
 .desk-original > summary {
-    display: flex; align-items: center; gap: 0.5rem; min-height: 2.75rem;
+    /* 12 + 20 + 12 = a 44px target on one line; the chevron sits on the
+       first line when the label wraps on a phone. */
+    display: flex; align-items: flex-start; gap: 0.5rem; min-height: 2.75rem; padding-block: 0.75rem;
     font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.25rem; font-weight: 500;
     color: var(--brand); cursor: pointer; list-style: none;
     -webkit-tap-highlight-color: transparent;
 }
 .desk-original > summary::-webkit-details-marker { display: none; }
 .desk-original > summary::before {
-    content: ""; flex-shrink: 0; width: 0.4rem; height: 0.4rem;
+    content: ""; flex-shrink: 0; width: 0.4rem; height: 0.4rem; margin-top: 0.4rem;
     border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
     transform: rotate(-45deg); transition: transform .15s;
 }
