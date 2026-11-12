@@ -304,6 +304,12 @@ code, pre { font-family: var(--font-mono); }
 .local-desk {
     margin-bottom: 1rem; font-size: 0.875rem; color: var(--muted-foreground);
 }
+/* Both of these are filled by /js/national.js after first paint (the shell is
+   CDN-cached, so it cannot bake today's date or the reader's office). Their
+   line is reserved from the start so nothing below them moves when they fill. */
+.local-desk[hidden] { display: block; visibility: hidden; }
+.local-desk:empty::before,
+#folio-date:empty::before { content: "\00a0"; }
 .local-desk a { color: var(--foreground); font-weight: 500; text-decoration: underline; text-underline-offset: 4px; }
 
 /* Census strip: a row of outline badges. */
