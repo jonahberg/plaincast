@@ -52,17 +52,19 @@ export async function fetchLatestAFD(office, { force = false } = {}) {
 }
 
 // Active alerts for the office's state, filtered to this office's sender
-// name. Returns { alerts, severe } — `severe` is an active Severe/Extreme
-// Warning (tightens the refresh poll, same as the vanilla client).
+// name. Returns { alerts, severe, ok } — `severe` is an active Severe/Extreme
+// Warning (tightens the refresh poll, same as the vanilla client); `ok` is
+// false when the feed could not be read, so the page never claims "No active
+// alerts" on a failed fetch.
 export async function fetchAlerts(office) {
     const state = OFFICE_STATES[office];
-    if (!state) return { alerts: [], severe: false };
+    if (!state) return { alerts: [], severe: false, ok: false };
     try {
         const res = await fetch(`https://api.weather.gov/alerts/active?area=${state}`, {
             headers: HEADERS,
             signal: AbortSignal.timeout(10000),
         });
-        if (!res.ok) return { alerts: [], severe: false };
+        if (!res.ok) return { alerts: [], severe: false, ok: false };
         const data = await res.json();
         const senderMatch = OFFICE_SENDER[office] || '';
         let alerts = [];
@@ -87,10 +89,10 @@ export async function fetchAlerts(office) {
         alerts.sort((a, b) => order[classifyAlertKind(a.event)] - order[classifyAlertKind(b.event)]);
         const severe = alerts.some(a =>
             /warning/i.test(a.event) && /severe|extreme/i.test(a.severity));
-        return { alerts, severe };
+        return { alerts, severe, ok: true };
     } catch (e) {
         console.debug('Alert fetch failed', e);
-        return { alerts: [], severe: false };
+        return { alerts: [], severe: false, ok: false };
     }
 }
 

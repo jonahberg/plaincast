@@ -27,7 +27,8 @@ import { OFFICE_NAMES, OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/office
 import { escHtml } from '../scripts/build-offices.mjs';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { regexTranslate } from './_afd-sections.js';
-import { loadTemplate, editionSections as fullEdition } from './office-page.js';
+import { loadTemplate, editionSections as fullEdition, wantsBoot } from './office-page.js';
+import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot } from './_boot.js';
 import { renderHomeMarkdown } from './_edition-markdown.js';
 import { sendNegotiated, HTML, MARKDOWN, send406, setVary, selectRepresentation, acceptHeader } from './_negotiate.js';
 import { sendError } from './_errors.js';
@@ -45,6 +46,8 @@ const DEFAULT_OFFICE = 'LOX';
 // two sections is enough to prove there is real content here without making
 // the homepage a duplicate of it.
 const MAX_SECTIONS = 2;
+
+const FULL_CACHE = 'public, s-maxage=900, stale-while-revalidate=3600';
 
 // `/?office=OKX` is the legacy form documented in llms.txt and still linked
 // from the SSR note. Honour it, but only for offices that exist — the value is
@@ -170,6 +173,11 @@ export default async function handler(req, res) {
         const items = await fetchAFDList(code, { signal: AbortSignal.timeout(8000) });
         const prodUrl = productUrlFromItem(items[0]);
         if (!prodUrl) throw new Error('no AFD product listed');
+        // Boot extras run in parallel with the product fetch (see office-page.js).
+        const latestId = items[0]?.id || null;
+        const extrasPending = baked && wantsBoot(chosen, req.query) && latestId
+            ? fetchBootExtras(code, latestId)
+            : null;
         const prod = await fetchAFDProduct(prodUrl, { signal: AbortSignal.timeout(8000) });
         const text = typeof prod?.productText === 'string' ? prod.productText : '';
         if (!text) throw new Error('empty AFD product');
@@ -179,16 +187,26 @@ export default async function handler(req, res) {
         const markdown = renderHomeMarkdown({ code, city, sections, issued, edition: true });
 
         let html = null;
+        let cacheControl = FULL_CACHE;
         if (baked) {
             if (!baked.includes(LOADING_DIV)) throw new Error('skeleton marker missing from template');
             // replacer fn: `$`-sequences in forecast text must not be interpreted
             html = baked.replace(LOADING_DIV, () => buildHomeSsr(code, city, sections, issued));
+            if (extrasPending) {
+                const boot = buildBoot({
+                    office: code,
+                    product: { id: prod?.id || latestId, issuanceTime: prod?.issuanceTime, productText: text },
+                    extras: await extrasPending,
+                });
+                html = insertBoot(html, boot);
+                cacheControl = cacheControlFor(boot, FULL_CACHE);
+            }
         }
 
         return sendNegotiated(req, res, {
             [HTML]: html || minimalHtml(markdown),
             [MARKDOWN]: markdown,
-        }, { cacheControl: 'public, s-maxage=900, stale-while-revalidate=3600' });
+        }, { cacheControl });
     } catch (err) {
         // NWS down, format drift, marker drift, anything: the exact committed
         // page bytes, shorter CDN window so recovery is quick. The Markdown

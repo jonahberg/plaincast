@@ -8,7 +8,9 @@ import { extractTakeaway, hasRealAlerts, parseSections, reorderSections } from '
 import {
     fetchAFDList, fetchAlerts, fetchChangelog, fetchConditions, fetchProduct, historyItems,
 } from '@/lib/nws';
-import { fetchEditionSnapshot } from '@/lib/ai';
+import { fetchEditionSnapshot, primeIssuanceTranslations } from '@/lib/ai';
+import { bootFor, readBoot } from '@/lib/boot';
+import { ALERTS_KEY, alertStatusSummary, withAlertsSection } from '@/lib/alert-status';
 import { loadLastEdition, saveLastEdition } from '@/lib/offline';
 import { currentRoute, officeUrl } from '@/lib/route';
 import { headFor, officeFeedHref } from '@/lib/seo';
@@ -35,6 +37,9 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const OFFICE_KEY = 'plaincast-office';
 const HISTORY_LIMIT = 10;
+// Conditions that settled without a reading (the endpoint failed or the
+// station had none): the almanac shows a dash in the cells it reserved.
+const NO_CONDITIONS = Object.freeze({ temp: null, normal: null });
 
 function initialState() {
     const route = currentRoute();
@@ -46,6 +51,57 @@ function initialState() {
         if (saved && OFFICE_NAMES[saved]) return { office: saved, editionId: null, view: route.view, fromUrl: false };
     } catch (e) { /* private mode */ }
     return { office: 'LOX', editionId: null, view: route.view, fromUrl: false };
+}
+
+// Parsed product → render state; an unparseable product gets its own
+// 'empty' state (a link to the raw text) instead of a blank page. Shared by
+// the network load and the boot path, so both render an edition identically.
+function productToState(product, extra) {
+    const fullText = product.productText || '';
+    const { sections, forecaster } = parseSections(fullText);
+    return {
+        status: sections.length ? 'ready' : 'empty',
+        sections,
+        forecaster,
+        issuedAt: product.issuanceTime ? new Date(product.issuanceTime) : null,
+        fullText,
+        productId: product.id || null,
+        archived: false,
+        offline: false,
+        savedAt: null,
+        rawUrl: null,
+        ...extra,
+    };
+}
+
+// Same URL historyItems() falls back to for a list item.
+function productUrl(id) {
+    return `https://api.weather.gov/products/${encodeURIComponent(id)}`;
+}
+
+function sameInstant(a, b) {
+    const ta = Date.parse(a);
+    const tb = Date.parse(b);
+    return Number.isFinite(ta) && Number.isFinite(tb) && ta === tb;
+}
+
+// The served page's boot data, when it applies to the route the app opens on
+// (src/lib/boot.js): the first render is then the finished edition — no
+// skeleton — and its translations are primed so sections render AI text
+// from their first frame.
+function initialApp() {
+    const loc = initialState();
+    const boot = bootFor(readBoot(), loc);
+    if (!boot) return { loc, boot: null, state: { status: 'loading' } };
+    const state = productToState(boot.product, {
+        rawUrl: productUrl(boot.product.id),
+        productId: boot.product.id,
+    });
+    if (state.status !== 'ready') return { loc, boot: null, state: { status: 'loading' } };
+    if (boot.translations) {
+        primeIssuanceTranslations(loc.office, boot.product.id, boot.translations, boot.translationsComplete);
+    }
+    return { loc, boot, state };
 }
 
 function LoadingSkeleton() {
@@ -75,18 +131,29 @@ function LoadingSkeleton() {
 
 export default function App() {
     const { theme, toggle } = useTheme();
+    // Computed once: the route, plus the boot edition when the served page
+    // carries one for it.
+    const [initial] = useState(initialApp);
     // fromUrl: the address bar names an office (/o/CODE/). False at `/`, where
     // the head keeps the homepage's title and canonical.
-    const [{ office, editionId, view, fromUrl }, setLocation] = useState(initialState);
+    const [{ office, editionId, view, fromUrl }, setLocation] = useState(initial.loc);
     const inChangelog = view === 'changelog';
     const [pickerOpen, setPickerOpen] = useState(false);
-    const [state, setState] = useState({ status: 'loading' });
+    const [state, setState] = useState(initial.state);
     const [alerts, setAlerts] = useState([]);
+    // 'pending' until this load's alerts fetch settles: 'ok' | 'failed'.
+    const [alertsStatus, setAlertsStatus] = useState('pending');
     const [severe, setSevere] = useState(false);
-    const [editions, setEditions] = useState([]);
+    // The boot edition stands in for the list until the revalidation brings
+    // it, so the edition picker is in place from the first frame.
+    const [editions, setEditions] = useState(() => (initial.boot
+        ? [{ id: initial.boot.product.id, url: productUrl(initial.boot.product.id), time: new Date(initial.boot.product.issuanceTime || Date.now()) }]
+        : []));
     const [diffs, setDiffs] = useState(null);          // Map(sectionKey → diff result)
     const [conditions, setConditions] = useState(null);
-    const [changelog, setChangelog] = useState(null);
+    // A changelog the server already resolved for this issuance renders
+    // with the page instead of arriving above it later.
+    const [changelog, setChangelog] = useState(() => (initial.boot?.changelog?.changelog ? initial.boot.changelog : null));
     const [newerEdition, setNewerEdition] = useState(null); // product id of an unseen issuance
     const [offlineNow, setOfflineNow] = useState(!navigator.onLine);
     const [kbdOpen, setKbdOpen] = useState(false);
@@ -96,6 +163,9 @@ export default function App() {
     // Stale responses must never clobber a newer render (the vanilla client's
     // fetchGeneration): every async continuation checks it took the latest turn.
     const generation = useRef(0);
+    // The boot edition, until the route moves off it (then every load is a
+    // normal network load).
+    const bootRef = useRef(initial.boot);
     const selectRef = useRef(null);
     const sectionEls = useRef(new Map());
     const refCallbacks = useRef(new Map());
@@ -110,10 +180,61 @@ export default function App() {
         document.getElementById('ssr-root')?.remove();
     }, []);
 
+    // Alerts load in parallel and merge in when they arrive — they never hold
+    // the forecast back (a slow alerts API used to blank the page). Where
+    // they render (status row + the LAST section) keeps that arrival from
+    // moving painted content.
+    const loadAlerts = useCallback((code, gen) => {
+        fetchAlerts(code).then(({ alerts: liveAlerts, severe: severeNow, ok }) => {
+            if (gen !== generation.current) return;
+            setAlerts(liveAlerts);
+            setSevere(severeNow);
+            setAlertsStatus(ok === false ? 'failed' : 'ok');
+            if (liveAlerts.length) {
+                const summary = alertStatusSummary(liveAlerts);
+                if (summary) announce(`${summary.count} ${summary.count === 1 ? 'active alert' : 'active alerts'} for ${OFFICE_NAMES[code]}`);
+            }
+        });
+    }, [announce]);
+
+    // Post-load extras for a latest edition, each soft-failing independently:
+    // the offline snapshot, live conditions, the "since the last update"
+    // sentence, and the per-section diff vs the previous edition (the "What
+    // changed" tabs — diff.js, the changelog data layer).
+    const loadExtras = useCallback((code, gen, { product, rawUrl, sections, prevItem, fetchChangelogToo, saveSnapshot = true }) => {
+        if (saveSnapshot) saveLastEdition(code, { product, rawUrl });
+        fetchConditions(code).then(d => {
+            // Settled with no reading still settles: the almanac keeps its
+            // reserved cells and shows a dash rather than reflowing.
+            if (gen === generation.current) setConditions(d || NO_CONDITIONS);
+        });
+        if (fetchChangelogToo) {
+            fetchChangelog(code).then(d => {
+                if (gen !== generation.current || !d) return;
+                // On the boot path a newer issuance may already exist; its
+                // sentence describes that edition, not the one on screen.
+                if (fetchChangelogToo === 'this-edition' && d.updated && product.issuanceTime
+                    && !sameInstant(d.updated, product.issuanceTime)) return;
+                setChangelog(d);
+            });
+        }
+        if (prevItem) {
+            fetchProduct(prevItem.url).then(prev => {
+                if (gen !== generation.current) return;
+                const prevSections = parseSections(prev.productText || '').sections;
+                const results = computeDiff(prevSections, sections);
+                setDiffs(new Map(results.map(r => [r.key, r])));
+            }).catch(() => { /* the tabs simply don't appear */ });
+        }
+    }, []);
+
     const load = useCallback(async (code, targetEditionId = null) => {
+        // Any network load supersedes the served (boot) edition.
+        bootRef.current = null;
         const gen = ++generation.current;
         setState({ status: 'loading' });
         setAlerts([]);
+        setAlertsStatus('pending');
         setDiffs(null);
         setConditions(null);
         setChangelog(null);
@@ -124,33 +245,7 @@ export default function App() {
         setEditions([]);
         setSevere(false);
 
-        // Alerts load in parallel and merge in when they arrive — they never
-        // hold the forecast back (a slow alerts API used to blank the page).
-        fetchAlerts(code).then(({ alerts: liveAlerts, severe: severeNow }) => {
-            if (gen !== generation.current) return;
-            setAlerts(liveAlerts);
-            setSevere(severeNow);
-        });
-
-        // Parsed product → render state; an unparseable product gets its own
-        // 'empty' state (a link to the raw text) instead of a blank page.
-        const toState = (product, extra) => {
-            const fullText = product.productText || '';
-            const { sections, forecaster } = parseSections(fullText);
-            return {
-                status: sections.length ? 'ready' : 'empty',
-                sections,
-                forecaster,
-                issuedAt: product.issuanceTime ? new Date(product.issuanceTime) : null,
-                fullText,
-                productId: product.id || null,
-                archived: false,
-                offline: false,
-                savedAt: null,
-                rawUrl: null,
-                ...extra,
-            };
-        };
+        loadAlerts(code, gen);
 
         try {
             const graph = await fetchAFDList(code);
@@ -190,7 +285,7 @@ export default function App() {
             if (gen !== generation.current) return;
             if (!product) throw new Error('No forecast discussions found for this office.');
 
-            const next = toState(product, {
+            const next = productToState(product, {
                 rawUrl,
                 productId: product.id || target?.id || null,
                 archived,
@@ -204,27 +299,13 @@ export default function App() {
             announce(`Forecast for ${OFFICE_NAMES[code]} loaded`);
 
             if (!archived) {
-                saveLastEdition(code, {
+                loadExtras(code, gen, {
                     product: { id: next.productId, productText: next.fullText, issuanceTime: product.issuanceTime },
                     rawUrl,
+                    sections: next.sections,
+                    prevItem: items[1] || null,
+                    fetchChangelogToo: true,
                 });
-                // Post-load extras, each soft-failing independently.
-                fetchConditions(code).then(d => {
-                    if (gen === generation.current && d) setConditions(d);
-                });
-                fetchChangelog(code).then(d => {
-                    if (gen === generation.current && d) setChangelog(d);
-                });
-                // Per-section diff vs the previous edition, for the "What
-                // changed" tabs (diff.js — the changelog data layer).
-                if (items[1]) {
-                    fetchProduct(items[1].url).then(prev => {
-                        if (gen !== generation.current) return;
-                        const prevSections = parseSections(prev.productText || '').sections;
-                        const results = computeDiff(prevSections, next.sections);
-                        setDiffs(new Map(results.map(r => [r.key, r])));
-                    }).catch(() => { /* the tabs simply don't appear */ });
-                }
             }
         } catch (e) {
             if (gen !== generation.current) return;
@@ -233,7 +314,7 @@ export default function App() {
             // read for this office.
             const cached = loadLastEdition(code);
             if (cached?.product?.productText) {
-                setState(toState(cached.product, {
+                setState(productToState(cached.product, {
                     rawUrl: cached.rawUrl || null,
                     offline: true,
                     savedAt: cached.savedAt || null,
@@ -244,15 +325,82 @@ export default function App() {
                 announce("Couldn't fetch the forecast");
             }
         }
-    }, [announce]);
+    }, [announce, loadAlerts, loadExtras]);
+
+    // The boot path's load. The served edition is already on screen, so this
+    // never resets state, shows the skeleton, clears alerts or diffs, or
+    // re-renders the edition differently. It brings what the server did not
+    // embed — the edition list (picker, "What changed" diffs), live alerts
+    // and conditions, the offline snapshot — and when a newer issuance exists
+    // it offers it through the newer-edition banner instead of swapping the
+    // page under the reader.
+    const revalidate = useCallback(async (code, boot, bootState) => {
+        const gen = ++generation.current;
+        loadAlerts(code, gen);
+        const bootProduct = boot.product;
+        const bootTime = Date.parse(bootProduct.issuanceTime);
+        const snapshot = { id: bootProduct.id, productText: bootProduct.productText, issuanceTime: bootProduct.issuanceTime };
+        const fetchChangelogToo = boot.changelog === undefined ? 'this-edition' : false;
+        try {
+            const graph = await fetchAFDList(code);
+            if (gen !== generation.current) return;
+            const items = historyItems(graph, HISTORY_LIMIT);
+            if (!items.length) throw new Error('No forecast discussions found for this office.');
+            // The picker lists the edition on screen as the latest it knows,
+            // then everything older; a newer one goes to the banner.
+            const idx = items.findIndex(i => i.id === bootProduct.id);
+            const list = idx >= 0
+                ? items.slice(idx)
+                : [{ id: bootProduct.id, url: productUrl(bootProduct.id), time: new Date(bootTime) },
+                    ...items.filter(i => Number.isFinite(bootTime) && i.time.getTime() < bootTime)];
+            setEditions(list);
+            if (idx > 0 || (idx < 0 && Number.isFinite(bootTime) && items[0].time.getTime() > bootTime)) {
+                setNewerEdition(items[0].id);
+            }
+            announce(`Forecast for ${OFFICE_NAMES[code]} loaded`);
+            loadExtras(code, gen, {
+                product: snapshot,
+                rawUrl: idx >= 0 ? items[idx].url : productUrl(bootProduct.id),
+                sections: bootState.sections,
+                prevItem: list[1] || null,
+                fetchChangelogToo,
+            });
+        } catch (e) {
+            if (gen !== generation.current) return;
+            track('afd-fetch-fail', { office: code });
+            // The served edition stays on screen. A newer edition this
+            // browser saved earlier is offered through the banner ("Read it"
+            // runs the normal load, whose offline fallback shows it).
+            const cached = loadLastEdition(code);
+            const cachedTime = Date.parse(cached?.product?.issuanceTime);
+            const cachedIsNewer = Boolean(cached?.product?.id) && cached.product.id !== bootProduct.id
+                && Number.isFinite(cachedTime) && Number.isFinite(bootTime) && cachedTime > bootTime;
+            if (cachedIsNewer) setNewerEdition(cached.product.id);
+            // Everything that does not need the NWS list still runs.
+            loadExtras(code, gen, {
+                product: snapshot,
+                rawUrl: productUrl(bootProduct.id),
+                sections: bootState.sections,
+                prevItem: null,
+                fetchChangelogToo,
+                saveSnapshot: !cachedIsNewer,
+            });
+        }
+    }, [announce, loadAlerts, loadExtras]);
 
     useEffect(() => {
         if (inChangelog) {
+            bootRef.current = null;
             generation.current++; // strand any in-flight forecast load
             return;
         }
+        const boot = bootRef.current;
+        if (boot && boot.office === office && !editionId) {
+            revalidate(office, boot, initial.state);
+            return;
+        }
         load(office, editionId);
-    }, [office, editionId, inChangelog, load]);
+    }, [office, editionId, inChangelog, load, revalidate, initial]);
 
     // Title + head links, in the SSR formats (lib/seo.js is shared with
     // scripts/build-offices.mjs). On an office URL they name the office; at
@@ -357,17 +505,34 @@ export default function App() {
     const displaySections = useMemo(() => {
         if (!ready) return [];
         const filtered = state.sections.filter(s => {
-            if (s.key !== 'Active Alerts') return true;
+            if (s.key !== ALERTS_KEY) return true;
             if (alerts.length) return false;          // live card replaces it
             return hasRealAlerts(s.text);              // drop the bare "None."
         });
         return reorderSections(filtered, office, alerts.length > 0);
     }, [ready, state.sections, alerts.length, office]);
 
-    const navSections = useMemo(() => {
-        const list = displaySections.map(s => ({ key: s.key }));
-        return alerts.length ? [{ key: 'Active Alerts' }, ...list] : list;
-    }, [displaySections, alerts.length]);
+    // Live alerts arrive after the page has painted, so their section goes
+    // LAST (an arrival appends below what is on screen) — except while a
+    // Severe/Extreme Warning is live, when safety outranks layout stability
+    // and it is pinned FIRST. The nav follows the page.
+    const alertsFirst = alerts.length > 0 && severe;
+    const navSections = useMemo(
+        () => withAlertsSection(displaySections.map(s => s.key), { liveAlerts: alerts.length > 0, severe })
+            .map(key => ({ key })),
+        [displaySections, alerts.length, severe]
+    );
+
+    // The intro's alert status line (PageIntro's second meta row).
+    const parsedAlertsListed = ready && state.sections.some(s => s.key === ALERTS_KEY && hasRealAlerts(s.text));
+    const alertRow = useMemo(() => {
+        if (alerts.length) return { kind: 'live', summary: alertStatusSummary(alerts), severe };
+        if (alertsStatus === 'pending') return { kind: 'pending' };
+        // The forecaster's coded watch/warning list, with no live match.
+        if (parsedAlertsListed) return { kind: 'listed' };
+        if (alertsStatus === 'failed') return { kind: 'unavailable' };
+        return { kind: 'none' };
+    }, [alerts, alertsStatus, parsedAlertsListed, severe]);
 
     const takeawayHTML = useMemo(
         () => (ready ? extractTakeaway(state.sections, tz) : ''),
@@ -486,24 +651,34 @@ export default function App() {
                     )}
 
                     {newerEdition && (
-                        <Alert className="mb-6">
-                            <RefreshCw />
-                            <AlertTitle>A newer edition has been issued</AlertTitle>
-                            <AlertDescription className="w-full">
-                                <div className="flex w-full items-center justify-between gap-2">
-                                    <Button size="sm" onClick={() => { setNewerEdition(null); load(office, null); }}>
-                                        Read it
-                                    </Button>
-                                    <Button
-                                        variant="ghost" size="icon" className="size-7"
-                                        aria-label="Dismiss"
-                                        onClick={() => setNewerEdition(null)}
-                                    >
-                                        <X />
-                                    </Button>
-                                </div>
-                            </AlertDescription>
-                        </Alert>
+                        // Floats over the bottom of the viewport instead of
+                        // entering the page flow above the forecast: it can
+                        // arrive at any moment (the poll, or the boot path's
+                        // revalidation finding a newer issuance than the
+                        // served page), and must not push the text the
+                        // reader is on.
+                        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40">
+                            <div className="mx-auto max-w-reading px-4 pb-4 sm:px-6">
+                                <Alert className="pointer-events-auto bg-background shadow-lg">
+                                    <RefreshCw />
+                                    <AlertTitle>A newer edition has been issued</AlertTitle>
+                                    <AlertDescription className="w-full">
+                                        <div className="flex w-full items-center justify-between gap-2">
+                                            <Button size="sm" onClick={() => { setNewerEdition(null); load(office, null); }}>
+                                                Read it
+                                            </Button>
+                                            <Button
+                                                variant="ghost" size="icon" className="size-7"
+                                                aria-label="Dismiss"
+                                                onClick={() => setNewerEdition(null)}
+                                            >
+                                                <X />
+                                            </Button>
+                                        </div>
+                                    </AlertDescription>
+                                </Alert>
+                            </div>
+                        </div>
                     )}
 
                     {inChangelog && (
@@ -575,6 +750,7 @@ export default function App() {
                                 issueLine={issueLine}
                                 fullText={state.fullText}
                                 conditions={conditions}
+                                conditionsExpected={!state.archived && !state.offline}
                                 changelog={changelog}
                                 editions={editions}
                                 currentEditionId={viewingHistorical ? state.productId : null}
@@ -582,15 +758,19 @@ export default function App() {
                                 viewingHistorical={viewingHistorical}
                                 changelogHref={changelogHref}
                                 onOpenChangelog={openChangelog}
+                                alertRow={alertRow}
+                                onJumpToAlerts={() => jumpTo(ALERTS_KEY)}
                             />
                             <Explainer />
                             <SectionNav sections={navSections} activeKey={activeKey} onJump={jumpTo} />
                             <div className="mt-2">
-                                <AlertsSection
-                                    alerts={alerts}
-                                    office={office}
-                                    sectionRef={setSectionRef('Active Alerts')}
-                                />
+                                {alertsFirst && (
+                                    <AlertsSection
+                                        alerts={alerts}
+                                        office={office}
+                                        sectionRef={setSectionRef(ALERTS_KEY)}
+                                    />
+                                )}
                                 {displaySections.map(section => (
                                     <ForecastSection
                                         key={`${office}-${state.productId}-${section.key}`}
@@ -603,6 +783,13 @@ export default function App() {
                                         sectionRef={setSectionRef(section.key)}
                                     />
                                 ))}
+                                {!alertsFirst && (
+                                    <AlertsSection
+                                        alerts={alerts}
+                                        office={office}
+                                        sectionRef={setSectionRef(ALERTS_KEY)}
+                                    />
+                                )}
                             </div>
                         </ErrorBoundary>
                     )}

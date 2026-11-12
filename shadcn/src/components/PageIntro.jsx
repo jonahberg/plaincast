@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Rss } from 'lucide-react';
+import { AlertTriangle, Rss } from 'lucide-react';
 
 import { OFFICE_COORDS, OFFICE_NAMES, OFFICE_TIMEZONES } from '@data/offices.js';
 import { confidenceScore, confidenceWord } from '@data/timeline.js';
@@ -50,18 +50,32 @@ function sinceText(iso, tz) {
 // The almanac strip: sun + moon computed client-side, live conditions from
 // /api/conditions when the deployed functions are reachable. A typeset
 // ledger: one hairline-ruled row on desktop, a 3-column grid on phones.
-function Almanac({ office, conditions }) {
+//
+// When live conditions are expected (the latest edition, online), their two
+// cells are laid out from the first frame — blank while the reading is on its
+// way, a dash if it never comes — so its arrival fills a cell instead of
+// regridding the strip and pushing everything below it.
+function Almanac({ office, conditions, conditionsExpected }) {
     const tz = OFFICE_TIMEZONES[office];
     const cells = useMemo(() => {
         const out = [];
         // null/undefined mean "no reading" (+null would render as 0°).
         const temp = readingOrNull(conditions?.temp);
         const normal = readingOrNull(conditions?.normal);
-        if (temp !== null) {
-            out.push({ label: 'Now', value: `${temp}°` });
-        }
-        if (normal !== null) {
-            out.push({ label: 'Normal high', value: `${normal}°` });
+        const reading = (value) => {
+            if (value !== null) return `${value}°`;
+            return conditions ? '—' : ' '; // settled without one : still coming
+        };
+        if (conditionsExpected) {
+            out.push({ label: 'Now', value: reading(temp) });
+            out.push({ label: 'Normal high', value: reading(normal) });
+        } else {
+            if (temp !== null) {
+                out.push({ label: 'Now', value: `${temp}°` });
+            }
+            if (normal !== null) {
+                out.push({ label: 'Normal high', value: `${normal}°` });
+            }
         }
         const coords = OFFICE_COORDS[office];
         if (coords) {
@@ -79,7 +93,7 @@ function Almanac({ office, conditions }) {
         const m = moonPhase(new Date());
         out.push({ label: 'Moon', value: m.name });
         return out;
-    }, [office, conditions, tz]);
+    }, [office, conditions, conditionsExpected, tz]);
 
     if (!cells.length) return null;
     // Phones: a tidy grid, never a ragged wrap. Six cells (the usual case)
@@ -110,10 +124,42 @@ function Almanac({ office, conditions }) {
     );
 }
 
+// The alert half of the status row. Nothing while the alerts feed is pending
+// (or unreadable); a muted "No active alerts" once it settles empty; with
+// alerts, one line that links to the Active Alerts section — the count, then
+// the most severe event names, truncated so it never wraps.
+function AlertStatus({ row, onJump }) {
+    if (!row || row.kind === 'pending' || row.kind === 'unavailable') return null;
+    if (row.kind === 'none') {
+        return <span className="min-w-0 truncate">No active alerts</span>;
+    }
+    const live = row.kind === 'live' && row.summary;
+    const text = live ? row.summary.text : 'Watches and warnings in this discussion';
+    const label = live ? row.summary.label : 'Watches and warnings in this discussion. Jump to them.';
+    return (
+        <a
+            href="#section-active-alerts"
+            aria-label={label}
+            onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                e.preventDefault();
+                onJump?.();
+            }}
+            className={cn(
+                'inline-flex min-w-0 items-center gap-1.5 rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                live && row.severe ? 'text-destructive' : 'text-foreground'
+            )}
+        >
+            <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 truncate">{text}</span>
+        </a>
+    );
+}
+
 export function PageIntro({
     office, takeawayHTML, takeawayFromMessages, forecaster, issueLine, fullText, conditions,
-    changelog, editions, currentEditionId, onSelectEdition, viewingHistorical,
-    changelogHref, onOpenChangelog,
+    conditionsExpected = false, changelog, editions, currentEditionId, onSelectEdition, viewingHistorical,
+    changelogHref, onOpenChangelog, alertRow, onJumpToAlerts,
 }) {
     const tz = OFFICE_TIMEZONES[office];
     const score = confidenceScore(fullText);
@@ -148,38 +194,40 @@ export function PageIntro({
             </Tooltip>
         );
     }
-    if (editions.length > 1) {
-        meta.push(
-            // A deep-linked edition older than the NWS retention window isn't
-            // in the list — show it as "Archived", never as Latest. Always
-            // controlled: '' (no matching item) shows the placeholder instead
-            // of flipping to uncontrolled.
-            <Select
-                key="edition"
-                value={!currentEditionId || editions.some(e => e.id === currentEditionId)
-                    ? (currentEditionId || editions[0].id)
-                    : ''}
-                onValueChange={onSelectEdition}
+    // Second row: the edition picker, then the alert status. In place from
+    // the first frame (the boot edition stands in for the list), so neither
+    // half's arrival moves the other.
+    const picker = editions.length > 0 && (
+        // A deep-linked edition older than the NWS retention window isn't
+        // in the list — show it as "Archived", never as Latest. Always
+        // controlled: '' (no matching item) shows the placeholder instead
+        // of flipping to uncontrolled.
+        <Select
+            value={!currentEditionId || editions.some(e => e.id === currentEditionId)
+                ? (currentEditionId || editions[0].id)
+                : ''}
+            onValueChange={onSelectEdition}
+        >
+            <SelectTrigger
+                size="sm"
+                className="h-auto shrink-0 gap-1 rounded-sm border-none bg-transparent p-0 text-[13px] text-muted-foreground shadow-none hover:text-foreground dark:bg-transparent dark:hover:bg-transparent"
+                aria-label="Forecast edition"
             >
-                <SelectTrigger
-                    size="sm"
-                    className="h-auto gap-1 rounded-sm border-none bg-transparent p-0 text-[13px] text-muted-foreground shadow-none hover:text-foreground dark:bg-transparent dark:hover:bg-transparent"
-                    aria-label="Forecast edition"
-                >
-                    <SelectValue placeholder="Archived edition" />
-                </SelectTrigger>
-                <SelectContent>
-                    {editions.map((item, i) => (
-                        <SelectItem key={item.id} value={item.id}>
-                            {i === 0
-                                ? 'Latest edition'
-                                : `${item.time.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: tz })} (${timeAgo(item.time)})`}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-        );
-    }
+                <SelectValue placeholder="Archived edition" />
+            </SelectTrigger>
+            <SelectContent>
+                {editions.map((item, i) => (
+                    <SelectItem key={item.id} value={item.id}>
+                        {i === 0
+                            ? 'Latest edition'
+                            : `${item.time.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: tz })} (${timeAgo(item.time)})`}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+    const status = <AlertStatus row={alertRow} onJump={onJumpToAlerts} />;
+    const hasStatus = Boolean(alertRow) && !['pending', 'unavailable'].includes(alertRow.kind);
 
     const links = (
         <p className={cn('flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] leading-5', since ? 'mt-2' : 'mt-4')}>
@@ -229,11 +277,11 @@ export function PageIntro({
             )}
 
             {meta.length > 0 && (
-                // Every item carries its `·` in the 1rem gap to its left; the
-                // row is pulled 1rem left inside an overflow-hidden frame, so
-                // whichever item starts a line has its separator clipped — no
-                // stray dot at a line start, at any width. (The frame's 4px
-                // inset keeps focus rings visible.)
+                // Row 1. Every item carries its `·` in the 1rem gap to its
+                // left; the row is pulled 1rem left inside an overflow-hidden
+                // frame, so whichever item starts a line has its separator
+                // clipped — no stray dot at a line start, at any width. (The
+                // frame's 4px inset keeps focus rings visible.)
                 <div className="-mx-1 mt-5 overflow-hidden px-1 py-1">
                     <div className="-ml-4 flex flex-wrap items-center gap-y-1 text-[13px] leading-5 text-muted-foreground">
                         {meta.map(item => (
@@ -246,6 +294,18 @@ export function PageIntro({
                 </div>
             )}
 
+            {/* Row 2: one line at a fixed height from the first frame —
+                the edition picker, then the alert status (empty while the
+                alerts feed is pending). Alerts arriving fill it in place. */}
+            <div
+                data-slot="status-row"
+                className={cn('flex h-7 min-w-0 items-center gap-x-2 text-[13px] leading-5 whitespace-nowrap text-muted-foreground', meta.length > 0 ? 'mt-0.5' : 'mt-5')}
+            >
+                {picker}
+                {picker && hasStatus && <span aria-hidden="true">·</span>}
+                {status}
+            </div>
+
             {since ? (
                 <div className="mt-6 border-l-2 border-brand pl-4">
                     <p className="max-w-[65ch] font-serif text-[1.0625rem] leading-[1.6] text-pretty">
@@ -256,7 +316,7 @@ export function PageIntro({
                 </div>
             ) : links}
 
-            <Almanac office={office} conditions={conditions} />
+            <Almanac office={office} conditions={conditions} conditionsExpected={conditionsExpected} />
         </section>
     );
 }

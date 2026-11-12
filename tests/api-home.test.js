@@ -154,8 +154,14 @@ describe('the homepage is readable without JavaScript', () => {
         await handler(get(), res);
         const marker = '<div class="loading" id="loading">Setting the type…</div>';
         const [head, tail] = TEMPLATE.split(marker);
-        expect(res.body.startsWith(head)).toBe(true);
-        expect(res.body.endsWith(tail)).toBe(true);
+        // The one other insertion is the boot data block, directly before
+        // the app script (api/_boot.js); without it, the bytes are the
+        // template's.
+        const boot = /<script type="application\/json" id="plaincast-boot">[^<]*<\/script>\n {4}(?=<script type="module" crossorigin src="\/assets\/app\.js"><\/script>)/;
+        expect(res.body).toMatch(boot);
+        const body = res.body.replace(boot, '');
+        expect(body.startsWith(head)).toBe(true);
+        expect(body.endsWith(tail)).toBe(true);
     });
 });
 
@@ -293,5 +299,38 @@ describe('the shell-unavailable path never loops', () => {
     it('escapes the markdown it wraps', async () => {
         const { minimalHtml } = await import('../api/home.js');
         expect(minimalHtml('<script>alert(1)</script>')).not.toContain('<script>alert(1)</script>');
+    });
+});
+
+describe('the homepage embeds boot data for the app', () => {
+    const bootOf = (html) => {
+        const m = html.match(/<script type="application\/json" id="plaincast-boot">([^<]*)<\/script>/);
+        return m ? JSON.parse(m[1]) : null;
+    };
+
+    it('carries the edition it rendered, for the office it rendered', async () => {
+        const res = mockRes();
+        await handler(get({ query: { office: 'okx' } }), res);
+        const boot = bootOf(res.body);
+        expect(boot.office).toBe('OKX');
+        expect(boot.product.productText).toBe(AFD);
+        expect(boot.product.issuanceTime).toBe('2026-07-03T11:40:00+00:00');
+        // No self origin in tests → no translations → the short window.
+        expect(boot.translationsComplete).toBe(false);
+        expect(res.headers['cache-control']).toBe('public, s-maxage=120, stale-while-revalidate=3600');
+    });
+
+    it('fallback pages carry none (they are the committed bytes)', async () => {
+        mockListThrows = true;
+        const res = mockRes();
+        await handler(get(), res);
+        expect(res.body).not.toContain('plaincast-boot');
+    });
+
+    it('Markdown carries none and keeps the full window', async () => {
+        const res = mockRes();
+        await handler(get({ headers: { accept: 'text/markdown' } }), res);
+        expect(res.body).not.toContain('plaincast-boot');
+        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
     });
 });

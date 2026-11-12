@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -128,7 +128,10 @@ describe('GET /api/office-page (SSR /o/<CODE>/ pages)', () => {
 
         expect(res.statusCode).toBe(200);
         expect(res.headers['content-type']).toContain('text/html');
-        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        // No VERCEL_* env here, so the boot block carries no AI translations
+        // and the page takes the short CDN window (see the boot-data suite
+        // below for the full window with translations embedded).
+        expect(res.headers['cache-control']).toBe('public, s-maxage=120, stale-while-revalidate=3600');
 
         // real prose, abbreviations expanded by regexTranslate (chc→chance, csts→coasts)
         expect(res.body).toContain('<article class="forecast-section ssr">');
@@ -388,5 +391,212 @@ describe('GET /o/<CODE>/ with Accept: text/markdown', () => {
         expect(res.statusCode).toBe(404);
         expect(res.body).toContain('sitemap.xml');
         expect(res.body).not.toBe('Not found');
+    });
+});
+
+// ─── Boot data (one-pass load) ──────────────────────────────────────
+// The page embeds the edition it fetched, plus the AI translations and
+// changelog sentence the site's CDN already holds (api/_boot.js), so the
+// app's first paint is the finished page. The self-fetch goes through
+// api/_self.js: stubbed here with VERCEL_URL + a fetch stub, the same way
+// tests/api-self.test.js drives it.
+describe('GET /o/<CODE>/ boot data', () => {
+    const ENV_KEYS = ['VERCEL_ENV', 'VERCEL_URL', 'VERCEL_AUTOMATION_BYPASS_SECRET'];
+    const savedEnv = Object.fromEntries(ENV_KEYS.map(k => [k, process.env[k]]));
+    const savedFetch = globalThis.fetch;
+    let selfCalls = [];
+
+    const restore = () => {
+        for (const k of ENV_KEYS) {
+            if (savedEnv[k] === undefined) delete process.env[k];
+            else process.env[k] = savedEnv[k];
+        }
+        globalThis.fetch = savedFetch;
+    };
+    // `respond(path)` → a JSON body, or null for a 503.
+    function stubSelf(respond) {
+        for (const k of ENV_KEYS) delete process.env[k];
+        process.env.VERCEL_URL = 'plaincast-test.vercel.app';
+        selfCalls = [];
+        globalThis.fetch = async (url) => {
+            const u = new URL(String(url));
+            selfCalls.push(u.pathname + u.search);
+            const body = respond(u.pathname, u.searchParams);
+            return body ? Response.json(body) : new Response('no', { status: 503 });
+        };
+    }
+    function bootOf(html) {
+        const m = html.match(/<script type="application\/json" id="plaincast-boot">([^<]*)<\/script>/);
+        return m ? JSON.parse(m[1]) : null;
+    }
+
+    beforeEach(() => { mockListThrows = false; restore(); });
+    afterEach(restore);
+
+    it('embeds the product it served, before the app script, as inert JSON', async () => {
+        setScenario();
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const boot = bootOf(res.body);
+        expect(boot).not.toBe(null);
+        expect(boot.v).toBe(1);
+        expect(boot.office).toBe('LOX');
+        expect(boot.product.id).toBe(mockItems[0].id);
+        expect(boot.product.productText).toBe(CURR);
+        expect(boot.product.issuanceTime).toBe('2026-07-03T11:40:00+00:00');
+        // Off-Vercel (no self origin): no translations, and the short window.
+        expect(boot.translations).toBe(null);
+        expect(boot.translationsComplete).toBe(false);
+        expect('changelog' in boot).toBe(false);
+        expect(res.headers['cache-control']).toBe('public, s-maxage=120, stale-while-revalidate=3600');
+        // Outside <main>, right before the module script.
+        expect(res.body).toMatch(/<\/script>\n {4}<script type="module" crossorigin src="\/assets\/app\.js"><\/script>/);
+        expect(res.body.indexOf('id="plaincast-boot"')).toBeGreaterThan(res.body.lastIndexOf('</main>'));
+    });
+
+    it('the only inline scripts are data blocks (CSP script-src \'self\' stays sufficient)', async () => {
+        setScenario();
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const inline = [...res.body.matchAll(/<script\b([^>]*)>/g)].map(m => m[1]).filter(attrs => !/\bsrc=/.test(attrs));
+        expect(inline.length).toBeGreaterThan(0);
+        for (const attrs of inline) {
+            expect(attrs).toMatch(/type="application\/(?:ld\+)?json"/);
+        }
+    });
+
+    it('serialises </script>, <!--, & and U+2028/2029 in the forecast text safely', async () => {
+        const nasty = CURR.replace('Low clouds and fog',
+            'Low </script><script>alert(1)</script> <!-- & \u2028\u2029 fog');
+        setScenario({ curr: nasty });
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const m = res.body.match(/<script type="application\/json" id="plaincast-boot">([\s\S]*?)<\/script>/);
+        expect(m).not.toBe(null);
+        const raw = m[1];
+        expect(raw).not.toContain('<');
+        expect(raw).not.toContain('>');
+        expect(raw).not.toContain('&');
+        expect(raw).not.toMatch(/[\u2028\u2029]/);
+        // …and it still round-trips to the exact text.
+        expect(JSON.parse(raw).product.productText).toBe(nasty);
+        // The block ends where it should: the app script still follows it.
+        expect(res.body).toContain('src="/assets/app.js"');
+        expect(res.body).not.toContain('<script>alert(1)</script>');
+    });
+
+    it('embeds complete translations + the changelog and keeps the full CDN window', async () => {
+        setScenario();
+        const id = mockItems[0].id;
+        stubSelf((path, q) => {
+            if (path === '/api/translate-issuance') {
+                expect(q.get('office')).toBe('LOX');
+                expect(q.get('id')).toBe(id);
+                return { office: 'LOX', id, complete: true, sections: { Synopsis: 'Fog **near the coast**.', 'Short Term': 'Warmer.', Bogus: 42 } };
+            }
+            if (path === '/api/changelog') {
+                return { changelog: 'Warmer this weekend.', since: '2026-07-03T05:38:00+00:00', updated: '2026-07-03T11:40:00Z' };
+            }
+            return null;
+        });
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const boot = bootOf(res.body);
+        expect(boot.translations).toEqual({ Synopsis: 'Fog **near the coast**.', 'Short Term': 'Warmer.' });
+        expect(boot.translationsComplete).toBe(true);
+        expect(boot.changelog).toEqual({ changelog: 'Warmer this weekend.', since: '2026-07-03T05:38:00+00:00', updated: '2026-07-03T11:40:00Z' });
+        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        expect(selfCalls.sort()).toEqual([
+            '/api/changelog?office=LOX',
+            `/api/translate-issuance?office=LOX&id=${id}`,
+        ]);
+    });
+
+    it('a partial translation is embedded but flagged incomplete, with the short window', async () => {
+        setScenario();
+        stubSelf((path) => (path === '/api/translate-issuance'
+            ? { office: 'LOX', id: mockItems[0].id, complete: false, sections: { Synopsis: 'Fog.' } }
+            : null));
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const boot = bootOf(res.body);
+        expect(boot.translations).toEqual({ Synopsis: 'Fog.' });
+        expect(boot.translationsComplete).toBe(false);
+        expect(res.headers['cache-control']).toBe('public, s-maxage=120, stale-while-revalidate=3600');
+    });
+
+    it('a failed self-fetch renders exactly the page plus the product block', async () => {
+        setScenario();
+        stubSelf(() => null); // 503 for everything
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const boot = bootOf(res.body);
+        expect(boot.translations).toBe(null);
+        expect(boot.translationsComplete).toBe(false);
+        expect('changelog' in boot).toBe(false);
+        restore();
+        const plain = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), plain);
+        const strip = (html) => html.replace(/<script type="application\/json" id="plaincast-boot">[^<]*<\/script>\n {4}/, '');
+        expect(strip(res.body)).toBe(strip(plain.body));
+    });
+
+    it('a translation for another edition, or a changelog for another issuance, is not embedded', async () => {
+        setScenario();
+        stubSelf((path) => {
+            if (path === '/api/translate-issuance') return { office: 'LOX', id: 'some-other-id', complete: true, sections: { Synopsis: 'x' } };
+            if (path === '/api/changelog') return { changelog: 'Old news.', updated: '2026-07-02T23:00:00Z' };
+            return null;
+        });
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const boot = bootOf(res.body);
+        expect(boot.translations).toBe(null);
+        expect('changelog' in boot).toBe(false);
+    });
+
+    it('a definitive "nothing changed" changelog is embedded as null; a transient one is not', async () => {
+        setScenario();
+        stubSelf((path) => (path === '/api/changelog' ? { changelog: null, since: null, updated: '2026-07-03T11:40:00+00:00' } : null));
+        let res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        expect(bootOf(res.body).changelog).toEqual({ changelog: null, since: null, updated: '2026-07-03T11:40:00+00:00' });
+
+        stubSelf((path) => (path === '/api/changelog' ? { changelog: null, transient: true } : null));
+        res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        expect('changelog' in bootOf(res.body)).toBe(false);
+    });
+
+    it('?edition= permalinks and the ?view=changelog ledger carry no block and keep the full window', async () => {
+        for (const query of [{ code: 'LOX', edition: 'a1b2c3d4-5566-7788-99aa-bbccddeeff00' }, { code: 'LOX', view: 'changelog' }]) {
+            setScenario();
+            stubSelf(() => { throw new Error('no self-fetch expected'); });
+            const res = createRes();
+            await handler(createReq({ query }), res);
+            expect(res.statusCode).toBe(200);
+            expect(res.body).not.toContain('id="plaincast-boot"');
+            expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+            expect(selfCalls).toEqual([]);
+        }
+    });
+
+    it('the baked fallback (NWS down) carries no block and is still byte-identical', async () => {
+        mockListThrows = true;
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        expect(res.body).toBe(BAKED_LOX);
+        expect(res.body).not.toContain('plaincast-boot');
+    });
+
+    it('Markdown is unaffected: no self-fetch, no block, the full window', async () => {
+        setScenario({ prev: PREV });
+        stubSelf(() => { throw new Error('no self-fetch expected'); });
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' }, headers: { accept: 'text/markdown' } }), res);
+        expect(res.headers['content-type']).toBe('text/markdown; charset=utf-8');
+        expect(res.body).not.toContain('plaincast-boot');
+        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        expect(selfCalls).toEqual([]);
     });
 });

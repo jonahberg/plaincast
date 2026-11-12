@@ -88,13 +88,26 @@ server-rendered `/national/`, `/about`, `/contact`, `/privacy`, `/developers` an
   2. The serif `<h1>`, with the code muted and lighter.
   3. **The key takeaway as the lede**, unboxed, in full foreground. It sits under a small
      "Key takeaway" / "Key messages" eyebrow.
-  4. The sans meta line: issued, forecaster, confidence and edition picker,
-     `·`-separated. No separator may start a wrapped line.
+  4. The sans meta, in two rows. Row 1: issued, forecaster and confidence,
+     `·`-separated; no separator may start a wrapped line. Row 2 is one line
+     at a fixed height from the first frame: the edition picker, then the
+     alert status (nothing while alerts load, a muted "No active alerts", or a
+     foreground link such as "5 active alerts: Coastal Flood Watch, High Surf
+     Advisory +3", truncated, never wrapped; destructive only while a
+     Severe/Extreme warning is live).
   5. The "Since the … update" callout: brand left rule, serif, with "See every revision"
      and RSS beneath.
   6. The almanac strip: hairline-ruled, one row on desktop and a 3-column grid on phones.
   7. The quiet "What is an Area Forecast Discussion?" accordion.
   8. The section nav: text links that scroll sideways on phones.
+- **Nothing painted moves** once the page is on screen (the server embeds the edition, its
+  AI translations and the changelog sentence, so the first paint is the finished page):
+  - The Active Alerts card is the LAST section, so live alerts arriving append below. It is
+    pinned first only while a Severe/Extreme warning is live (safety outranks stability).
+  - The almanac reserves its "Now" and "Normal high" cells for the latest edition (blank
+    while loading, a dash if no reading comes).
+  - The "A newer edition has been issued" notice floats over the bottom of the viewport
+    instead of entering the flow above the forecast.
 - **Confidence is words, never a meter:** "Confidence: low" plus a small neutral dot. The
   dot's fill steps through foreground opacities (hollow for Low, solid for High). Never a
   progress bar, and never destructive red.

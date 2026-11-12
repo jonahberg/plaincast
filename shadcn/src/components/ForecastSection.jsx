@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { OFFICE_TIMEZONES } from '@data/offices.js';
 import { renderDiffHTML } from '@data/diff.js';
 import { sectionDomId, translateToPlainEnglish } from '@/lib/afd';
-import { translateSection } from '@/lib/ai';
+import { mapTranslation, peekTranslation, postTranslation } from '@/lib/ai';
 import { track } from '@/lib/track';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,18 +12,32 @@ import { JargonText } from '@/components/JargonText';
 
 // One AFD section: a ruled block with Plain English / Original tabs, plus a
 // "What changed" tab when this section differs from the previous edition.
-// The plain tab shows the instant regex translation, then upgrades to the
-// AI translation lazily when the card scrolls into view (same
-// IntersectionObserver pattern as the vanilla client). Parent keys this
-// component per edition, so state resets naturally on office/edition change.
+//
+// The plain tab's text, in order of preference:
+//   1. A translation already in hand (the server embedded the edition's
+//      translations — src/lib/boot.js): the FIRST render is the AI text with
+//      "via Claude", so nothing swaps while the reader scrolls.
+//   2. The edition's translation map (one shared, CDN-cached GET), requested
+//      on mount and applied to every section it covers when it resolves.
+//   3. Only for a section the map does not cover: the per-section POST (a
+//      model call), lazily, when the section nears the viewport.
+// Until then, and on any failure, the instant regex translation stands.
+// Parent keys this component per edition, so state resets naturally on
+// office/edition change.
 export const ForecastSection = memo(function ForecastSection({
     section, office, productId, issuanceTime, aiEligible, diff, sectionRef,
 }) {
     const tz = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
     const cardRef = useRef(null);
-    // 'idle' until the request actually starts (the card scrolls near the
-    // viewport) — "Summarizing…" must never show with nothing in flight.
-    const [ai, setAi] = useState({ status: aiEligible ? 'idle' : 'off', html: null });
+    // 'idle' until a request actually starts — "Summarizing…" must never
+    // show with nothing in flight. 'done' from the first frame when the
+    // translation is already in hand.
+    const [ai, setAi] = useState(() => {
+        const html = aiEligible ? peekTranslation(office, productId, section.key) : null;
+        return html ? { status: 'done', html } : { status: aiEligible ? 'idle' : 'off', html: null };
+    });
+    const aiRef = useRef(ai);
+    aiRef.current = ai;
 
     const plainHTML = useMemo(
         () => translateToPlainEnglish(section.text, tz, issuanceTime),
@@ -31,29 +45,50 @@ export const ForecastSection = memo(function ForecastSection({
     );
 
     useEffect(() => {
-        if (!aiEligible) return;
-        const el = cardRef.current;
-        if (!el) return;
+        if (!aiEligible || aiRef.current.status === 'done') return;
         let cancelled = false;
-        const start = () => {
-            setAi({ status: 'pending', html: null });
-            translateSection(section, office, productId, issuanceTime).then(html => {
-                if (cancelled) return;
-                if (!html) track('ai-translate-fail', { office, section: section.key });
-                setAi(html ? { status: 'done', html } : { status: 'failed', html: null });
-            });
+        let observer = null;
+
+        // The per-section POST, lazily: one model call per section, so only
+        // once this section nears the viewport.
+        const lazyPost = () => {
+            const start = () => {
+                setAi({ status: 'pending', html: null });
+                postTranslation(section, office, issuanceTime).then(html => {
+                    if (cancelled) return;
+                    if (!html) track('ai-translate-fail', { office, section: section.key });
+                    setAi(html ? { status: 'done', html } : { status: 'failed', html: null });
+                });
+            };
+            const el = cardRef.current;
+            if (!el || !('IntersectionObserver' in window)) {
+                start();
+                return;
+            }
+            observer = new IntersectionObserver((entries) => {
+                if (!entries.some(e => e.isIntersecting)) return;
+                observer.disconnect();
+                start();
+            }, { rootMargin: '200px' });
+            observer.observe(el);
         };
-        if (!('IntersectionObserver' in window)) {
-            start();
-            return () => { cancelled = true; };
+
+        if (!productId) {
+            lazyPost();
+        } else {
+            // The edition's map, now: one shared request for every section.
+            setAi({ status: 'pending', html: null });
+            mapTranslation(section, office, productId).then(html => {
+                if (cancelled) return;
+                if (html) {
+                    setAi({ status: 'done', html });
+                } else {
+                    setAi({ status: 'idle', html: null });
+                    lazyPost();
+                }
+            });
         }
-        const observer = new IntersectionObserver((entries) => {
-            if (!entries.some(e => e.isIntersecting)) return;
-            observer.disconnect();
-            start();
-        }, { rootMargin: '200px' });
-        observer.observe(el);
-        return () => { cancelled = true; observer.disconnect(); };
+        return () => { cancelled = true; observer?.disconnect(); };
     }, [aiEligible, section, office, productId, issuanceTime]);
 
     const changed = diff && (diff.status === 'changed' || diff.status === 'added');

@@ -31,6 +31,8 @@ api/               Vercel serverless functions
   api-not-found.js JSON 404 for unknown /api/* paths
   _errors.js       structured JSON errors (code + hint + docs)
   _negotiate.js    Accept-header content negotiation (HTML / Markdown / 406)
+  _boot.js         boot data the SSR pages embed for the app's first render
+                   (edition + cached AI translations + changelog; via _self.js)
   _edition-markdown.js  Markdown twin of an edition
   _afd-sections.js server-side AFD section parser (translate verifies against it)
   _snapshots.js    Blob-backed edition snapshots (inert unless BLOB_READ_WRITE_TOKEN is set)
