@@ -32,7 +32,11 @@ api/               Vercel serverless functions
   _errors.js       structured JSON errors (code + hint + docs)
   _negotiate.js    Accept-header content negotiation (HTML / Markdown / 406)
   _boot.js         boot data the SSR pages embed for the app's first render
-                   (edition + cached AI translations + changelog; via _self.js)
+                   (edition + stored AI translations + changelog, read from
+                   _shared-cache.js; pages make no HTTP call to their own API)
+  _shared-cache.js the shared store for AI results (Vercel Runtime Cache,
+                   per region, survives deploys); the only importer of
+                   @vercel/functions; no-op off Vercel, test seam injected
   _edition-markdown.js  Markdown twin of an edition
   _afd-sections.js server-side AFD section parser (translate verifies against it)
   _snapshots.js    Blob-backed edition snapshots (inert unless BLOB_READ_WRITE_TOKEN is set)
@@ -48,7 +52,7 @@ api/               Vercel serverless functions
   conditions.js    Current weather + averages
   whereami.js      no-store geo lookup (Vercel headers) for the office pointer
 docs/openapi.json  OpenAPI 3.1 spec (lint: bunx @redocly/cli lint docs/openapi.json)
-tests/             Bun test suite (783 tests)
+tests/             Bun test suite (960 tests)
 ```
 
 ## Routing rule
@@ -75,6 +79,14 @@ stays a human string (unchanged contract); `code`, `hint` and `docs` are
 siblings. Codes are a contract — add, never repurpose. `api/explain-alert.js`
 has its own local `sendError(res, e)`, so it imports the shared one as
 `sendJsonError`.
+
+## Shared cache rule
+`api/_shared-cache.js` keys carry a version per family (`ti:v1`, `cl:v1`,
+`lede:v1`). The Runtime Cache survives deploys, so bump that family's version
+when an AI output's prompt, sanitizer, model or stored shape changes;
+otherwise the new deploy keeps serving text made under the old rules. Store
+only what the endpoint's in-memory cache would keep (never partial or
+transient results), and have every reader check the value's own identity.
 
 ## Content negotiation
 Every HTML-serving function goes through `api/_negotiate.js`. Never `res.send()`
