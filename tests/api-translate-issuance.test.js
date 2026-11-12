@@ -1,4 +1,5 @@
 import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { readFileSync } from 'node:fs';
 
 let mockGenerateText = async () => ({ text: 'translated', finishReason: 'stop' });
 mock.module('ai', () => ({ generateText: (...args) => mockGenerateText(...args) }));
@@ -331,5 +332,62 @@ $$`;
         expect(res.statusCode).toBe(200);
         expect(prompts.join('\n')).toContain('6-9Z (1-4 AM CDT Tue)');
         expect(prompts.join('\n')).toContain('15Z (10 AM CDT)');
+    });
+});
+
+// ── Nov 11 2026 trust fixes: the real LOX AFD issued 2026-11-12T04:55Z ──
+// Every LOX section opens with a forecaster stamp ("11/220 PM." = day 11,
+// 2:20 PM); production read it as a date ("Sunday, November 22") and leaked an
+// aside about the source text. Shared helpers from translate.js fix both
+// endpoints: the stamp leaves the prompt, the output is guarded before caching.
+describe('GET /api/translate-issuance — header stamp + output guard (Nov 11 2026)', () => {
+    const LOX_NOV11 = JSON.parse(readFileSync(new URL('./fixtures/afd/live-2026-11-11/LOX.json', import.meta.url), 'utf8'));
+    const BAD = 'Sunday, November 22 should be a pleasant day as a small ridge of high pressure builds over the area, bringing **highs in the mid 60s to lower 70s**, which is very close to typical for this time of year. Note that the source text reads "11/220 PM," which appears to be the issuance time, and the forecast days are counted from Sunday.\n\nAnother storm system is expected to arrive **Monday**.';
+    const CLEAN = 'A **significant cooling trend** begins **Thursday**.\n\nRain is likely **Thursday night**.';
+
+    beforeEach(() => {
+        mockListThrows = false;
+        mockProductText = LOX_NOV11.productText;
+        mockIssuanceTime = LOX_NOV11.issuanceTime;
+        mockSnapshots = {};
+        coldBudget.reset();
+    });
+
+    it('strips stamps from every prompt and caches/snapshots the sanitized Long Term', async () => {
+        const id = freshId();
+        mockList = [{ id }];
+        const prompts = {};
+        mockGenerateText = async (args) => {
+            const key = /Section name for context: (.+)/.exec(args.system)[1];
+            prompts[key] = args.prompt;
+            return { text: key === 'Long Term' ? BAD : CLEAN, finishReason: 'stop' };
+        };
+        const res = createRes();
+        await handler(createReq({ office: 'LOX', id }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body.complete).toBe(true);
+
+        expect(prompts['Long Term'].startsWith('Sunday should be a pleasant day')).toBe(true);
+        expect(Object.keys(prompts).length).toBeGreaterThanOrEqual(5);
+        // no section prompt opens with an AM/PM header stamp
+        for (const prompt of Object.values(prompts)) expect(prompt).not.toMatch(/^\s*\d{1,2}\/\d{3,4}\s*(?:AM|PM)/i);
+        expect(Object.values(prompts).join('\n')).not.toMatch(/\d{1,2}\/\d{3,4} (?:AM|PM)\./);
+
+        const lt = res.body.sections['Long Term'];
+        expect(lt).not.toContain('November 22');
+        expect(lt).not.toContain('source text');
+        expect(lt).toContain('Sunday should be a pleasant day');
+        expect(lt).toContain('Another storm system is expected to arrive **Monday**.');
+        expect(res.body.sections.Synopsis).toBe(CLEAN); // clean output untouched
+        // productText (the facsimile column) is NOT stripped
+        expect(res.body.productText).toContain('.LONG TERM (SUN-WED)...11/220 PM.');
+
+        // The durable snapshot and the in-memory cache both hold the sanitized text.
+        expect(mockSnapshots[`LOX|${id}`].sections['Long Term']).toBe(lt);
+        mockGenerateText = async () => { throw new Error('re-billed: cache miss'); };
+        const again = createRes();
+        await handler(createReq({ office: 'LOX', id }), again);
+        expect(again.body.cached).toBe(true);
+        expect(again.body.sections['Long Term']).toBe(lt);
     });
 });

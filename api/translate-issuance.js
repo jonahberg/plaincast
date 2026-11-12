@@ -7,7 +7,7 @@ import { generateText } from 'ai';
 import { OFFICE_NAMES, SECTION_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractSections } from './_afd-sections.js';
-import { annotateZuluTimes, buildSystemPrompt } from './translate.js';
+import { annotateZuluTimes, buildSystemPrompt, sanitizeTranslation, stripHeaderStamp } from './translate.js';
 import { getSnapshot, putSnapshot } from './_snapshots.js';
 import { sendError } from './_errors.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
@@ -164,12 +164,13 @@ export default async function handler(req, res) {
                     model: MODEL,
                     providerOptions: PROVIDER_OPTIONS,
                     system: buildSystemPrompt({ section: s.key, office, issuanceTime }),
-                    prompt: annotateZuluTimes(s.text, office, issuanceTime),
+                    prompt: annotateZuluTimes(stripHeaderStamp(s.text), office, issuanceTime),
                     maxOutputTokens: 2048,
                     abortSignal: AbortSignal.timeout(15000),
                 });
                 if (result.finishReason === 'content-filter') return null;
-                const text = (result.text || '').trim();
+                // Same output guard as /api/translate, before cache + snapshot.
+                const text = sanitizeTranslation((result.text || '').trim(), { office, issuanceTime });
                 return text ? { key: s.key, text } : null;
             } catch (e) {
                 return null;
