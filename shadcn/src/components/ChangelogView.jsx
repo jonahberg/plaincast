@@ -270,7 +270,7 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
                     {[0, 1, 2].map(i => (
                         <div key={i} className="space-y-3 border-t py-7">
                             <Skeleton className="h-5 w-72 max-w-full" />
-                            <Skeleton className="h-4 w-full max-w-[68ch]" />
+                            <Skeleton className="h-4 w-full max-w-[37rem]" />
                             <Skeleton className="h-4 w-2/3" />
                         </div>
                     ))}

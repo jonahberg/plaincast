@@ -27,6 +27,16 @@ const CONF_DOT = {
     Low: 'bg-transparent',
 };
 
+// Phone almanac grids (static strings so Tailwind can see them): column
+// count, hairlines between columns, a rule above every row after the first.
+// sm+ resets the row rules and lays the cells out in one row.
+const PHONE_GRID = {
+    1: 'grid-cols-1',
+    2: 'grid-cols-2 [&>div:nth-child(even)]:border-l [&>div:nth-child(even)]:pl-3 [&>div:nth-child(n+3)]:border-t sm:[&>div:nth-child(n+3)]:border-t-0',
+    3: 'grid-cols-3 [&>div:not(:nth-child(3n+1))]:border-l [&>div:not(:nth-child(3n+1))]:pl-3 [&>div:nth-child(n+4)]:border-t sm:[&>div:nth-child(n+4)]:border-t-0',
+};
+const LAST_SPAN = { 1: '', 2: 'max-sm:col-span-2', 3: 'max-sm:col-span-3' };
+
 function sinceText(iso, tz) {
     if (!iso) return 'the last update';
     try {
@@ -72,20 +82,26 @@ function Almanac({ office, conditions }) {
     }, [office, conditions, tz]);
 
     if (!cells.length) return null;
+    // Phones: a tidy grid, never a ragged wrap. Six cells (the usual case)
+    // are 3×2; four (no live conditions, e.g. an archived edition) are 2×2;
+    // an odd remainder stretches the last cell so every row rule spans the
+    // full width.
+    const n = cells.length;
+    const cols = n === 4 ? 2 : Math.min(n, 3);
+    const lastSpan = n % cols ? cols - (n % cols) + 1 : 1;
     return (
         <dl
             className={cn(
-                'mt-8 grid grid-cols-3 border-y text-[13px] leading-5 [&>div]:py-2.5 [&>div]:pr-3',
-                // Phones: a 3-column grid, hairlines between columns and rows.
-                '[&>div:not(:nth-child(3n+1))]:border-l [&>div:not(:nth-child(3n+1))]:pl-3 [&>div:nth-child(n+4)]:border-t',
-                // sm+: one row of equal cells, hairlines between them.
+                'mt-8 grid border-y text-[13px] leading-5 [&>div]:py-2.5 [&>div]:pr-3',
+                PHONE_GRID[cols],
+                // sm+: one row of content-sized cells, hairlines between them.
                 'sm:auto-cols-auto sm:grid-flow-col sm:grid-cols-none sm:[&>div]:pr-4 sm:[&>div:last-child]:pr-0',
-                'sm:[&>div:not(:first-child)]:border-l sm:[&>div:not(:first-child)]:pl-4 sm:[&>div:nth-child(n+4)]:border-t-0'
+                'sm:[&>div:not(:first-child)]:border-l sm:[&>div:not(:first-child)]:pl-4'
             )}
             aria-label="Current conditions and almanac"
         >
-            {cells.map(({ label, value }) => (
-                <div key={label} className="min-w-0">
+            {cells.map(({ label, value }, i) => (
+                <div key={label} className={cn('min-w-0', i === n - 1 && LAST_SPAN[lastSpan])}>
                     <dt className="text-muted-foreground">{label}</dt>
                     <dd className="font-medium tabular-nums sm:whitespace-nowrap">{value}</dd>
                 </div>
@@ -187,10 +203,13 @@ export function PageIntro({
 
     return (
         <section className="pb-2">
-            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                <span className="text-balance">Area Forecast Discussion · NWS {OFFICE_NAMES[office]} ({office})</span>
+            {/* Wraps only at the separator (each half is unbreakable), and
+                the separator stays at the end of the first line. */}
+            <p className="text-xs leading-5 font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                <span className="whitespace-nowrap">Area Forecast Discussion ·</span>{' '}
+                <span className="whitespace-nowrap">NWS {OFFICE_NAMES[office]} ({office})</span>
                 {viewingHistorical && (
-                    <Badge variant="outline" className="normal-case tracking-normal">Archived edition</Badge>
+                    <Badge variant="outline" className="ml-2 align-[1px] normal-case tracking-normal">Archived edition</Badge>
                 )}
             </p>
             <h1 className="mt-3 font-serif text-[2rem] leading-[1.1] font-semibold tracking-[-0.02em] text-balance sm:text-[2.5rem]">

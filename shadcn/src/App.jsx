@@ -64,8 +64,8 @@ function LoadingSkeleton() {
             {[0, 1].map(i => (
                 <div key={i} className="mt-4 space-y-3 border-t py-10">
                     <Skeleton className="h-7 w-40" />
-                    <Skeleton className="mt-5 h-4 w-full max-w-[68ch]" />
-                    <Skeleton className="h-4 w-full max-w-[68ch]" />
+                    <Skeleton className="mt-5 h-4 w-full max-w-[37rem]" />
+                    <Skeleton className="h-4 w-full max-w-[37rem]" />
                     <Skeleton className="h-4 w-2/3" />
                 </div>
             ))}

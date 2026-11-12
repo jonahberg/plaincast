@@ -8,7 +8,10 @@ export function SectionNav({ sections, activeKey, onJump }) {
     return (
         <nav
             aria-label="Sections in this discussion"
-            className="-mx-4 mt-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
+            // The scroller clips overflow on both axes, so it carries a few px
+            // of padding (cancelled by negative margins) to keep focus rings
+            // whole.
+            className="-mx-4 mt-3 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:-mx-1 sm:px-1 [&::-webkit-scrollbar]:hidden"
         >
             <div className="flex gap-x-5">
                 {sections.map(s => {

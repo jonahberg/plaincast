@@ -170,7 +170,7 @@ code, pre { font-family: var(--font-mono); }
 @supports (backdrop-filter: blur(1px)) {
     .site-header { background: color-mix(in oklch, var(--background) 60%, transparent); }
 }
-.site-header-inner { display: flex; align-items: center; gap: 0.75rem; height: 3.5rem; }
+.site-header-inner { display: flex; align-items: center; gap: 0.5rem; height: 3.5rem; }
 .brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; flex-shrink: 0; }
 .brand svg { width: 1.25rem; height: 1.25rem; }
 .header-sep { display: none; width: 1px; height: 1.25rem; background: var(--border); flex-shrink: 0; }
@@ -441,19 +441,17 @@ code, pre { font-family: var(--font-mono); }
 
 /* ── Footer (Footer.jsx) ─────────────────────────────────────────────── */
 .site-footer { border-top-width: 1px; }
+/* Stacked and left-aligned at every width, like Footer.jsx's colophon: in
+   the 46rem column, side-by-side halves both wrapped raggedly. */
 .site-footer-inner {
-    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-    gap: 0.5rem; padding-block: 1.5rem; font-size: 0.875rem; line-height: 1.25rem;
-    color: var(--muted-foreground); text-align: center;
+    display: flex; flex-direction: column; align-items: flex-start;
+    gap: 0.75rem; padding-block: 1.5rem; font-size: 0.875rem; line-height: 1.25rem;
+    color: var(--muted-foreground);
 }
 .site-footer a { text-decoration: underline; text-underline-offset: 4px; }
 .site-footer a:hover { color: var(--foreground); }
 .site-footer a.plain { font-weight: 500; }
-.footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem 0.75rem; }
-@media (min-width: 640px) {
-    .site-footer-inner { flex-direction: row; text-align: left; }
-    .footer-links { justify-content: flex-end; }
-}
+.footer-links { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
 
 @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }

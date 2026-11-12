@@ -77,7 +77,9 @@ export function Header({
                 icon-only wordmark, a flexible picker, and only
                 locate/share/theme — shortcuts + GitHub return at sm (the
                 footer carries the GitHub link at every width). The picker
-                flexes to whatever the column leaves (capped at 14rem). */}
+                flexes to whatever the column leaves (capped at 14rem); at md+,
+                where the site nav joins the row, the icon buttons tighten to
+                32px so the longest office names still fit it. */}
             <div className="mx-auto flex h-14 max-w-reading items-center gap-2 px-4 sm:px-6">
                 <a href="/" className="flex shrink-0 items-center gap-2 font-semibold" aria-label="Plaincast home">
                     <CloudSun className="size-5" aria-hidden="true" />
@@ -102,7 +104,7 @@ export function Header({
                     <SelectTrigger
                         ref={selectRef}
                         size="sm"
-                        className="w-auto min-w-0 flex-1 sm:max-w-56"
+                        className="w-auto min-w-0 flex-1 sm:max-w-56 md:px-2.5"
                         aria-label="NWS forecast office"
                     >
                         <SelectValue placeholder="Choose an office" />
@@ -127,10 +129,10 @@ export function Header({
                     </SelectContent>
                 </Select>
 
-                <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                <div className="ml-auto flex shrink-0 items-center gap-0.5 md:gap-0">
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={locate} aria-label="Use my location">
+                            <Button variant="ghost" size="icon" onClick={locate} aria-label="Use my location" className="md:size-8">
                                 <LocateFixed />
                             </Button>
                         </TooltipTrigger>
@@ -138,7 +140,7 @@ export function Header({
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={share} aria-label="Share forecast link">
+                            <Button variant="ghost" size="icon" onClick={share} aria-label="Share forecast link" className="md:size-8">
                                 <Share2 />
                             </Button>
                         </TooltipTrigger>
@@ -148,7 +150,7 @@ export function Header({
                         <TooltipTrigger asChild>
                             <Button
                                 variant="ghost" size="icon" onClick={onShowKbd}
-                                aria-label="Keyboard shortcuts" className="hidden sm:inline-flex"
+                                aria-label="Keyboard shortcuts" className="hidden sm:inline-flex md:size-8"
                             >
                                 <Keyboard />
                             </Button>
@@ -157,7 +159,7 @@ export function Header({
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" asChild className="hidden sm:inline-flex">
+                            <Button variant="ghost" size="icon" asChild className="hidden sm:inline-flex md:size-8">
                                 <a
                                     href="https://github.com/jonahberg/plaincast"
                                     target="_blank"
@@ -172,7 +174,7 @@ export function Header({
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={onToggleTheme} aria-label="Toggle dark mode">
+                            <Button variant="ghost" size="icon" onClick={onToggleTheme} aria-label="Toggle dark mode" className="md:size-8">
                                 {theme === 'dark' ? <Sun /> : <Moon />}
                             </Button>
                         </TooltipTrigger>
