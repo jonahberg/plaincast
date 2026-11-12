@@ -7,6 +7,7 @@ import { moonPhase, sunTimes } from '@/lib/almanac';
 import { officeFeedHref } from '@/lib/seo';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
     Select,
     SelectContent,
@@ -158,7 +159,7 @@ function AlertStatus({ row, onJump }) {
 
 export function PageIntro({
     office, takeawayHTML, takeawayFromMessages, forecaster, issueLine, fullText, conditions,
-    conditionsExpected = false, changelog, editions, currentEditionId, onSelectEdition, viewingHistorical,
+    conditionsExpected = false, changelog, changelogPending = false, editions, currentEditionId, onSelectEdition, viewingHistorical,
     changelogHref, onOpenChangelog, alertRow, onJumpToAlerts,
 }) {
     const tz = OFFICE_TIMEZONES[office];
@@ -166,6 +167,9 @@ export function PageIntro({
     const label = confidenceWord(score);
     const takeawayIsList = takeawayHTML.includes('class="takeaway-list"');
     const since = changelog && !viewingHistorical ? changelog : null;
+    // The sentence is on its way: hold its place (a few skeleton lines in the
+    // callout frame) so it fills in instead of pushing the page down.
+    const sinceHeld = !since && changelogPending && !viewingHistorical;
 
     // The meta line: one wrapping row of sans facts, `·`-separated.
     const meta = [];
@@ -230,7 +234,7 @@ export function PageIntro({
     const hasStatus = Boolean(alertRow) && !['pending', 'unavailable'].includes(alertRow.kind);
 
     const links = (
-        <p className={cn('flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] leading-5', since ? 'mt-2' : 'mt-4')}>
+        <p className={cn('flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] leading-5', since || sinceHeld ? 'mt-2' : 'mt-4')}>
             <a
                 href={changelogHref}
                 onClick={onOpenChangelog}
@@ -312,6 +316,17 @@ export function PageIntro({
                         <span className="font-semibold">Since {sinceText(since.since, tz)}:</span>{' '}
                         {since.changelog}
                     </p>
+                    {links}
+                </div>
+            ) : sinceHeld ? (
+                <div className="mt-6 border-l-2 border-brand/40 pl-4">
+                    {/* Line boxes of the sentence's own type (17px / 1.6): three
+                        on phones, two from sm, the usual length of one. */}
+                    <div aria-hidden="true" className="max-w-[65ch] space-y-[0.6em] py-[0.3em] text-[1.0625rem] leading-[1.6]">
+                        <Skeleton className="h-[1em] w-full" />
+                        <Skeleton className="h-[1em] w-11/12" />
+                        <Skeleton className="h-[1em] w-2/3 sm:hidden" />
+                    </div>
                     {links}
                 </div>
             ) : links}

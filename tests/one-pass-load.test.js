@@ -276,3 +276,37 @@ describe('App boot path', () => {
         expect(intro).toContain('aria-label={label}');
     });
 });
+
+describe('"Since the … update" holds its place while it loads', () => {
+    it('the intro reserves the callout (skeleton lines) while the sentence is pending', () => {
+        const intro = read('shadcn/src/components/PageIntro.jsx');
+        expect(intro).toContain('const sinceHeld = !since && changelogPending && !viewingHistorical;');
+        expect(intro).toContain(') : sinceHeld ? (');
+        // The links sit where they will sit once the sentence arrives.
+        expect(intro).toContain("since || sinceHeld ? 'mt-2'");
+    });
+
+    it('App marks it pending only when the server did not resolve it, and settles on every outcome', () => {
+        const app = read('shadcn/src/App.jsx');
+        expect(app).toContain('useState(() => Boolean(initial.boot) && initial.boot.changelog === undefined)');
+        const extras = app.slice(app.indexOf('const loadExtras = useCallback'), app.indexOf('const load = useCallback'));
+        expect(extras).toContain('setChangelogPending(true);');
+        expect(extras).toContain('setChangelogPending(false);');
+        // A newer issuance's sentence is never shown for the edition on screen.
+        expect(extras).toContain('fetchChangelog(code, product.id)');
+    });
+
+    it('fetchChangelog pins to an issuance with ?id=', async () => {
+        const { fetchChangelog } = await import('../shadcn/src/lib/nws.js');
+        const saved = globalThis.fetch;
+        const calls = [];
+        globalThis.fetch = async (url) => { calls.push(String(url)); return Response.json({ changelog: 'x' }); };
+        try {
+            await fetchChangelog('LOX');
+            await fetchChangelog('LOX', 'a1:b.c');
+        } finally {
+            globalThis.fetch = saved;
+        }
+        expect(calls).toEqual(['/api/changelog?office=LOX', '/api/changelog?office=LOX&id=a1%3Ab.c']);
+    });
+});

@@ -154,6 +154,10 @@ export default function App() {
     // A changelog the server already resolved for this issuance renders
     // with the page instead of arriving above it later.
     const [changelog, setChangelog] = useState(() => (initial.boot?.changelog?.changelog ? initial.boot.changelog : null));
+    // True while the sentence for the edition on screen is still being
+    // fetched: the intro holds its place (src/components/PageIntro.jsx) so
+    // the arrival fills in rather than pushing everything below it down.
+    const [changelogPending, setChangelogPending] = useState(() => Boolean(initial.boot) && initial.boot.changelog === undefined);
     const [newerEdition, setNewerEdition] = useState(null); // product id of an unseen issuance
     const [offlineNow, setOfflineNow] = useState(!navigator.onLine);
     const [kbdOpen, setKbdOpen] = useState(false);
@@ -209,13 +213,19 @@ export default function App() {
             if (gen === generation.current) setConditions(d || NO_CONDITIONS);
         });
         if (fetchChangelogToo) {
-            fetchChangelog(code).then(d => {
-                if (gen !== generation.current || !d) return;
-                // On the boot path a newer issuance may already exist; its
-                // sentence describes that edition, not the one on screen.
-                if (fetchChangelogToo === 'this-edition' && d.updated && product.issuanceTime
-                    && !sameInstant(d.updated, product.issuanceTime)) return;
-                setChangelog(d);
+            setChangelogPending(true);
+            fetchChangelog(code).then(async (d) => {
+                // On the boot path a newer issuance may already exist; the
+                // latest sentence then describes that edition, not the one on
+                // screen, so ask for this edition's own (?id=).
+                if (d && fetchChangelogToo === 'this-edition' && d.updated && product.issuanceTime
+                    && !sameInstant(d.updated, product.issuanceTime)) {
+                    const pinned = await fetchChangelog(code, product.id);
+                    d = pinned && (!pinned.updated || sameInstant(pinned.updated, product.issuanceTime)) ? pinned : null;
+                }
+                if (gen !== generation.current) return;
+                setChangelogPending(false);
+                if (d) setChangelog(d);
             });
         }
         if (prevItem) {
@@ -238,6 +248,7 @@ export default function App() {
         setDiffs(null);
         setConditions(null);
         setChangelog(null);
+        setChangelogPending(false);
         setNewerEdition(null);
         setActiveKey(null);
         // Per-office state: an offline fallback must never show the previous
@@ -752,6 +763,7 @@ export default function App() {
                                 conditions={conditions}
                                 conditionsExpected={!state.archived && !state.offline}
                                 changelog={changelog}
+                                changelogPending={changelogPending && !viewingHistorical}
                                 editions={editions}
                                 currentEditionId={viewingHistorical ? state.productId : null}
                                 onSelectEdition={selectEdition}

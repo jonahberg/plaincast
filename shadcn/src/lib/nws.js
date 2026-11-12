@@ -195,9 +195,12 @@ export async function fetchConditions(office) {
     }
 }
 
-export async function fetchChangelog(office) {
+// `id` pins the sentence to one issuance (the same ?id= the changelog ledger
+// uses); without it, the endpoint describes the office's latest issuance.
+export async function fetchChangelog(office, id = null) {
     try {
-        const res = await fetch(`/api/changelog?office=${office}`);
+        const pin = id ? `&id=${encodeURIComponent(id)}` : '';
+        const res = await fetch(`/api/changelog?office=${office}${pin}`);
         if (!res.ok) return null;
         const data = await res.json();
         return data && data.changelog ? data : null;
