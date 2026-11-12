@@ -66,7 +66,9 @@ describe('ForecastSection AI status', () => {
     });
 
     it('the header title can wrap and shrink (no 320px overflow)', () => {
-        expect(src).toMatch(/<CardTitle className="flex min-w-0 flex-wrap/);
+        // Sections are ruled editorial blocks since Nov 11 2026: the title is
+        // a real <h2> (was CardTitle) and must still wrap and shrink.
+        expect(src).toMatch(/<h2 className="flex min-w-0 flex-wrap/);
     });
 
     it('passes the issuance time to the regex translation (Zulu dating)', () => {

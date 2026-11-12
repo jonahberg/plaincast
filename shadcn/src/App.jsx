@@ -50,23 +50,22 @@ function initialState() {
 
 function LoadingSkeleton() {
     return (
-        <div aria-hidden="true" className="space-y-6">
-            <div className="space-y-2">
-                <Skeleton className="h-8 w-64" />
-                <Skeleton className="h-4 w-96 max-w-full" />
-                <Skeleton className="h-4 w-72" />
-                <Skeleton className="mt-4 h-12 w-full rounded-lg" />
-                <Skeleton className="mt-4 h-20 w-full rounded-lg" />
-            </div>
-            <div className="flex gap-1">
-                {[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-8 w-24" />)}
+        <div aria-hidden="true">
+            <Skeleton className="h-3 w-72 max-w-full" />
+            <Skeleton className="mt-4 h-10 w-64 max-w-full" />
+            <Skeleton className="mt-7 h-3 w-24" />
+            <Skeleton className="mt-3 h-6 w-full" />
+            <Skeleton className="mt-2 h-6 w-3/4" />
+            <Skeleton className="mt-7 h-4 w-96 max-w-full" />
+            <Skeleton className="mt-8 h-14 w-full" />
+            <div className="mt-6 flex gap-5">
+                {[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-5 w-20" />)}
             </div>
             {[0, 1].map(i => (
-                <div key={i} className="space-y-4 rounded-lg border p-6">
-                    <Skeleton className="h-6 w-40" />
-                    <Skeleton className="h-9 w-56 rounded-lg" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-full" />
+                <div key={i} className="mt-4 space-y-3 border-t py-10">
+                    <Skeleton className="h-7 w-40" />
+                    <Skeleton className="mt-5 h-4 w-full max-w-[68ch]" />
+                    <Skeleton className="h-4 w-full max-w-[68ch]" />
                     <Skeleton className="h-4 w-2/3" />
                 </div>
             ))}
@@ -374,6 +373,7 @@ export default function App() {
         () => (ready ? extractTakeaway(state.sections, tz) : ''),
         [ready, state.sections, tz]
     );
+    const takeawayFromMessages = ready && state.sections.some(s => s.key === 'Messages');
 
     const issueLine = ready && state.issuedAt
         ? `Issued ${formatIssueTime(state.issuedAt, tz)} (${timeAgo(state.issuedAt)})`
@@ -472,7 +472,7 @@ export default function App() {
                     onPickerOpenChange={setPickerOpen}
                 />
 
-                <main id="sections" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
+                <main id="sections" className="mx-auto w-full max-w-reading flex-1 px-4 pt-8 pb-4 sm:px-6 sm:pt-10">
                     {(offlineNow || (ready && state.offline)) && (
                         <Alert className="mb-6">
                             <WifiOff />
@@ -570,6 +570,7 @@ export default function App() {
                             <PageIntro
                                 office={office}
                                 takeawayHTML={takeawayHTML}
+                                takeawayFromMessages={takeawayFromMessages}
                                 forecaster={state.forecaster}
                                 issueLine={issueLine}
                                 fullText={state.fullText}
@@ -584,7 +585,7 @@ export default function App() {
                             />
                             <Explainer />
                             <SectionNav sections={navSections} activeKey={activeKey} onJump={jumpTo} />
-                            <div className="space-y-6">
+                            <div className="mt-2">
                                 <AlertsSection
                                     alerts={alerts}
                                     office={office}

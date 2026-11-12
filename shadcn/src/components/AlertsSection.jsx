@@ -94,13 +94,16 @@ export function AlertsSection({ alerts, office, sectionRef }) {
     const now = Date.now();
 
     return (
-        <section ref={sectionRef} id="section-active-alerts" className="scroll-mt-20">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Active alerts</CardTitle>
-                    <CardDescription>{describe(groups, alerts.length, tz)}</CardDescription>
+        // Alerts stay a card (a UI object, not prose), tightened to the
+        // reading column. The h2 keeps heading order legal for the alert
+        // rows' accordion h3s.
+        <section ref={sectionRef} id="section-active-alerts" className="scroll-mt-20 pt-6 pb-10">
+            <Card className="gap-3 py-5">
+                <CardHeader className="px-5">
+                    <CardTitle><h2>Active alerts</h2></CardTitle>
+                    <CardDescription className="text-[13px]">{describe(groups, alerts.length, tz)}</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-5">
                     <Accordion type="single" collapsible value={expanded} onValueChange={setExpanded}>
                         {groups.map((group) => {
                             const kind = classifyAlertKind(group.event);

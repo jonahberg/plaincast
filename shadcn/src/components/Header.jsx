@@ -73,10 +73,12 @@ export function Header({
 
     return (
         <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            {/* 320–375px budget: icon-only wordmark, a flexible picker, and
-                only locate/share/theme — shortcuts + GitHub return at sm (the
-                footer carries the GitHub link at every width). */}
-            <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-4 sm:gap-3 sm:px-6">
+            {/* Aligned to the 46rem reading column. 320–375px budget:
+                icon-only wordmark, a flexible picker, and only
+                locate/share/theme — shortcuts + GitHub return at sm (the
+                footer carries the GitHub link at every width). The picker
+                flexes to whatever the column leaves (capped at 14rem). */}
+            <div className="mx-auto flex h-14 max-w-reading items-center gap-2 px-4 sm:px-6">
                 <a href="/" className="flex shrink-0 items-center gap-2 font-semibold" aria-label="Plaincast home">
                     <CloudSun className="size-5" aria-hidden="true" />
                     <span className="hidden sm:inline">Plaincast</span>
@@ -100,7 +102,7 @@ export function Header({
                     <SelectTrigger
                         ref={selectRef}
                         size="sm"
-                        className="w-auto min-w-0 flex-1 sm:w-56 sm:flex-none"
+                        className="w-auto min-w-0 flex-1 sm:max-w-56"
                         aria-label="NWS forecast office"
                     >
                         <SelectValue placeholder="Choose an office" />
@@ -125,7 +127,7 @@ export function Header({
                     </SelectContent>
                 </Select>
 
-                <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+                <div className="ml-auto flex shrink-0 items-center gap-0.5">
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button variant="ghost" size="icon" onClick={locate} aria-label="Use my location">

@@ -13,7 +13,7 @@ const LINK = 'underline-offset-4 hover:text-foreground hover:underline';
 export function Footer({ office, rawUrl }) {
     return (
         <footer className="border-t">
-            <div className="mx-auto max-w-5xl px-4 py-8 text-sm text-muted-foreground sm:px-6">
+            <div className="mx-auto max-w-reading px-4 py-8 text-sm text-muted-foreground sm:px-6">
                 <nav aria-label="All Plaincast forecast offices">
                     <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         The forecast, office by office
@@ -23,7 +23,7 @@ export function Footer({ office, rawUrl }) {
                             The National Desk — where the weather is today →
                         </a>
                     </p>
-                    <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-5">
+                    <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
                         {OFFICE_GROUPS.map(group => (
                             <div key={group.label} className="min-w-0">
                                 <h3 className="text-xs font-medium text-foreground">{group.label}</h3>
@@ -45,7 +45,7 @@ export function Footer({ office, rawUrl }) {
                     </div>
                 </nav>
 
-                <div className="mt-8 flex flex-col gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-8 flex flex-col gap-3 border-t pt-6">
                     <p>
                         Data from the{' '}
                         <a

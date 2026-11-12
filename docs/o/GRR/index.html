@@ -25,6 +25,11 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="alternate" type="application/rss+xml" title="Plaincast RSS" href="/api/feed?office=GRR">
+    <!-- The reading face (Source Serif 4, self-hosted: CSP font-src 'self').
+         Preloaded so the h1, lede and prose usually paint in it directly;
+         src/index.css carries the @font-face and a metric-matched Georgia
+         fallback for when it does not. The italic is not preloaded. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/source-serif-4-latin.woff2">
     <!-- api.weather.gov gates all forecast content; warm the connection early -->
     <link rel="preconnect" href="https://api.weather.gov" crossorigin>
 
@@ -203,19 +208,19 @@
          the React app removes this whole region the moment it mounts
          (src/App.jsx), so for browsers it is pure progressive enhancement. -->
     <div id="ssr-root">
-        <main class="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+        <main class="mx-auto w-full max-w-reading px-4 py-10 sm:px-6">
             <h1 class="sr-only">Grand Rapids (GRR) — the National Weather Service forecast in plain English · Plaincast</h1>
-            <p class="text-3xl font-semibold tracking-tight">Plaincast</p>
-            <p class="mt-1 text-sm text-muted-foreground">What the forecast actually says — NWS Area Forecast Discussions, decoded into plain English.</p>
+            <p class="font-serif text-[2rem] leading-[1.1] font-semibold tracking-[-0.02em] sm:text-[2.5rem]">Plaincast</p>
+            <p class="mt-4 max-w-[34em] font-serif text-[1.1875rem] leading-[1.45] text-pretty sm:text-[1.375rem]">What the forecast actually says — NWS Area Forecast Discussions, decoded into plain English.</p>
 
-            <div id="sections-ssr" class="mt-4">
+            <div id="sections-ssr">
                 <div class="loading" id="loading">Setting the type…</div>
             </div>
 
-            <nav class="mt-10" aria-label="All Plaincast forecast offices">
-                <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">The forecast, office by office</h2>
-                <p class="mt-2 text-sm"><a href="/national/">The National Desk — where the weather is today →</a></p>
-                <ul class="office-index-list mt-3 list-none columns-2 gap-6 text-sm leading-6 sm:columns-3 md:columns-4">
+            <nav class="mt-12 border-t pt-8" aria-label="All Plaincast forecast offices">
+                <h2 class="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">The forecast, office by office</h2>
+                <p class="mt-3 text-sm"><a href="/national/">The National Desk — where the weather is today →</a></p>
+                <ul class="office-index-list mt-4 list-none columns-2 gap-6 text-sm leading-6 sm:columns-3">
                 <li><a href="/o/OKX/">New York (OKX)</a></li>
                 <li><a href="/o/BOX/">Boston (BOX)</a></li>
                 <li><a href="/o/PHI/">Philadelphia (PHI)</a></li>

@@ -17,7 +17,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // ─── The edition ledger (?view=changelog) ───────────────────────────
@@ -102,8 +101,8 @@ function EntrySummary({ office, id }) {
                     <Loader2 className="size-3 animate-spin" aria-hidden="true" /> Summarizing…
                 </p>
             )}
-            {state.status === 'done' && <p className="text-sm leading-6">{state.text}</p>}
-            {state.status === 'quiet' && <p className="text-sm text-muted-foreground">{state.text}</p>}
+            {state.status === 'done' && <p className="max-w-[68ch] font-serif text-[1.0625rem] leading-[1.6] text-pretty">{state.text}</p>}
+            {state.status === 'quiet' && <p className="max-w-[68ch] font-serif text-[1.0625rem] leading-[1.6] text-muted-foreground">{state.text}</p>}
         </div>
     );
 }
@@ -112,36 +111,36 @@ function Entry({ entry, office, tz, isLatest, onOpenEdition }) {
     const dl = dateline(entry.time, tz);
     const href = isLatest ? `/o/${office}/` : `/o/${office}/?edition=${encodeURIComponent(entry.id)}`;
     const conf = confidenceSentence(entry.confidence);
+    // One edition = one ruled block (no card): sans dateline + badges, the
+    // revised-sections line, then the summary sentence in the reading serif.
     return (
-        <Card className="gap-4">
-            <CardHeader>
-                <CardTitle className="flex flex-wrap items-center gap-x-2 gap-y-1 text-base">
-                    <h2 className="contents">
-                        <span>{dl.date}</span>
-                        <span className="text-muted-foreground" aria-hidden="true">·</span>
-                        <span className="font-normal text-muted-foreground">{dl.clock}</span>
-                    </h2>
-                    <Badge variant="secondary">{dl.edition} edition</Badge>
-                    {isLatest && <Badge variant="outline">Latest</Badge>}
-                </CardTitle>
-                <CardDescription>
-                    {entry.changedKeys.length
-                        ? `Revised: ${entry.changedKeys.join(', ')}.`
-                        : 'No substantive revisions.'}
-                    {conf && <> {conf}</>}
-                    {entry.forecaster && <> — {entry.forecaster}</>}
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
+        <article className="border-t py-7">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h2 className="contents">
+                    <span className="font-semibold">{dl.date}</span>
+                    <span className="text-muted-foreground" aria-hidden="true">·</span>
+                    <span className="text-muted-foreground">{dl.clock}</span>
+                </h2>
+                <Badge variant="secondary">{dl.edition} edition</Badge>
+                {isLatest && <Badge variant="outline">Latest</Badge>}
+            </div>
+            <p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">
+                {entry.changedKeys.length
+                    ? `Revised: ${entry.changedKeys.join(', ')}.`
+                    : 'No substantive revisions.'}
+                {conf && <> {conf}</>}
+                {entry.forecaster && <> — {entry.forecaster}</>}
+            </p>
+            <div className="mt-4 space-y-3">
                 {entry.changedKeys.length
                     ? <EntrySummary office={office} id={entry.id} />
-                    : <p className="text-sm text-muted-foreground">The forecast carried forward unchanged.</p>}
+                    : <p className="font-serif text-[1.0625rem] leading-[1.6] text-muted-foreground">The forecast carried forward unchanged.</p>}
                 {entry.changed.length > 0 && (
                     <Accordion type="single" collapsible>
                         <AccordionItem value="diff" className="border-b-0">
-                            <AccordionTrigger className="py-2 text-sm">Compare the text</AccordionTrigger>
+                            <AccordionTrigger className="py-1.5 text-[13px] text-muted-foreground hover:text-foreground">Compare the text</AccordionTrigger>
                             <AccordionContent>
-                                <div className="space-y-4">
+                                <div className="space-y-4 pt-2">
                                     {entry.changed.map(d => (
                                         <div key={d.key}>
                                             <h3 className="mb-2 text-sm font-semibold">{d.key}</h3>
@@ -156,21 +155,19 @@ function Entry({ entry, office, tz, isLatest, onOpenEdition }) {
                         </AccordionItem>
                     </Accordion>
                 )}
-            </CardContent>
-            <CardFooter>
-                <a
-                    href={href}
-                    onClick={(e) => {
-                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-                        e.preventDefault();
-                        onOpenEdition(isLatest ? null : entry.id);
-                    }}
-                    className="text-sm font-medium underline underline-offset-4"
-                >
-                    Read this edition
-                </a>
-            </CardFooter>
-        </Card>
+            </div>
+            <a
+                href={href}
+                onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                    e.preventDefault();
+                    onOpenEdition(isLatest ? null : entry.id);
+                }}
+                className="mt-3 inline-block text-[13px] font-medium text-brand underline decoration-brand/40 underline-offset-4 hover:decoration-brand"
+            >
+                Read this edition
+            </a>
+        </article>
     );
 }
 
@@ -246,7 +243,7 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
 
     return (
         <section aria-labelledby="changelog-title">
-            <div className="mb-6">
+            <div className="mb-8">
                 <a
                     href={`/o/${office}/`}
                     onClick={(e) => {
@@ -259,21 +256,21 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
                     <ArrowLeft className="size-3.5" aria-hidden="true" />
                     Back to the forecast
                 </a>
-                <h1 id="changelog-title" className="mt-3 text-2xl font-semibold tracking-tight">
-                    Forecast changelog — {name} <span className="text-muted-foreground">({office})</span>
+                <h1 id="changelog-title" className="mt-4 font-serif text-[2rem] leading-[1.1] font-semibold tracking-[-0.02em] text-balance sm:text-[2.5rem]">
+                    Forecast changelog{'\u00a0'}— {name} <span className="font-normal text-muted-foreground">({office})</span>
                 </h1>
-                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                <p className="mt-3 max-w-[60ch] text-[15px] leading-6 text-muted-foreground">
                     Every revision to the {name} forecast, newest first — what changed with each update,
                     and whether the forecasters' confidence rose or fell.
                 </p>
             </div>
 
             {state.status === 'loading' && (
-                <div aria-busy="true" aria-label="Loading the changelog" className="space-y-4">
+                <div aria-busy="true" aria-label="Loading the changelog">
                     {[0, 1, 2].map(i => (
-                        <div key={i} className="space-y-3 rounded-lg border p-6">
+                        <div key={i} className="space-y-3 border-t py-7">
                             <Skeleton className="h-5 w-72 max-w-full" />
-                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-full max-w-[68ch]" />
                             <Skeleton className="h-4 w-2/3" />
                         </div>
                     ))}
@@ -293,9 +290,9 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
             )}
 
             {state.status === 'ready' && (
-                <div className="space-y-4">
+                <div className="border-b">
                     {state.entries.length === 0 && (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="border-t py-6 text-sm text-muted-foreground">
                             The archive is thin right now — check back after the next update.
                         </p>
                     )}
@@ -310,7 +307,7 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
                         />
                     ))}
                     {state.more && (
-                        <div className="flex justify-center pt-2">
+                        <div className="flex justify-center border-t py-6">
                             <Button variant="outline" onClick={loadMore} disabled={state.loadingMore}>
                                 {state.loadingMore && <Loader2 className="animate-spin" aria-hidden="true" />}
                                 Earlier editions
