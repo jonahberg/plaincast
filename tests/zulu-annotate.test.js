@@ -137,3 +137,41 @@ describe('regex fallback: flight-category abbreviations', () => {
         expect(expand('IFR expected')).toBe('instrument-only flying conditions expected');
     });
 });
+
+// Opt-in options for the National Desk (Nov 2026). No office caller passes
+// them; the tests above pin the office behaviour unchanged.
+describe('annotateZuluTimes — explicit zone and weekday pins (National Desk)', () => {
+    // Live SPC Day 1, 05:23Z Nov 12 2026 = 12:23 AM EST Thursday.
+    const SPC_ISSUED = '2026-11-12T05:23:00+00:00';
+    const EASTERN = { timeZone: 'America/New_York' };
+    const PINNED = { timeZone: 'America/New_York', weekdayPins: true };
+
+    it('annotates in an explicit zone with no office at all', () => {
+        expect(annotateZuluTimes('after 21Z', null, SPC_ISSUED, EASTERN)).toBe('after 21Z (4 PM EST)');
+        expect(annotateZuluTimes('after 21Z', null, SPC_ISSUED)).toBe('after 21Z'); // no zone: no-op, as before
+    });
+
+    it('the explicit zone wins over the office', () => {
+        expect(annotateZuluTimes('by 06Z', 'HFO', SPC_ISSUED)).toBe('by 06Z (8 PM HST)');
+        expect(annotateZuluTimes('by 06Z', 'HFO', SPC_ISSUED, EASTERN)).toBe('by 06Z (1 AM EST)');
+    });
+
+    it('without weekdayPins a trailing weekday is ignored, exactly as for offices', () => {
+        expect(annotateZuluTimes('by 12Z Friday', null, SPC_ISSUED, EASTERN)).toBe('by 12Z (7 AM EST) Friday');
+    });
+
+    it('weekdayPins: SPC\'s "12Z Friday" is Friday\'s 12Z, annotated after the weekday', () => {
+        expect(annotateZuluTimes('through the Atlantic Seaboard by 12Z Friday.', null, SPC_ISSUED, PINNED))
+            .toBe('through the Atlantic Seaboard by 12Z Friday (7 AM EST Fri).');
+        // 00Z Friday is Thursday evening in the East — the label says so
+        expect(annotateZuluTimes('by 00Z Friday', null, SPC_ISSUED, PINNED)).toBe('by 00Z Friday (7 PM EST Thu)');
+        expect(annotateZuluTimes('after 0300Z Sat', null, SPC_ISSUED, PINNED)).toBe('after 0300Z Sat (10 PM EST Fri)');
+        // unpinned tokens behave as before
+        expect(annotateZuluTimes('around 22z this evening', null, SPC_ISSUED, PINNED)).toBe('around 22z (5 PM EST) this evening');
+    });
+
+    it('weekdayPins leaves an already-annotated token alone', () => {
+        const done = 'by 12Z Friday (7 AM EST Fri)';
+        expect(annotateZuluTimes(done, null, SPC_ISSUED, PINNED)).toBe(done);
+    });
+});

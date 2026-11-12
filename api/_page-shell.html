@@ -15,6 +15,9 @@
          negotiation (RFC 8288 rel="alternate"; see api/_negotiate.js). -->
     <link rel="alternate" type="text/markdown" href="https://plaincast.live/{{SLUG}}">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <!-- The reading face (Source Serif 4, self-hosted; @font-face in
+         /styles.css), preloaded like the SPA's shell. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/source-serif-4-latin.woff2">
     <script defer src="/_vercel/insights/script.js"></script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
     <!-- Pre-paint theme (blocking, no defer/module): must run before first
@@ -78,7 +81,7 @@
     </div>
 </header>
 
-<main class="container container-narrow main" id="page">
+<main class="container main" id="page">
     <!-- The heading for THIS page's content. It must sit inside <main>:
          main-content extractors strip <header> as boilerplate (CLAUDE.md
          heading rule). The sr-only tail keeps the product name in the H1
@@ -87,7 +90,7 @@
         <h1 class="page-title">{{TITLE}}<span class="sr-only"> · Plaincast</span></h1>
         <p class="page-description">{{DATELINE}}</p>
     </div>
-    <article class="card page-prose">
+    <article class="page-prose">
 {{CONTENT}}
     </article>
 </main>

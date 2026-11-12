@@ -1,5 +1,6 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { memoryBackend } from './shared-cache-backend.js';
 
 let mockGenerateText = async () => ({ text: 'translated', finishReason: 'stop' });
 mock.module('ai', () => ({ generateText: (...args) => mockGenerateText(...args) }));
@@ -55,6 +56,10 @@ mock.module('../api/_snapshots.js', () => ({
 }));
 
 const { default: handler, coldBudget } = await import('../api/translate-issuance.js');
+const { __setSharedCacheBackendForTests, translationKey, TRANSLATION_TTL } = await import('../api/_shared-cache.js');
+
+// The shared store is module state shared by every test file: always reset.
+afterEach(() => __setSharedCacheBackendForTests(null));
 
 function createRes() {
     return {
@@ -146,6 +151,124 @@ describe('GET /api/translate-issuance', () => {
         expect(second.statusCode).toBe(200);
         expect(second.body.cached).toBe(true);
         expect(second.body.sections.Synopsis).toBeTruthy();
+    });
+
+    // ── Shared store (api/_shared-cache.js), Nov 2026 ──
+    // Replaces the page self-fetch + peek mode: the page functions read the
+    // store directly, so this endpoint has no read-only mode of its own.
+    it('serves a shared-store hit like an in-memory hit: no model call, no NWS fetch', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        const id = freshId(); // never seen by this instance: a cold instance
+        backend.seed(translationKey('LOX', id), {
+            office: 'LOX', id, issuanceTime: '2026-03-24T18:25:00+00:00', productText: AFD_TEXT,
+            sections: { Synopsis: 'Dry and warm.', 'Short Term': 'Patchy fog.' }, complete: true,
+        });
+        mockListThrows = true; // any NWS fetch would throw
+        mockGenerateText = async () => { throw new Error('re-billed: another instance already translated this'); };
+        const res = createRes();
+        await handler(createReq({ office: 'LOX', id }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({
+            office: 'LOX', id, issuanceTime: '2026-03-24T18:25:00+00:00', productText: AFD_TEXT,
+            sections: { Synopsis: 'Dry and warm.', 'Short Term': 'Patchy fog.' }, complete: true, cached: true,
+        });
+        expect(res.headers['cache-control']).toBe('public, s-maxage=86400, stale-while-revalidate=2592000');
+
+        // It is now in this instance's memory too: the store is not read again.
+        backend.store.clear();
+        const again = createRes();
+        await handler(createReq({ office: 'LOX', id }), again);
+        expect(again.body.sections.Synopsis).toBe('Dry and warm.');
+        expect(backend.reads).toEqual([translationKey('LOX', id)]);
+    });
+
+    it('writes a complete run to the shared store (7-day TTL); a second instance is served from it', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        const id = freshId();
+        mockList = [{ id }];
+        const first = createRes();
+        await handler(createReq({ office: 'LOX', id }), first);
+        expect(first.body.complete).toBe(true);
+        const key = translationKey('LOX', id);
+        expect(backend.writes).toEqual([{ key, options: { tags: ['ti'], ttl: TRANSLATION_TTL } }]);
+        const stored = backend.peek(key);
+        expect(stored).toEqual({ ...first.body, cached: undefined, complete: true });
+
+        // "Another instance": the module has no reset hook for its memory, so
+        // a fresh id seeded with the stored value stands in for an instance
+        // whose memory is empty.
+        const id2 = freshId();
+        backend.seed(translationKey('LOX', id2), { ...stored, id: id2 });
+        mockGenerateText = async () => { throw new Error('re-billed: cache miss'); };
+        mockListThrows = true;
+        const second = createRes();
+        await handler(createReq({ office: 'LOX', id: id2 }), second);
+        expect(second.statusCode).toBe(200);
+        expect(second.body.cached).toBe(true);
+        expect(second.body.sections).toEqual(first.body.sections);
+    });
+
+    it('never writes a partial or failed result to the shared store', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        let id = freshId();
+        mockList = [{ id }];
+        mockGenerateText = async (args) => {
+            if (args.system.includes('Section name for context: Aviation')) throw new Error('hiccup');
+            return { text: 'ok', finishReason: 'stop' };
+        };
+        const partial = createRes();
+        await handler(createReq({ office: 'LOX', id }), partial);
+        expect(partial.body.complete).toBe(false);
+
+        id = freshId();
+        mockList = [{ id }];
+        mockGenerateText = async () => { throw new Error('gateway down'); };
+        const failed = createRes();
+        await handler(createReq({ office: 'LOX', id }), failed);
+        expect(failed.statusCode).toBe(502);
+
+        expect(backend.writes).toEqual([]);
+        expect(backend.store.size).toBe(0);
+    });
+
+    it('ignores a shared entry that is partial, or for another office or id, and translates', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        for (const bogus of [
+            (id) => ({ office: 'LOX', id, sections: { Synopsis: 'half' }, complete: false }),
+            (id) => ({ office: 'LOX', id: 'some-other-id', sections: { Synopsis: 'x' }, complete: true }),
+            (id) => ({ office: 'OKX', id, sections: { Synopsis: 'x' }, complete: true }),
+            (id) => ({ office: 'LOX', id, sections: { Synopsis: 42 }, complete: true }),
+        ]) {
+            const id = freshId();
+            mockList = [{ id }];
+            backend.seed(translationKey('LOX', id), bogus(id));
+            let calls = 0;
+            mockGenerateText = async () => { calls++; return { text: 'fresh', finishReason: 'stop' }; };
+            const res = createRes();
+            await handler(createReq({ office: 'LOX', id }), res);
+            expect(res.statusCode).toBe(200);
+            expect(res.body.cached).toBe(false);
+            expect(res.body.sections.Synopsis).toBe('fresh');
+            expect(calls).toBeGreaterThan(0);
+        }
+    });
+
+    it('a store that throws is a miss, never an error', async () => {
+        __setSharedCacheBackendForTests({
+            get: async () => { throw new Error('store down'); },
+            set: async () => { throw new Error('store down'); },
+        });
+        const id = freshId();
+        mockList = [{ id }];
+        const res = createRes();
+        await handler(createReq({ office: 'LOX', id }), res);
+        expect(res.statusCode).toBe(200);
+        expect(res.body.complete).toBe(true);
+        expect(res.headers['cache-control']).toContain('s-maxage=86400');
     });
 
     it('tolerates individual section failures (missing key, others intact)', async () => {

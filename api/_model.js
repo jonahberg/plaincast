@@ -1,6 +1,9 @@
 // The Claude model behind every AI endpoint (translate, translate-issuance,
 // changelog, explain-alert, national-lede), plus the request options that go
-// with it. Change the model HERE, not per file.
+// with it. Change the model HERE, not per file. Translations, changelog
+// verdicts and the national lede are stored in the shared cache, which
+// survives deploys: bump the versions in api/_shared-cache.js when the model
+// (or anything else that changes their output) changes.
 //
 // Calls go straight to the Claude API (not Vercel AI Gateway), billed to the
 // Console organization that receives the Max plan's monthly API credits.

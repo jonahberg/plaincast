@@ -16,9 +16,12 @@
   reach the others; once it's in, `ANTHROPIC_WORKSPACE_ID` can be deleted.
 
 ### Code follow-ups
-- **Shared cache for AI results.** Caches are in-memory per instance; Blob is not
-  provisioned, so `api/_snapshots.js` is inert. Provisioning Blob (or moving to
-  Vercel Runtime Cache) turns cold starts into cache hits.
+- **Durable edition snapshots.** The shared cache for AI results is done
+  (Nov 2026: `api/_shared-cache.js`, Vercel Runtime Cache, so cold instances
+  and the SSR pages read what any instance in the region already produced).
+  What remains: Blob is still not provisioned, so `api/_snapshots.js` is
+  inert, and the Runtime Cache is ephemeral (LRU eviction, 7-day TTL), so
+  permalinks to editions NWS has deleted still have no durable copy.
 - **@vercel/og is pinned to exactly 1.0.1.** 1.0.2 and 1.0.3 import `dist/hb.wasm`
   (harfbuzz) but do not ship it, so every render throws ENOENT. Before bumping,
   check the tarball: `npm pack @vercel/og@<v> --dry-run | grep hb.wasm`.

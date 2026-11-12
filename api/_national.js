@@ -116,20 +116,164 @@ export function parseSpcOutlook(productText) {
 
 const RISK_LEVELS = ['MARGINAL', 'SLIGHT', 'ENHANCED', 'MODERATE', 'HIGH'];
 
-// Day-1 categorical risk from the THERE-IS headline. Regions is the prose
-// after "OF SEVERE THUNDERSTORMS" (or the whole tail), title-cased lightly
-// by the caller's CSS (small caps), so we just trim connective noise.
+// Day-1 categorical risk from the THERE-IS headline. `regions` is the prose
+// after "OF SEVERE THUNDERSTORMS" with one leading connective trimmed (the
+// rail's caption). `area` is that same tail untouched ("TODAY ACROSS PARTS
+// OF ..."), which is what the risk line needs to read as a sentence.
 export function parseRiskCategory(headline) {
     const text = String(headline || '');
     const m = text.match(/THERE IS AN? (MARGINAL|SLIGHT|ENHANCED|MODERATE|HIGH) RISK OF SEVERE THUNDERSTORMS\s*(.*)$/i);
     if (!m) return null;
     const level = m[1].toUpperCase();
     if (!RISK_LEVELS.includes(level)) return null;
-    const regions = m[2]
+    const area = m[2].replace(/\s+/g, ' ').trim();
+    const regions = area
         .replace(/^(ACROSS|FOR|OVER|PORTIONS OF|PARTS OF)\s+/i, '')
-        .replace(/\s+/g, ' ')
         .trim();
-    return { level, regions };
+    return { level, regions, area };
+}
+
+// ── Area casing ─────────────────────────────────────────────────────
+// SPC headlines are SHOUTED and joined with "..." ("PARTS OF SOUTHEASTERN
+// PENNSYLVANIA...MUCH OF DELAWARE"). caseArea turns that into prose: commas
+// for the "..." joins, everything lowercase, then the proper names below put
+// back. The list is explicit on purpose: a guess ("capitalise any word that
+// follows 'the'") would capitalise "the middle" and miss "southern Indiana".
+//
+// Compass words stay lowercase as adjectives ("southeastern Pennsylvania",
+// "central High Plains"). The four compass REGIONS (Northeast, Northwest,
+// Southeast, Southwest) are capitalised only when they stand alone ("the
+// Southeast"); followed by a place they are adjectives ("northwest
+// Washington", "far southeast Virginia" — both live Nov 2026 headlines).
+const STATE_NAMES = [
+    'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut',
+    'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa',
+    'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan',
+    'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire',
+    'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio',
+    'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota',
+    'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia',
+    'Wisconsin', 'Wyoming', 'District of Columbia',
+];
+// Geographic names SPC routinely writes. Hyphen and space are interchangeable
+// when matching ("MID-ATLANTIC" and "MID ATLANTIC" both match "Mid-Atlantic");
+// the source's own separator is kept.
+const REGION_NAMES = [
+    'Mid-Atlantic', 'Mid-South', 'Deep South', 'New England', 'Great Lakes', 'Great Plains',
+    'High Plains', 'Plains', 'Great Basin', 'Ohio Valley', 'Tennessee Valley',
+    'Mississippi Valley', 'Missouri Valley', 'Red River', 'Rio Grande', 'Gulf Coast',
+    'Gulf of America', 'Gulf of Mexico', 'Gulf', 'Atlantic Seaboard', 'Eastern Seaboard',
+    'Atlantic', 'Pacific', 'Appalachians', 'Ozarks', 'Rockies', 'Black Hills', 'Carolinas',
+    'Dakotas', 'Virginias', 'Florida Peninsula', 'Florida Panhandle', 'Florida Keys',
+    'Texas Panhandle', 'Oklahoma Panhandle', 'Big Bend', 'Delmarva', 'Arklatex', 'Ark-La-Tex',
+    'Arklamiss', 'Four Corners', 'Intermountain West', 'Midwest', 'Northeast', 'Southeast',
+    'Southwest', 'Northwest', 'Pacific Northwest', 'Hudson Valley', 'Chesapeake',
+    'Great Salt Lake', 'Sierra Nevada', 'Cascades', 'Front Range', 'Edwards Plateau',
+    'Lake Michigan', 'Lake Superior', 'Lake Erie', 'Lake Huron', 'Lake Ontario',
+    'Lake Okeechobee', 'Upper Peninsula', 'Piedmont', 'Tidewater', 'Blue Ridge',
+    'Cumberland Plateau', 'Allegheny Plateau', 'Permian Basin', 'Hill Country', 'Lowcountry',
+    'Sandhills', 'Llano Estacado', 'Central Valley', 'Columbia Basin', 'Snake River Plain',
+    'Puget Sound', 'Long Island', 'Cape Cod', 'Outer Banks', 'Mogollon Rim', 'Wasatch',
+    'Bootheel', 'Coastal Bend', 'Concho Valley', 'Big Country', 'Rolling Plains',
+    'Continental Divide', 'Canadian Prairies', 'Alleghenies',
+    'Mexico', 'Canada', 'Canadian', 'Puerto Rico', 'New York City', 'East Coast', 'West Coast',
+    'Carolina', 'Gulf Stream', 'Lake Champlain', 'San Joaquin Valley', 'Sacramento Valley',
+    'Rocky Mountains', 'Adirondacks', 'Catskills', 'Poconos', 'Berkshires', 'Green Mountains',
+    'White Mountains', 'Great Smoky Mountains', 'Smoky Mountains', 'Ozark Plateau',
+];
+// A river or landform word right after a proper name is part of that name:
+// "western Tennessee Valleys", "Kansas River", "Nebraska Panhandle".
+const NAME_SUFFIXES = new Set(['valley', 'valleys', 'river', 'rivers', 'basin', 'panhandle', 'panhandles', 'peninsula', 'plateau', 'delta']);
+// Postal codes stay uppercase. Codes that are also everyday words are left
+// out, because in an all-caps headline "IN" is far likelier to be the
+// preposition than Indiana (likewise OR, ME, HI, OK) — unless one is
+// slash-joined to another code ("TX/OK PANHANDLES"), where it can only be
+// the state.
+const POSTAL_CODES = new Set(('AL AK AZ AR CA CO CT DE DC FL GA IA ID IL KS KY LA MA MD MI MN MO MS MT NC '
+    + 'ND NE NH NJ NM NV NY OH PA RI SC SD TN TX UT VA VT WA WI WV WY').split(' '));
+const WORDLIKE_CODES = new Set(['IN', 'OR', 'ME', 'HI', 'OK']);
+// Acronyms that must not be lowercased.
+const ACRONYMS = new Map([['us', 'US'], ['u.s', 'U.S'], ['conus', 'CONUS']]);
+
+export const AREA_PROPER_NOUNS = [...STATE_NAMES, ...REGION_NAMES];
+
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const nameKey = (s) => s.toLowerCase().split(/[\s-]+/).join(' ');
+const NAME_BY_KEY = new Map(AREA_PROPER_NOUNS.map(n => [nameKey(n), n]));
+// One alternation, longest first: at each position the regex takes the first
+// alternative that matches, so "North Carolina" beats "north", "Pacific
+// Northwest" beats "Pacific", "West Virginia" beats "Virginia", and a matched
+// name is never rescanned for a shorter one inside it.
+const NAME_RE = new RegExp(`(?<!\\w)(?:${[...AREA_PROPER_NOUNS]
+    .sort((a, b) => b.length - a.length)
+    .map(n => n.split(/[\s-]+/).map(escRe).join('[\\s-]+'))
+    .join('|')})(?!\\w)`, 'gi');
+const capWord = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+// The words a suffix may follow: the last word of every listed name, a
+// postal code ("lower MS Valley"), and the suffixes themselves once
+// capitalised ("Connecticut River Valley").
+const NAME_LAST_WORDS = new Set([
+    ...AREA_PROPER_NOUNS.map(n => n.split(/[\s-]+/).pop()),
+    ...POSTAL_CODES, ...WORDLIKE_CODES,
+    ...[...NAME_SUFFIXES].map(capWord),
+]);
+const SUFFIX_RE = /(?<=(?<!\w)([A-Z]\w*)[\s-]+)([a-z]+)(?!\w)/g;
+// A compass region followed by a name (or a postal code) is an adjective.
+const COMPASS_REGION_RE = /(?<!Pacific[\s-]+)\b(Northeast|Northwest|Southeast|Southwest)(?=[\s-]+[A-Z])/g;
+
+// Lowercased prose with the proper names restored; no sentence casing.
+// Plain text in, plain text out — the caller escapes.
+export function caseArea(text) {
+    let s = String(text ?? '')
+        .replace(/\s*\.{2,}\s*/g, ', ')    // SPC's "..." joins
+        .replace(/\s+/g, ' ')
+        .replace(/^[,\s]+|[,\s]+$/g, '')
+        .toLowerCase();
+    if (!s) return '';
+    s = s.replace(NAME_RE, (m) => {
+        const canon = NAME_BY_KEY.get(nameKey(m));
+        if (!canon) return m;
+        const words = canon.split(/[\s-]+/);
+        let i = 0;
+        return m.replace(/[^\s-]+/g, () => words[i++] ?? '');
+    });
+    s = s.replace(/(?<![\w.])[a-z]{2}(?![\w.])/g, (m) => (POSTAL_CODES.has(m.toUpperCase()) ? m.toUpperCase() : m));
+    s = s.replace(/(?<=(?<!\w)[A-Z]{2}\/)[a-z]{2}(?!\w)|(?<!\w)[a-z]{2}(?=\/[A-Z]{2}(?!\w))/g,
+        (m) => (WORDLIKE_CODES.has(m.toUpperCase()) ? m.toUpperCase() : m));
+    // Suffix words after a name or code ("western Tennessee valleys" ->
+    // Valleys); repeated so a chain resolves left to right.
+    for (let prev = null; prev !== s;) {
+        prev = s;
+        s = s.replace(SUFFIX_RE, (word, name) =>
+            (NAME_SUFFIXES.has(word) && NAME_LAST_WORDS.has(name) ? capWord(word) : word));
+    }
+    s = s.replace(/(?<![\w.])(?:u\.s|us|conus)(?!\w)/g, (m) => ACRONYMS.get(m) ?? m);
+    s = s.replace(COMPASS_REGION_RE, (m) => m.toLowerCase());
+    return s;
+}
+
+// Words that already make the tail read as a sentence after "Risk of severe
+// thunderstorms". Anything else ("PORTIONS OF THE OHIO VALLEY", swody1 of Aug
+// 15) is a bare place and gets "across", SPC's own usual preposition.
+const AREA_LEAD = /^(?:today|tonight|tomorrow|this|through|across|over|for|from|in|into|along|near|around|within|on|at|between|off|during|late|early|mainly|mostly|primarily|especially|by|with)\b/i;
+
+// The risk line under the categorical word, as one sentence:
+//   "Risk of severe thunderstorms today across parts of southeastern
+//    Pennsylvania, much of Delaware, adjacent eastern Maryland and southern
+//    through central New Jersey."
+// Accepts a parseRiskCategory result; falls back to `regions` for a risk
+// object built without `area`. Plain text — the caller escapes.
+export function riskAreaLine(risk) {
+    const raw = risk?.area ?? risk?.regions ?? '';
+    const area = caseArea(raw).replace(/[.,;:\s]+$/, '');
+    if (!area) return 'Risk of severe thunderstorms.';
+    return `Risk of severe thunderstorms ${AREA_LEAD.test(area) ? '' : 'across '}${area}.`;
+}
+
+// A rail caption from `regions`: the same casing, sentence-cased.
+export function areaCaption(regions) {
+    const s = caseArea(regions);
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : null;
 }
 
 // Dot-prefixed structural markers: section headers ("...SUMMARY...",
@@ -164,6 +308,16 @@ const PREV_DISCUSSION = /^\s*\.{1,3}PREV DISCUSSION/im;
 // sentence. If that empties the list, the caller's summary fallback covers it.
 const REISSUE_PREAMBLE = /^(?:the )?previous (?:forecast|outlook|discussion)\b.{0,120}?\b(?:remains?|see below|on track|unchanged)\b/i;
 
+// The other shape of reissue housekeeping: a 20Z update that says what (if
+// anything) changed and then sends the reader to the discussion below — the
+// PREV block we cut, so the pointer dangles. Every 20Z Day 1 of Nov 5–12 2026
+// that the preamble rule missed ended this way ("No changes are needed to the
+// current D1 Convective Outlook. See previous discussion below for more
+// information."). Same whole-paragraph policy; an update paragraph with real
+// meteorology and no pointer (Nov 8: "The Marginal Risk along the lower Texas
+// coast was removed...") is kept.
+const REISSUE_POINTER = /\bsee (?:the )?(?:previous|prior) (?:discussion|outlook|forecast) below\b/i;
+
 // Narrative paragraphs AFTER the ...SUMMARY... block — the standfirst already
 // covers the summary, so the running copy must never repeat it (spec §5).
 export function parseDiscussionBody(productText) {
@@ -193,7 +347,7 @@ export function parseDiscussionBody(productText) {
             .replace(/\s+/g, ' ')
             .trim())
         .filter(p => p.length >= 40 && !/^(ATTN|\.\.\.)/.test(p))
-        .filter(p => !REISSUE_PREAMBLE.test(p))
+        .filter(p => !REISSUE_PREAMBLE.test(p) && !REISSUE_POINTER.test(p))
         .slice(0, 3);
 }
 
@@ -216,6 +370,16 @@ export function formatExpiry(iso, tz) {
     } catch { return null; }
 }
 
+// What /api/national-lede may return and api/national-desk.js will embed: one
+// definition, so the page never rejects an answer the endpoint cached (the
+// page would then sit on its short cache window for the whole issuance).
+// Generous on purpose: the prompt asks for short paragraphs, so the longest
+// discussion measured (3,179 characters, ~24 sentences) can fairly come back
+// as a dozen. The output-token ceilings bound the sizes long before these do.
+export const LEDE_DECK_MAX_CHARS = 2000;
+export const LEDE_COPY_MAX_PARAS = 20;
+export const LEDE_COPY_MAX_CHARS = 16000;
+
 // Fixed SPC Day-1 issuance slots (UTC). Next slot strictly after `nowIso`.
 const SPC_SLOTS = [1, 6, 13, 16.5, 20]; // 0100, 0600, 1300, 1630, 2000 UTC
 export function nextOutlookTime(nowIso) {
@@ -224,4 +388,39 @@ export function nextOutlookTime(nowIso) {
     const next = SPC_SLOTS.find(s => s > nowH) ?? SPC_SLOTS[0];
     const h = Math.floor(next), m = Math.round((next - h) * 60);
     return `${String(h).padStart(2, '0')}${String(m).padStart(2, '0')} UTC`;
+}
+
+// The same slot as an instant (ISO string), rolling to tomorrow's 0100 UTC
+// after the day's last slot — what a <time datetime> needs. Null on a bad date.
+export function nextOutlookAt(nowIso) {
+    const d = new Date(nowIso);
+    if (Number.isNaN(d.getTime())) return null;
+    const nowH = d.getUTCHours() + d.getUTCMinutes() / 60;
+    const i = SPC_SLOTS.findIndex(s => s > nowH);
+    const slot = i === -1 ? SPC_SLOTS[0] : SPC_SLOTS[i];
+    const h = Math.floor(slot), m = Math.round((slot - h) * 60);
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + (i === -1 ? 1 : 0), h, m)).toISOString();
+}
+
+// The page is national and CDN-cached, so the server cannot know a reader's
+// zone: it prints US Eastern, and /js/national.js re-renders each <time> in
+// the reader's own zone. Built from formatToParts, not toLocaleString, so the
+// separator before AM/PM is always a plain space (newer ICU emits U+202F).
+export const DESK_TIME_ZONE = 'America/New_York';
+
+// "12:23 AM EST", or null — never a broken string — for a missing or
+// unparseable timestamp (`new Date(null)` is the epoch, not Invalid Date).
+export function formatClock(iso, timeZone = DESK_TIME_ZONE) {
+    if (!iso) return null;
+    try {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return null;
+        const parts = {};
+        for (const p of new Intl.DateTimeFormat('en-US', {
+            timeZone, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short',
+        }).formatToParts(d)) parts[p.type] = p.value;
+        if (!parts.hour || !parts.minute || !parts.dayPeriod) return null;
+        return `${parts.hour}:${parts.minute} ${parts.dayPeriod.toUpperCase()}`
+            + (parts.timeZoneName ? ` ${parts.timeZoneName}` : '');
+    } catch { return null; }
 }

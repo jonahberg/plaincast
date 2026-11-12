@@ -56,7 +56,7 @@ function AlertLead({ id }) {
         <div className="mb-3">
             <p className="mb-1 text-xs font-medium text-muted-foreground">
                 In plain English · via{' '}
-                <a className="underline underline-offset-2" href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a>
+                <a className="tap-target underline underline-offset-2" href="https://www.anthropic.com/claude/haiku" target="_blank" rel="noopener noreferrer">Claude</a>
             </p>
             <div className="plain-prose" dangerouslySetInnerHTML={{ __html: state.html }} />
         </div>
@@ -94,13 +94,16 @@ export function AlertsSection({ alerts, office, sectionRef }) {
     const now = Date.now();
 
     return (
-        <section ref={sectionRef} id="section-active-alerts" className="scroll-mt-20">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Active alerts</CardTitle>
-                    <CardDescription>{describe(groups, alerts.length, tz)}</CardDescription>
+        // Alerts stay a card (a UI object, not prose), tightened to the
+        // reading column. The h2 keeps heading order legal for the alert
+        // rows' accordion h3s.
+        <section ref={sectionRef} id="section-active-alerts" className="scroll-mt-20 pt-6 pb-10">
+            <Card className="gap-3 py-5">
+                <CardHeader className="px-5">
+                    <CardTitle><h2>Active alerts</h2></CardTitle>
+                    <CardDescription className="text-[13px]">{describe(groups, alerts.length, tz)}</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-5">
                     <Accordion type="single" collapsible value={expanded} onValueChange={setExpanded}>
                         {groups.map((group) => {
                             const kind = classifyAlertKind(group.event);

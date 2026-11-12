@@ -16,7 +16,7 @@ function JargonTerm({ text, tip }) {
                     role="button"
                     aria-label={`${text}: ${tip}`}
                     onClick={() => setOpen(o => !o)}
-                    className="cursor-help underline decoration-dotted underline-offset-4"
+                    className="cursor-help underline decoration-brand decoration-dotted underline-offset-4"
                 >
                     {text}
                 </span>
@@ -30,7 +30,7 @@ function JargonTerm({ text, tip }) {
 export const JargonText = memo(function JargonText({ text }) {
     const segments = useMemo(() => annotateSegments(text), [text]);
     return (
-        <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-4 font-mono text-xs leading-6">
+        <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-4 font-mono text-[13px] leading-[1.6]">
             {segments.map((seg, i) =>
                 seg.type === 'jargon' ? (
                     <JargonTerm key={i} text={seg.text} tip={seg.tip} />

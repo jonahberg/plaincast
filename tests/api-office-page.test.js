@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { memoryBackend, recordFetches } from './shared-cache-backend.js';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +39,10 @@ mock.module('../api/_utils.js', () => ({
 const { default: handler, buildSsrHtml, pickSections, sectionParagraphs, validEdition, pinEditionMeta } = await import('../api/office-page.js');
 const { renderOfficePage } = await import('../scripts/build-offices.mjs');
 const { extractSections } = await import('../api/_afd-sections.js');
+const { __setSharedCacheBackendForTests, translationKey, changelogKey } = await import('../api/_shared-cache.js');
+
+// The shared store is module state shared by every test file: always reset.
+afterEach(() => __setSharedCacheBackendForTests(null));
 
 // The production shell is the shadcn app shell (scripts/app-shell.mjs) —
 // the same bytes committed as api/_home-shell.html.
@@ -128,7 +133,10 @@ describe('GET /api/office-page (SSR /o/<CODE>/ pages)', () => {
 
         expect(res.statusCode).toBe(200);
         expect(res.headers['content-type']).toContain('text/html');
-        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        // No VERCEL_* env here, so the boot block carries no AI translations
+        // and the page takes the short CDN window (see the boot-data suite
+        // below for the full window with translations embedded).
+        expect(res.headers['cache-control']).toBe('public, s-maxage=120, stale-while-revalidate=3600');
 
         // real prose, abbreviations expanded by regexTranslate (chc→chance, csts→coasts)
         expect(res.body).toContain('<article class="forecast-section ssr">');
@@ -388,5 +396,210 @@ describe('GET /o/<CODE>/ with Accept: text/markdown', () => {
         expect(res.statusCode).toBe(404);
         expect(res.body).toContain('sitemap.xml');
         expect(res.body).not.toBe('Not found');
+    });
+});
+
+// ─── Boot data (one-pass load) ──────────────────────────────────────
+// The page embeds the edition it fetched, plus the AI translations and
+// changelog sentence the AI endpoints already stored in the shared store
+// (api/_boot.js → api/_shared-cache.js), so the app's first paint is the
+// finished page. These tests inject an in-memory backend and record global
+// fetch: the upstream fetchers are module-mocked above, so a render must
+// make no HTTP call at all (in particular none to its own /api/).
+describe('GET /o/<CODE>/ boot data', () => {
+    let backend;
+    let fetches;
+
+    function bootOf(html) {
+        const m = html.match(/<script type="application\/json" id="plaincast-boot">([^<]*)<\/script>/);
+        return m ? JSON.parse(m[1]) : null;
+    }
+
+    beforeEach(() => {
+        mockListThrows = false;
+        backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        fetches = recordFetches();
+    });
+    afterEach(() => fetches.restore());
+
+    it('embeds the product it served, before the app script, as inert JSON', async () => {
+        setScenario();
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const boot = bootOf(res.body);
+        expect(boot).not.toBe(null);
+        expect(boot.v).toBe(1);
+        expect(boot.office).toBe('LOX');
+        expect(boot.product.id).toBe(mockItems[0].id);
+        expect(boot.product.productText).toBe(CURR);
+        expect(boot.product.issuanceTime).toBe('2026-07-03T11:40:00+00:00');
+        // Nothing in the store yet: no translations, and the short window.
+        expect(boot.translations).toBe(null);
+        expect(boot.translationsComplete).toBe(false);
+        expect('changelog' in boot).toBe(false);
+        expect(res.headers['cache-control']).toBe('public, s-maxage=120, stale-while-revalidate=3600');
+        // Outside <main>, right before the module script.
+        expect(res.body).toMatch(/<\/script>\n {4}<script type="module" crossorigin src="\/assets\/app\.js"><\/script>/);
+        expect(res.body.indexOf('id="plaincast-boot"')).toBeGreaterThan(res.body.lastIndexOf('</main>'));
+    });
+
+    it('the only inline scripts are data blocks (CSP script-src \'self\' stays sufficient)', async () => {
+        setScenario();
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const inline = [...res.body.matchAll(/<script\b([^>]*)>/g)].map(m => m[1]).filter(attrs => !/\bsrc=/.test(attrs));
+        expect(inline.length).toBeGreaterThan(0);
+        for (const attrs of inline) {
+            expect(attrs).toMatch(/type="application\/(?:ld\+)?json"/);
+        }
+    });
+
+    it('serialises </script>, <!--, & and U+2028/2029 in the forecast text safely', async () => {
+        const nasty = CURR.replace('Low clouds and fog',
+            'Low </script><script>alert(1)</script> <!-- & \u2028\u2029 fog');
+        setScenario({ curr: nasty });
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const m = res.body.match(/<script type="application\/json" id="plaincast-boot">([\s\S]*?)<\/script>/);
+        expect(m).not.toBe(null);
+        const raw = m[1];
+        expect(raw).not.toContain('<');
+        expect(raw).not.toContain('>');
+        expect(raw).not.toContain('&');
+        expect(raw).not.toMatch(/[\u2028\u2029]/);
+        // …and it still round-trips to the exact text.
+        expect(JSON.parse(raw).product.productText).toBe(nasty);
+        // The block ends where it should: the app script still follows it.
+        expect(res.body).toContain('src="/assets/app.js"');
+        expect(res.body).not.toContain('<script>alert(1)</script>');
+    });
+
+    it('embeds complete translations + the changelog and keeps the full CDN window', async () => {
+        setScenario();
+        const id = mockItems[0].id;
+        backend.seed(translationKey('LOX', id), {
+            office: 'LOX', id, complete: true, productText: CURR,
+            sections: { Synopsis: 'Fog **near the coast**.', 'Short Term': 'Warmer.', Bogus: 42 },
+        });
+        backend.seed(changelogKey('LOX', id), {
+            office: 'LOX', id, changelog: 'Warmer this weekend.', since: '2026-07-03T05:38:00+00:00', updated: '2026-07-03T11:40:00Z',
+        });
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const boot = bootOf(res.body);
+        expect(boot.translations).toEqual({ Synopsis: 'Fog **near the coast**.', 'Short Term': 'Warmer.' });
+        expect(boot.translationsComplete).toBe(true);
+        expect(boot.changelog).toEqual({ changelog: 'Warmer this weekend.', since: '2026-07-03T05:38:00+00:00', updated: '2026-07-03T11:40:00Z' });
+        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        // Two store reads keyed by this office + edition; no HTTP call at all.
+        expect(backend.reads.sort()).toEqual([changelogKey('LOX', id), translationKey('LOX', id)].sort());
+        expect(fetches.calls).toEqual([]);
+    });
+
+    it('a partial translation is embedded but flagged incomplete, with the short window', async () => {
+        // The endpoint only stores complete runs; this pins pickTranslations
+        // for an entry that is not (an older writer, a corrupt value).
+        setScenario();
+        backend.seed(translationKey('LOX', mockItems[0].id), { office: 'LOX', id: mockItems[0].id, complete: false, sections: { Synopsis: 'Fog.' } });
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        const boot = bootOf(res.body);
+        expect(boot.translations).toEqual({ Synopsis: 'Fog.' });
+        expect(boot.translationsComplete).toBe(false);
+        expect(res.headers['cache-control']).toBe('public, s-maxage=120, stale-while-revalidate=3600');
+    });
+
+    it('a failing or hanging store renders exactly the page plus the product block', async () => {
+        const strip = (html) => html.replace(/<script type="application\/json" id="plaincast-boot">[^<]*<\/script>\n {4}/, '');
+        setScenario();
+        const plain = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), plain); // empty store
+        for (const broken of [
+            { get: async () => { throw new Error('store down'); }, set: async () => {} },
+            { get: () => new Promise(() => {}), set: async () => {} }, // hangs: the guard timeout ends it
+        ]) {
+            __setSharedCacheBackendForTests(broken);
+            const res = createRes();
+            await handler(createReq({ query: { code: 'LOX' } }), res);
+            const boot = bootOf(res.body);
+            expect(boot.translations).toBe(null);
+            expect(boot.translationsComplete).toBe(false);
+            expect('changelog' in boot).toBe(false);
+            expect(res.headers['cache-control']).toBe('public, s-maxage=120, stale-while-revalidate=3600');
+            expect(strip(res.body)).toBe(strip(plain.body));
+        }
+        expect(fetches.calls).toEqual([]);
+    });
+
+    it('a translation for another edition, or a changelog for another issuance, is not embedded', async () => {
+        setScenario();
+        const id = mockItems[0].id;
+        // Under this edition's keys but naming something else (a corrupt or
+        // colliding entry): rejected by the same-office/id and same-issuance checks.
+        backend.seed(translationKey('LOX', id), { office: 'LOX', id: 'some-other-id', complete: true, sections: { Synopsis: 'x' } });
+        backend.seed(changelogKey('LOX', id), { office: 'LOX', id, changelog: 'Old news.', updated: '2026-07-02T23:00:00Z' });
+        let res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        let boot = bootOf(res.body);
+        expect(boot.translations).toBe(null);
+        expect('changelog' in boot).toBe(false);
+
+        // Under another edition's or another office's keys: never read for this page.
+        backend.store.clear();
+        backend.seed(translationKey('LOX', 'some-other-id'), { office: 'LOX', id: 'some-other-id', complete: true, sections: { Synopsis: 'x' } });
+        backend.seed(translationKey('OKX', id), { office: 'OKX', id, complete: true, sections: { Synopsis: 'x' } });
+        backend.seed(changelogKey('OKX', id), { office: 'OKX', id, changelog: 'Elsewhere.', updated: '2026-07-03T11:40:00+00:00' });
+        res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        boot = bootOf(res.body);
+        expect(boot.translations).toBe(null);
+        expect('changelog' in boot).toBe(false);
+    });
+
+    it('a definitive "nothing changed" changelog is embedded as null; a transient one is not', async () => {
+        setScenario();
+        const key = changelogKey('LOX', mockItems[0].id);
+        backend.seed(key, { office: 'LOX', id: mockItems[0].id, changelog: null, since: null, updated: '2026-07-03T11:40:00+00:00' });
+        let res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        expect(bootOf(res.body).changelog).toEqual({ changelog: null, since: null, updated: '2026-07-03T11:40:00+00:00' });
+
+        backend.seed(key, { changelog: null, transient: true });
+        res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        expect('changelog' in bootOf(res.body)).toBe(false);
+    });
+
+    it('?edition= permalinks and the ?view=changelog ledger carry no block and keep the full window', async () => {
+        for (const query of [{ code: 'LOX', edition: 'a1b2c3d4-5566-7788-99aa-bbccddeeff00' }, { code: 'LOX', view: 'changelog' }]) {
+            setScenario();
+            const res = createRes();
+            await handler(createReq({ query }), res);
+            expect(res.statusCode).toBe(200);
+            expect(res.body).not.toContain('id="plaincast-boot"');
+            expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        }
+        expect(backend.reads).toEqual([]);
+        expect(fetches.calls).toEqual([]);
+    });
+
+    it('the baked fallback (NWS down) carries no block and is still byte-identical', async () => {
+        mockListThrows = true;
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        expect(res.body).toBe(BAKED_LOX);
+        expect(res.body).not.toContain('plaincast-boot');
+    });
+
+    it('Markdown is unaffected: no store read, no block, the full window', async () => {
+        setScenario({ prev: PREV });
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' }, headers: { accept: 'text/markdown' } }), res);
+        expect(res.headers['content-type']).toBe('text/markdown; charset=utf-8');
+        expect(res.body).not.toContain('plaincast-boot');
+        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        expect(backend.reads).toEqual([]);
+        expect(fetches.calls).toEqual([]);
     });
 });

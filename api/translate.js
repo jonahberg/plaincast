@@ -334,8 +334,25 @@ function localParts(date, timeZone) {
     };
 }
 
-export function annotateZuluTimes(text, office, issuanceTime) {
-    const timeZone = OFFICE_TIMEZONES[office];
+// Opt-in options (no existing caller passes them, so office callers behave
+// exactly as before):
+//   timeZone     an explicit IANA zone instead of the office's (the National
+//                Desk is national, so it annotates in America/New_York).
+//   weekdayPins  a weekday written right after the token ("by 12Z Friday",
+//                SPC's habit) pins its UTC day, the way a DD/ prefix does.
+//                Without it, "12Z Friday" in a Thursday-night product is
+//                annotated as Thursday morning. The annotation then follows
+//                the weekday and always names the local day:
+//                "12Z Friday (7 AM EST Fri)", "00Z Friday (7 PM EST Thu)".
+const ZULU_WEEKDAY = 'Sun(?:day)?|Mon(?:day)?|Tue(?:s(?:day)?)?|Wed(?:nesday)?|Thu(?:r(?:s(?:day)?)?)?|Fri(?:day)?|Sat(?:urday)?';
+// The trailing lookaheads keep an already-annotated "12Z Friday (...)" whole.
+const ZULU_WEEKDAY_RE = new RegExp(
+    `(?<![\\w.])(?:(\\d{1,2})\\/)?(\\d{4}|\\d{1,2})(?:[-\\u2013](\\d{4}|\\d{1,2}))?Z\\b`
+    + `(?:[ \\t]+(${ZULU_WEEKDAY})\\b(?!\\s*\\())?(?!\\s*\\()(?![ \\t]+(?:${ZULU_WEEKDAY})\\b\\s*\\()`, 'gi');
+const WEEKDAY_PREFIX = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOverride, weekdayPins = false } = {}) {
+    const timeZone = zoneOverride || OFFICE_TIMEZONES[office];
     if (!timeZone || typeof text !== 'string') return text;
     const base = getSafeIssueDate(issuanceTime);
     const issueDateKey = localParts(base, timeZone).dateKey;
@@ -359,27 +376,40 @@ export function annotateZuluTimes(text, office, issuanceTime) {
         }
         return null;
     };
+    // The first UTC instant at that clock time on the named UTC weekday, from
+    // the same 1 h lookback as an unpinned token.
+    const onWeekday = ({ h, m }, wd) => {
+        let t = firstAtOrAfter({ h, m }, base.getTime() - ZULU_LOOKBACK_MS);
+        for (let i = 0; i < 7 && new Date(t).getUTCDay() !== wd; i++) t += DAY_MS;
+        return t;
+    };
     const label = (p, withDay = true) => `${p.clock} ${p.ampm} ${p.tz}`
         + (withDay && p.dateKey !== issueDateKey ? ` ${p.weekday}` : '');
 
-    return text.replace(ZULU_RE, (tok, dd, t1, t2, offset, whole) => {
+    const re = weekdayPins ? ZULU_WEEKDAY_RE : ZULU_RE;
+    return text.replace(re, (tok, dd, t1, t2, ...rest) => {
+        // ZULU_WEEKDAY_RE has one more capture group (the weekday) than ZULU_RE.
+        const [wdName, offset, whole] = weekdayPins ? rest : [undefined, ...rest];
         const c1 = parseZuluClock(t1);
         const c2 = t2 === undefined ? null : parseZuluClock(t2);
         if (!c1 || (t2 !== undefined && !c2)) return tok;
         const dom = dd === undefined ? null : Number(dd);
         if (dom !== null && (dom < 1 || dom > 31)) return tok;
+        const wd = wdName === undefined ? -1 : WEEKDAY_PREFIX.indexOf(wdName.slice(0, 3).toLowerCase());
+        const pinned = wd !== -1 && dom === null;
         const tafLabel = /^\s*TAFS?\b/i.test(whole.slice(offset + tok.length));
         const start = (dom !== null ? onDayOfMonth(c1, dom) : null)
+            ?? (pinned ? onWeekday(c1, wd) : null)
             ?? (tafLabel ? nearest(c1) : firstAtOrAfter(c1, base.getTime() - ZULU_LOOKBACK_MS));
         const p1 = localParts(new Date(start), timeZone);
-        if (!c2) return `${tok} (${label(p1)})`;
+        if (!c2) return `${tok} (${pinned ? `${p1.clock} ${p1.ampm} ${p1.tz} ${p1.weekday}` : label(p1)})`;
         const p2 = localParts(new Date(firstAtOrAfter(c2, start)), timeZone);
         let local;
         if (p1.tz === p2.tz && p1.dateKey === p2.dateKey) {
             const span = p1.ampm === p2.ampm
                 ? `${p1.clock}-${p2.clock} ${p1.ampm}`
                 : `${p1.clock} ${p1.ampm}-${p2.clock} ${p2.ampm}`;
-            local = `${span} ${p1.tz}` + (p1.dateKey !== issueDateKey ? ` ${p1.weekday}` : '');
+            local = `${span} ${p1.tz}` + (pinned || p1.dateKey !== issueDateKey ? ` ${p1.weekday}` : '');
         } else {
             local = `${label(p1)}-${label(p2)}`;
         }
@@ -426,8 +456,8 @@ const WEEKDAY_DATE_RE = new RegExp(
 // calendar coincidences further out (Nov 22 2026 IS a Sunday) outside it.
 const DATE_WINDOW = { before: 1, after: 8 }; // days around the LOCAL issuance date
 
-function forecastWindow(office, issuanceTime) {
-    const timeZone = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
+function forecastWindow(office, issuanceTime, zoneOverride) {
+    const timeZone = zoneOverride || OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
     const [y, m, d] = localParts(getSafeIssueDate(issuanceTime), timeZone).dateKey.split('-').map(Number);
     const days = [];
     for (let off = -DATE_WINDOW.before; off <= DATE_WINDOW.after; off++) {
@@ -439,10 +469,10 @@ function forecastWindow(office, issuanceTime) {
 
 // A pair is kept only if that month/day falls on that weekday inside the
 // window; otherwise the date goes and the weekday (and its bold) stays.
-function fixWeekdayDates(text, office, issuanceTime) {
+function fixWeekdayDates(text, office, issuanceTime, timeZone) {
     let days = null;
     return text.replace(WEEKDAY_DATE_RE, (match, weekday, boldClose, bMonth, bDay, bYear, pMonth, pDay, pYear) => {
-        days ??= forecastWindow(office, issuanceTime);
+        days ??= forecastWindow(office, issuanceTime, timeZone);
         const month = MONTH_INDEX[bMonth ?? pMonth];
         const day = Number(bDay ?? pDay);
         const year = bYear ?? pYear;
@@ -503,12 +533,20 @@ function stripAsides(text) {
     return out;
 }
 
-export function sanitizeTranslation(text, { office, issuanceTime } = {}) {
+// `timeZone` (optional) dates the forecast window in an explicit zone rather
+// than the office's — the National Desk passes America/New_York. Office
+// callers do not pass it and behave as before.
+// Its output is stored in the shared cache (translate-issuance, national-lede):
+// bump the version in api/_shared-cache.js when this output's rules change.
+export function sanitizeTranslation(text, { office, issuanceTime, timeZone } = {}) {
     if (typeof text !== 'string' || !text) return text;
-    const out = fixWeekdayDates(stripAsides(text), office, issuanceTime);
+    const out = fixWeekdayDates(stripAsides(text), office, issuanceTime, timeZone);
     return out.trim() ? out : text; // never blank a translation
 }
 
+// Translate-issuance results are stored in the shared cache, which survives
+// deploys: bump the version in api/_shared-cache.js when this output's rules
+// change.
 export function buildSystemPrompt({ section, office, issuanceTime }) {
     const calendarContext = getTranslationCalendarContext(office, issuanceTime);
 

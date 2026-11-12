@@ -35,7 +35,11 @@ describe('head tags follow the route (Back to / restores the homepage)', () => {
 
     it('load() resets per-office editions and severe posture', () => {
         const app = read('shadcn/src/App.jsx');
-        const load = app.slice(app.indexOf('const load = useCallback'), app.indexOf('const toState'));
+        // The resets that open load(), up to where it starts fetching.
+        const start = app.indexOf('const load = useCallback');
+        const load = app.slice(start, app.indexOf('loadAlerts(code, gen);', start));
+        expect(start).toBeGreaterThan(-1);
+        expect(load.length).toBeLessThan(1500);
         expect(load).toContain('setEditions([]);');
         expect(load).toContain('setSevere(false);');
     });
@@ -66,7 +70,9 @@ describe('ForecastSection AI status', () => {
     });
 
     it('the header title can wrap and shrink (no 320px overflow)', () => {
-        expect(src).toMatch(/<CardTitle className="flex min-w-0 flex-wrap/);
+        // Sections are ruled editorial blocks since Nov 11 2026: the title is
+        // a real <h2> (was CardTitle) and must still wrap and shrink.
+        expect(src).toMatch(/<h2 className="flex min-w-0 flex-wrap/);
     });
 
     it('passes the issuance time to the regex translation (Zulu dating)', () => {

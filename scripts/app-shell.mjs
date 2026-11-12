@@ -21,7 +21,8 @@ const CSS_MARKER = '<!--app-css-->';
 const PROD_HEAD =
     '<link rel="stylesheet" crossorigin href="/assets/app.css">\n' +
     '    <link rel="modulepreload" crossorigin href="/assets/vendor.js">';
-const PROD_SCRIPT = '<script type="module" crossorigin src="/assets/app.js"></script>';
+// Exported: api/_boot.js inserts the boot data block right before it.
+export const PROD_SCRIPT = '<script type="module" crossorigin src="/assets/app.js"></script>';
 
 export function buildAppShell(source = readFileSync(APP_SHELL_SOURCE, 'utf8')) {
     if (!source.includes(DEV_SCRIPT)) {

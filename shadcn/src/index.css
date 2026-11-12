@@ -3,8 +3,64 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Stock shadcn/ui theme — "neutral" base color, default radius. */
+/* ── Reading face: Source Serif 4 (OFL, self-hosted in docs/fonts, served at
+   /fonts/* — CSP font-src 'self'). Reading text only: the h1, the takeaway
+   lede, section titles, .plain-prose, the changelog sentences and the SSR
+   digest. All UI chrome stays on the system sans stack. The roman file is
+   preloaded from index.html; the italic is not. ── */
+@font-face {
+    font-family: 'Source Serif 4';
+    src: url('/fonts/source-serif-4-latin.woff2') format('woff2');
+    font-weight: 400 700;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+2022, U+2026, U+2032-2033, U+2192, U+2767;
+}
+@font-face {
+    font-family: 'Source Serif 4';
+    src: url('/fonts/source-serif-4-italic-latin.woff2') format('woff2');
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+2022, U+2026, U+2032-2033, U+2192, U+2767;
+}
+
+/* Metric-matched fallback: Georgia re-proportioned to Source Serif 4 so the
+   swap does not reflow lines. size-adjust = frequency-weighted average
+   advance of English text (SS4 wght 400 @ opsz 17: 0.4612 em; Georgia:
+   0.4418 em); the overrides are SS4's ascent/descent (1.036 / 0.335 em)
+   divided by size-adjust, because the browser scales them by it. The bold
+   face matches SS4 600 against Georgia Bold the same way (0.4681 / 0.5141).
+   Measured with fontTools; harmless where Georgia is absent. */
+@font-face {
+    font-family: 'Plaincast Serif Fallback';
+    src: local('Georgia');
+    font-weight: 400;
+    font-style: normal;
+    size-adjust: 104.39%;
+    ascent-override: 99.24%;
+    descent-override: 32.09%;
+    line-gap-override: 0%;
+}
+@font-face {
+    font-family: 'Plaincast Serif Fallback';
+    src: local('Georgia Bold'), local('Georgia-Bold');
+    font-weight: 600 700;
+    font-style: normal;
+    size-adjust: 91.05%;
+    ascent-override: 113.78%;
+    descent-override: 36.79%;
+    line-gap-override: 0%;
+}
+
+/* Stock shadcn/ui theme — "neutral" base color, default radius — plus one
+   accent, --brand (teal), and the reading font stack. */
 :root {
+    --font-reading: 'Source Serif 4', 'Plaincast Serif Fallback', Georgia, serif;
+    /* Teal: links in prose and the intro block, the active section-nav item,
+       the "since the last update" rule, takeaway list markers, jargon
+       underlines and focus rings. Nothing else. Buttons stay --primary. */
+    --brand: #0f766e;
     --radius: 0.625rem;
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
@@ -23,7 +79,8 @@
     --destructive: oklch(0.577 0.245 27.325);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    /* Solid brand: the shadcn components already apply ring-ring/50. */
+    --ring: #0f766e;
     --chart-1: oklch(0.646 0.222 41.116);
     --chart-2: oklch(0.6 0.118 184.704);
     --chart-3: oklch(0.398 0.07 227.392);
@@ -32,6 +89,7 @@
 }
 
 .dark {
+    --brand: #2dd4bf;
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
@@ -49,7 +107,7 @@
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --ring: #2dd4bf;
     --chart-1: oklch(0.488 0.243 264.376);
     --chart-2: oklch(0.696 0.17 162.48);
     --chart-3: oklch(0.769 0.188 70.08);
@@ -81,6 +139,11 @@
     --color-chart-3: var(--chart-3);
     --color-chart-4: var(--chart-4);
     --color-chart-5: var(--chart-5);
+    --color-brand: var(--brand);
+
+    --font-serif: var(--font-reading);
+    /* The reading column: header, page content and footer share its edges. */
+    --container-reading: 46rem;
 
     --radius-sm: calc(var(--radius) - 4px);
     --radius-md: calc(var(--radius) - 2px);
@@ -98,63 +161,175 @@
 }
 
 @layer components {
-    /* Rendered plain-English translation HTML (from lib/afd.js) */
+    /* Rendered plain-English translation HTML (from lib/afd.js and the AI
+       endpoints). The reading measure: 17px / 1.7 Source Serif 4, ~68
+       characters a line. Lining, proportional figures (longhand
+       font-variant-numeric only — never the font-variant shorthand). */
     .plain-prose {
-        @apply text-sm leading-7;
+        max-width: 65ch;
+        font-family: var(--font-reading);
+        font-size: 1.0625rem;
+        line-height: 1.7;
+        font-variant-numeric: lining-nums proportional-nums;
+        text-wrap: pretty;
     }
     .plain-prose p {
-        @apply mb-4 last:mb-0;
+        margin: 0 0 1.1em;
+    }
+    .plain-prose > :last-child {
+        margin-bottom: 0;
     }
     .plain-prose strong {
-        @apply font-semibold;
+        @apply font-semibold text-foreground;
+    }
+    .plain-prose a {
+        @apply text-brand underline decoration-brand/40 underline-offset-[3px] hover:decoration-brand;
     }
     .plain-prose h3 {
-        @apply mt-5 mb-2 text-base font-semibold tracking-tight;
+        margin: 1.6em 0 0.5em;
+        font-size: 1.125rem;
+        line-height: 1.4;
+        @apply font-semibold tracking-tight;
     }
+    .plain-prose ul,
+    .plain-prose ol {
+        margin: 0 0 1.1em;
+        padding-left: 1.25em;
+    }
+    .plain-prose ul { @apply list-disc; }
+    .plain-prose ol { @apply list-decimal; }
+    .plain-prose li + li { margin-top: 0.35em; }
 
-    /* Key takeaway: Key Messages split into real list items (lib/afd.js
-       splitTakeawayItems) */
+    /* The key takeaway, set as the page's lede directly under the h1. A
+       single sentence is the big lede; Key Messages split into a list
+       (lib/afd.js splitTakeawayItems, markup parity-locked) set a step
+       smaller with brand-coloured markers. */
+    .takeaway-lede {
+        max-width: 34em;
+        font-family: var(--font-reading);
+        font-size: 1.1875rem;
+        line-height: 1.45;
+        font-variant-numeric: lining-nums proportional-nums;
+        text-wrap: pretty;
+        @apply text-foreground;
+    }
+    .takeaway-lede.is-list {
+        font-size: 1.125rem;
+        line-height: 1.5;
+    }
+    @media (min-width: 640px) {
+        .takeaway-lede:not(.is-list) { font-size: 1.375rem; }
+    }
+    .takeaway-lede strong {
+        @apply font-semibold;
+    }
+    .takeaway-lede p + p,
+    .takeaway-lede p + .takeaway-list,
+    .takeaway-lede .takeaway-list + p {
+        margin-top: 0.75em;
+    }
     .takeaway-list {
-        @apply my-1 space-y-1.5 pl-5;
+        padding-left: 1.25em;
+    }
+    .takeaway-list li + li {
+        margin-top: 0.6em;
+    }
+    .takeaway-list li {
+        padding-left: 0.25em;
+    }
+    .takeaway-list li::marker {
+        @apply text-brand;
     }
     ul.takeaway-list {
         @apply list-disc;
     }
     ol.takeaway-list {
         @apply list-decimal;
-    }
-    .takeaway-list li {
-        @apply pl-1;
+        font-variant-numeric: tabular-nums;
     }
 
     /* Server-rendered digest (#ssr-root): classes emitted by api/home.js and
        api/office-page.js buildSsrHtml — plain rules, since Tailwind cannot
        scan the api/ template strings. The React app removes this region on
-       mount; these styles are for crawlers, no-JS readers, and first paint. */
+       mount; these styles are for crawlers, no-JS readers, and first paint,
+       and mirror the app's first screen: same column, serif reading text,
+       sections as ruled editorial blocks. */
     #ssr-root .loading {
-        @apply mt-2 text-sm text-muted-foreground;
+        @apply mt-6 text-sm text-muted-foreground;
+    }
+    #ssr-root .ssr-standfirst,
+    #ssr-root .forecast-section.ssr p {
+        max-width: 65ch;
+        font-family: var(--font-reading);
+        font-size: 1.0625rem;
+        line-height: 1.7;
+        font-variant-numeric: lining-nums proportional-nums;
+        text-wrap: pretty;
     }
     #ssr-root .ssr-standfirst {
-        @apply mt-5 text-[15px] leading-7;
+        @apply mt-8;
     }
     #ssr-root .ssr-meta {
-        @apply mt-4 text-sm text-muted-foreground;
+        text-wrap: pretty;
+        @apply mt-6 text-[13px] leading-5 text-muted-foreground;
+    }
+    #ssr-root .ssr-standfirst + .ssr-meta {
+        @apply mt-4;
+    }
+    #ssr-root .ssr-changelog {
+        max-width: 65ch;
+        font-family: var(--font-reading);
+        font-size: 1.0625rem;
+        line-height: 1.6;
+        @apply mt-6 border-l-2 border-brand pl-4;
     }
     #ssr-root .forecast-section.ssr {
-        @apply mt-8 border-t pt-6;
+        @apply mt-10 border-t pt-10;
     }
     #ssr-root .forecast-section.ssr .section-title {
-        @apply text-lg font-semibold tracking-tight;
+        font-family: var(--font-reading);
+        font-size: 1.5rem;
+        line-height: 1.25;
+        @apply font-semibold tracking-[-0.015em];
     }
     #ssr-root .forecast-section.ssr p {
-        @apply mt-3 text-[15px] leading-7;
+        margin-top: 1.1em;
     }
-    #ssr-root .ssr-note,
-    #ssr-root .ssr-changelog {
-        @apply mt-6 text-sm text-muted-foreground;
+    #ssr-root .forecast-section.ssr .section-title + p {
+        @apply mt-5;
+    }
+    #ssr-root .ssr-note {
+        @apply mt-10 border-t pt-6 text-[13px] leading-5 text-muted-foreground;
     }
     #ssr-root a {
         @apply underline underline-offset-4 hover:text-foreground;
+    }
+    #ssr-root .ssr-standfirst a,
+    #ssr-root .ssr-changelog a,
+    #ssr-root .forecast-section.ssr a,
+    #ssr-root .ssr-note a {
+        @apply text-brand decoration-brand/40 hover:text-brand hover:decoration-brand;
+    }
+
+    /* Touch hit areas. On a coarse pointer every control gets at least a
+       44×44 CSS px target. `.tap-target` keeps the control's visual size
+       and grows an invisible ::after centred on it (never smaller than the
+       control itself); controls in rows that can afford it grow their own
+       box instead, with `pointer-coarse:` utilities in the component. A fine
+       pointer (desktop) is untouched. */
+    @media (pointer: coarse) {
+        .tap-target {
+            position: relative;
+        }
+        .tap-target::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: max(100%, 44px);
+            height: max(100%, 44px);
+            transform: translate(-50%, -50%);
+        }
     }
 
     /* "What changed" diff view (lib renderDiffHTML classes) */

@@ -1,13 +1,45 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
+const DOCS_FONTS = path.resolve(import.meta.dirname, '../docs/fonts');
+
+// Dev only: the reading face (Source Serif 4) is self-hosted in docs/fonts and
+// served at /fonts/* in production (scripts/prepare-deploy.mjs copies it into
+// dist). publicDir can only be one directory, so the dev server gets a tiny
+// read-only route for the same URLs. The CSS references the fonts by their
+// runtime URL (/fonts/...), never through the bundler, so the preload in
+// index.html and the @font-face in src/index.css always name one file.
+function docsFonts() {
+    return {
+        name: 'plaincast-docs-fonts',
+        apply: 'serve',
+        configureServer(server) {
+            server.middlewares.use('/fonts', (req, res, next) => {
+                const name = decodeURIComponent((req.url || '').split('?')[0]).replace(/^\/+/, '');
+                if (!/^[a-z0-9-]+\.woff2$/i.test(name)) return next();
+                const file = path.join(DOCS_FONTS, name);
+                if (!fs.existsSync(file)) return next();
+                res.setHeader('Content-Type', 'font/woff2');
+                fs.createReadStream(file).pipe(res);
+            });
+        },
+    };
+}
+
+// Dev only, opt-in: PLAINCAST_DEV_API=https://plaincast.live bun run dev
+// proxies GET /api/* (conditions, changelog, translate-issuance) to a deployed
+// site so the layout can be checked against real AI text. Anything else
+// (POST /api/translate) gets a 404 here and soft-falls back like an outage.
+const DEV_API = process.env.PLAINCAST_DEV_API;
+
 // The app imports the canonical data modules from ../docs/js (glossary,
 // offices, abbreviations, timeline) — single source of truth, so allow the
 // dev server to reach one level above this package root.
 export default defineConfig({
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), docsFonts()],
     resolve: {
         alias: {
             '@': path.resolve(import.meta.dirname, './src'),
@@ -16,6 +48,15 @@ export default defineConfig({
     },
     server: {
         fs: { allow: ['..'] },
+        proxy: DEV_API
+            ? {
+                '/api': {
+                    target: DEV_API,
+                    changeOrigin: true,
+                    bypass: (req) => (req.method === 'GET' || req.method === 'HEAD' ? undefined : false),
+                },
+            }
+            : undefined,
     },
     build: {
         rollupOptions: {

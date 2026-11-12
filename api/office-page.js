@@ -40,8 +40,21 @@ import {
     sendNegotiated, send406, setVary, selectRepresentation, acceptHeader, HTML, MARKDOWN,
 } from './_negotiate.js';
 import { sendError } from './_errors.js';
+import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot } from './_boot.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const FULL_CACHE = 'public, s-maxage=900, stale-while-revalidate=3600';
+
+// The app uses boot data only for the latest edition of the reading view
+// (src/App.jsx): a ?edition= permalink or the ?view=changelog ledger loads
+// its own data, so those URLs skip the shared-store reads and the block.
+export function wantsBoot(chosen, query) {
+    if (chosen !== HTML) return false;
+    if (query?.edition) return false;
+    if (query?.view === 'changelog') return false;
+    return true;
+}
 
 // Exact skeleton markup in the baked page that the SSR content replaces.
 // If the template drifts and this marker disappears, we throw → baked page.
@@ -293,6 +306,14 @@ export default async function handler(req, res) {
         const items = await fetchAFDList(code, { signal: AbortSignal.timeout(8000) });
         const prodUrl = productUrlFromItem(items[0]);
         if (!prodUrl) throw new Error('no AFD product listed');
+        // Boot extras (AI translations + changelog sentence, read from the
+        // shared store the AI endpoints write) start now, in parallel with
+        // the product and changelog fetches; awaited last, they add at most
+        // the store's short read timeout.
+        const latestId = items[0]?.id || null;
+        const extrasPending = wantsBoot(chosen, req.query) && latestId
+            ? fetchBootExtras(code, latestId)
+            : null;
         const prod = await fetchAFDProduct(prodUrl, { signal: AbortSignal.timeout(8000) });
         const text = typeof prod?.productText === 'string' ? prod.productText : '';
         if (!text) throw new Error('empty AFD product');
@@ -312,10 +333,21 @@ export default async function handler(req, res) {
         });
 
         // replacer fn: `$`-sequences in forecast text must not be interpreted
+        let html = baked.replace(LOADING_DIV, () => ssr);
+        let cacheControl = FULL_CACHE;
+        if (extrasPending) {
+            const boot = buildBoot({
+                office: code,
+                product: { id: prod?.id || latestId, issuanceTime: prod?.issuanceTime, productText: text },
+                extras: await extrasPending,
+            });
+            html = insertBoot(html, boot);
+            cacheControl = cacheControlFor(boot, FULL_CACHE);
+        }
         return sendNegotiated(req, res, {
-            [HTML]: baked.replace(LOADING_DIV, () => ssr),
+            [HTML]: html,
             [MARKDOWN]: markdown,
-        }, { cacheControl: 'public, s-maxage=900, stale-while-revalidate=3600' });
+        }, { cacheControl });
     } catch (err) {
         // NWS down, format drift, marker drift, anything: exact baked page,
         // shorter CDN window so recovery is quick. Markdown degrades to the

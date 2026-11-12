@@ -218,3 +218,22 @@ describe('glossary: PoP matches only the abbreviation, never the word "pop"', ()
         expect(html).not.toContain('chance of rain up ridge');
     });
 });
+
+// The National Desk dates its window in US Eastern with no office (Nov 2026).
+describe('sanitizeTranslation — explicit time zone', () => {
+    // 05:23Z Nov 12 = Thu Nov 12 in the East but still Wed Nov 11 in Honolulu.
+    const ISSUED = '2026-11-12T05:23:00+00:00';
+    it('uses the zone it is given, with no office', () => {
+        // Nov 20 2026 is a Friday: day +8 from Thu Nov 12 (inside the window),
+        // day +9 from Wed Nov 11 (outside it).
+        const text = 'Drier air arrives Friday, November 20.';
+        expect(sanitizeTranslation(text, { issuanceTime: ISSUED, timeZone: 'America/New_York' })).toBe(text);
+        expect(sanitizeTranslation(text, { office: 'HFO', issuanceTime: ISSUED })).toBe('Drier air arrives Friday.');
+        expect(sanitizeTranslation(text, { office: 'HFO', issuanceTime: ISSUED, timeZone: 'America/New_York' })).toBe(text);
+    });
+    it('still drops impossible pairs and asides', () => {
+        const out = sanitizeTranslation('Storms build today. Note that the source text uses abbreviations. Clearing by Sunday, November 22.',
+            { issuanceTime: ISSUED, timeZone: 'America/New_York' });
+        expect(out).toBe('Storms build today. Clearing by Sunday.');
+    });
+});

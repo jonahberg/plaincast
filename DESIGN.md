@@ -1,14 +1,134 @@
 # Design System — Plaincast
 
-> **CURRENT SYSTEM: shadcn/ui (decided by Jonah, 2026-09-25).** The whole site — the React
-> app at `/` and `/o/CODE/` and the server-rendered `/national/`, trust pages and 404 — uses
-> the shadcn look: neutral shadcn color tokens (`shadcn/src/index.css`, mirrored in
-> `docs/styles.css`) with light/dark, the system font stack, shadcn cards/badges/buttons,
-> and one shared header and footer. Source of truth for components: `shadcn/src/components/`.
-> Theme choice lives in `localStorage['plaincast-theme']` on every page.
->
-> Everything below ("The Dispatch" and the earlier editorial system) is ARCHIVED — kept for
-> history, no longer to be followed.
+## CURRENT SYSTEM — shadcn/ui, reading-first (2026-11-11)
+
+Built in the Nov 11 2026 polish pass, which Jonah commissioned ("let's do it all") and
+approves by merging PR #47. Three calls in it were made for him and are his to overrule:
+the Active Alerts section sits last unless a Severe/Extreme warning is live, calm offices
+show a muted "No active alerts" status line, and the National Desk body defaults to the
+plain-English version. It builds on the shadcn/ui
+decision of 2026-09-25 and stays inside shadcn: the same components and the same neutral
+tokens. What it adds is a reading layout and an identity. It covers the whole site: the
+React app at `/` and `/o/CODE/`, its server-rendered digest (`#ssr-root`), and the
+server-rendered `/national/`, `/about`, `/contact`, `/privacy`, `/developers` and 404.
+
+**Sources of truth**
+- Tokens and type: `shadcn/src/index.css`.
+- Server-rendered pages: `docs/styles.css` mirrors those tokens verbatim, and
+  `tests/site-chrome.test.js` pins the mirror, including `--brand`, `--ring` and
+  `--font-reading`.
+- Components: `shadcn/src/components/`.
+- Theme choice: `localStorage['plaincast-theme']` on every page, with dark mode as the
+  `.dark` class.
+
+**Type**
+- **Reading face: Source Serif 4** (OFL), self-hosted. It lives at
+  `docs/fonts/source-serif-4-latin.woff2` (variable, wght 400–700) and is served at
+  `/fonts/` under CSP `font-src 'self'`.
+  - The roman is preloaded in every shell. The italic is declared but not preloaded.
+  - A metric-matched fallback, `'Plaincast Serif Fallback'`, is Georgia tuned with
+    `size-adjust` and the ascent/descent overrides. Its set width is within 0.5% of
+    Source Serif 4, so the swap does not reflow lines.
+  - Tailwind token: `--font-serif`, which resolves to `var(--font-reading)`, so
+    `font-serif` works.
+- **The serif is for reading text only:**
+  - the page `<h1>`
+  - the key-takeaway lede
+  - section titles
+  - `.plain-prose`
+  - the "Since the … update" sentence
+  - changelog summary sentences
+  - the SSR digest
+  - on the server-rendered pages: `.page-title`, `.page-prose`, and the National Desk
+    headline, deck and running copy
+- **System sans for all chrome:** header and nav, eyebrows, meta rows, badges, tabs, buttons,
+  tooltips, the almanac strip and the footer.
+- **The "Original" AFD text** uses the system mono stack at 13px / 1.6 on the muted inset.
+- **No other webfonts.** Fraunces, DM Sans and JetBrains Mono are not loaded anywhere live.
+  `docs/fonts/fonts.css` serves only the legacy client.
+- **Scale**
+  | Element | Size / line height | Other |
+  |---|---|---|
+  | h1 | 2.5rem / 1.1 (2rem on phones) | 600, −0.02em |
+  | Lede | 1.375rem / 1.45 (1.1875rem on phones) | |
+  | Key Messages list | 1.125rem / 1.5 | |
+  | Section titles | 1.5rem | 600, tight |
+  | Prose | 17px / 1.7 | |
+  | Eyebrows | sans 12px uppercase | tracking 0.08em, muted |
+  | Meta | sans 13px | muted |
+- **Numerals:** prose uses lining, proportional figures and the almanac uses tabular ones.
+  Always write the longhand `font-variant-numeric`, never the `font-variant` shorthand.
+
+**Colour: one accent, teal `--brand`**
+- Values: light `#0F766E` (5.5:1 on the background), dark `#2DD4BF` (10.6:1). Registered
+  as `--color-brand`.
+- **It may be used only for:**
+  - links inside prose and the intro block
+  - the active section-nav item, as a 2px underline
+  - the 2px left rule of the "Since the … update" callout
+  - takeaway list markers
+  - jargon-term underlines
+  - focus rings (`--ring` is solid brand, and shadcn applies it at 50%)
+- Nothing else. `--primary` stays neutral, so buttons are not teal.
+- Everything else uses the stock neutral shadcn tokens. There are no gradients, and no
+  shadows beyond the shadcn defaults.
+
+**Layout**
+- **One centered reading column**, `max-w-reading` = 46rem, with 24px side padding at sm and
+  up and 16px on phones. The header bar, the page and the footer all share its edges, on
+  the server-rendered pages too (`.container`).
+- **Measure:** prose is capped at `65ch`. At 1440px that is about 69 characters per line.
+- **Forecast sections are ruled editorial blocks, not cards.**
+  - Each has a hairline `border-t` and about 2.5rem of vertical padding.
+  - The serif `<h2>` title sits on the left. On the right of the same row sit the
+    Plain English / Original / What changed tabs, as a small quiet segmented control,
+    beside a tiny muted "via Claude".
+  - On phones the tabs drop under the title.
+- **Cards only for UI objects:** active alerts, the National Desk rail and wire, and
+  dialogs and popovers. Prose is never boxed. On the trust pages the article is not a card,
+  and the National Desk story is a ruled block.
+- **Intro block order:**
+  1. Eyebrow ("Area Forecast Discussion · NWS City (CODE)"; below `sm` just "Area Forecast
+     Discussion", one line — the h1 names the office).
+  2. The serif `<h1>`, with the code muted and lighter.
+  3. **The key takeaway as the lede**, unboxed, in full foreground. It sits under a small
+     "Key takeaway" / "Key messages" eyebrow.
+  4. The sans meta, in two rows. Row 1: issued, forecaster and confidence,
+     `·`-separated; no separator may start a wrapped line. Row 2 is one line
+     at a fixed height from the first frame: the edition picker, then the
+     alert status (nothing while alerts load, a muted "No active alerts", or a
+     foreground link such as "5 active alerts: Coastal Flood Watch, High Surf
+     Advisory +3", truncated, never wrapped; destructive only while a
+     Severe/Extreme warning is live).
+  5. The "Since the … update" callout: brand left rule, serif, with "See every revision"
+     and RSS beneath.
+  6. The almanac strip: hairline-ruled, one row on desktop and a 3-column grid on phones.
+  7. The quiet "What is an Area Forecast Discussion?" accordion.
+  8. The section nav: text links that scroll sideways on phones.
+- **Nothing painted moves** once the page is on screen (the server embeds the edition, its
+  AI translations and the changelog sentence, so the first paint is the finished page):
+  - The Active Alerts card is the LAST section, so live alerts arriving append below. It is
+    pinned first only while a Severe/Extreme warning is live (safety outranks stability).
+  - The almanac reserves its "Now" and "Normal high" cells for the latest edition (blank
+    while loading, a dash if no reading comes).
+  - The "A newer edition has been issued" notice floats over the bottom of the viewport
+    instead of entering the flow above the forecast.
+- **Touch targets:** on a coarse pointer every control has at least a 44×44 CSS px hit area.
+  Compact controls (tabs, intro links, the edition picker, "via Claude") keep their look and grow
+  an invisible `.tap-target` ::after (`src/index.css`); header buttons, the section nav and footer
+  links grow their own box with `pointer-coarse:` utilities. A fine pointer is unchanged.
+- **Footer office index:** below `sm` a collapsed accordion, one 44px row per region opening to a
+  two-column list of 44px rows; from `sm` up the multi-column grid. The server-rendered index in
+  `#ssr-root` is separate and unchanged.
+- **Confidence is words, never a meter:** "Confidence: low" plus a small neutral dot. The
+  dot's fill steps through foreground opacities (hollow for Low, solid for High). Never a
+  progress bar, and never destructive red.
+- **Headings are sequential:** h1, then h2 (the explainer trigger, "Active alerts", section
+  titles, changelog editions), then h3 only beneath an h2.
+
+Everything below ("The Dispatch" and the earlier editorial system) is ARCHIVED. It is kept
+for history and is no longer to be followed. Where an archived section names Source Serif 4
+or teal, the block above is what governs.
 
 > **ARCHIVED — "The Dispatch" (2026-06-11).** Plaincast is set as a *printed weather
 > almanac that happens to live on the web* — never a SaaS dashboard. The sections below

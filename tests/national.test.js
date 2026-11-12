@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import {
     officeFromAlert, groupDispatches, buildCensus, parseSpcOutlook,
     parseRiskCategory, parseDiscussionBody, digestArea, formatExpiry, nextOutlookTime,
+    caseArea, riskAreaLine, areaCaption, AREA_PROPER_NOUNS, formatClock, nextOutlookAt,
 } from '../api/_national.js';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 // `?real` forces a distinct module instance from the bare '../api/_utils.js'
@@ -18,6 +19,9 @@ import { fetchSevereAlerts, fetchAlertTotals, fetchSpcDy1, fetchSpcOutlook } fro
 import alerts from './fixtures/national/severe-alerts.json';
 import swody1 from './fixtures/national/swody1.json';
 import swody1Fresh from './fixtures/national/swody1-fresh.json';
+// Live 05:23Z Nov 12 2026 Day 1 (11:23 PM CST Nov 11): the "today across
+// parts of southeastern pennsylvania..." line seen on production Nov 11.
+import swody1Nov12 from './fixtures/national/swody1-nov12.json';
 import swody2 from './fixtures/national/swody2.json';
 import swody3 from './fixtures/national/swody3.json';
 
@@ -121,6 +125,171 @@ describe('parseRiskCategory', () => {
         expect(parseRiskCategory('NO SEVERE THUNDERSTORM AREAS FORECAST')).toBeNull();
         expect(parseRiskCategory(null)).toBeNull();
     });
+    test('area keeps the whole tail, connective included; regions still trims one', () => {
+        const r = parseRiskCategory('THERE IS A MARGINAL RISK OF SEVERE THUNDERSTORMS ACROSS  PARTS OF THE OHIO VALLEY');
+        expect(r.area).toBe('ACROSS PARTS OF THE OHIO VALLEY');
+        expect(r.regions).toBe('PARTS OF THE OHIO VALLEY');
+        expect(parseRiskCategory('THERE IS A SLIGHT RISK OF SEVERE THUNDERSTORMS').area).toBe('');
+    });
+});
+
+// The risk line under the categorical word, cased in the source text (Nov 11
+// 2026: production showed "today across parts of southeastern
+// pennsylvania...much of delaware..." — CSS-lowercased SPC caps).
+describe('riskAreaLine / caseArea', () => {
+    const line = (product) => riskAreaLine(parseRiskCategory(parseSpcOutlook(product.productText).headline));
+
+    test('every fixture headline reads as a cased sentence', () => {
+        expect(line(swody1)).toBe('Risk of severe thunderstorms across portions of the Ohio Valley and parts of the central High Plains.');
+        expect(line(swody1Fresh)).toBe('Risk of severe thunderstorms across parts of the Ohio Valley, central Appalachians, Mid-Atlantic, and central High Plains.');
+        expect(line(swody1Nov12)).toBe('Risk of severe thunderstorms today across parts of southeastern Pennsylvania, much of Delaware, adjacent eastern Maryland and southern through central New Jersey.');
+        expect(line(swody2)).toBe('Risk of severe thunderstorms over parts of the northern Plains, and from the southern Appalachians into the Carolinas.');
+        expect(line(swody3)).toBe('Risk of severe thunderstorms over parts of the central Plains to lower Missouri/mid Mississippi Valley.');
+    });
+
+    test('the Nov 11 production string, as SPC wrote it', () => {
+        expect(riskAreaLine({ area: 'TODAY ACROSS PARTS OF SOUTHEASTERN PENNSYLVANIA...MUCH OF DELAWARE...ADJACENT EASTERN MARYLAND AND SOUTHERN THROUGH CENTRAL NEW JERSEY' }))
+            .toBe('Risk of severe thunderstorms today across parts of southeastern Pennsylvania, much of Delaware, adjacent eastern Maryland and southern through central New Jersey.');
+    });
+
+    test('"..." joins become commas; the source\'s own final "and" is kept, never invented', () => {
+        expect(caseArea('TEXAS...OKLAHOMA...KANSAS')).toBe('Texas, Oklahoma, Kansas');
+        expect(caseArea('TEXAS...OKLAHOMA AND KANSAS')).toBe('Texas, Oklahoma and Kansas');
+        expect(caseArea('TEXAS...OKLAHOMA...AND KANSAS')).toBe('Texas, Oklahoma, and Kansas');
+    });
+
+    // Real Day 1-3 headlines from Nov 5-12 2026 (api.weather.gov SWO DY1/2/3).
+    test('live phrasings: multi-word regions, slashes, hyphens, plurals, postal codes', () => {
+        const cases = [
+            ['ACROSS PARTS OF THE LOWER OHIO AND WESTERN TENNESSEE VALLEYS...AS WELL AS ACROSS THE EAST-CENTRAL FLORIDA PENINSULA',
+                'across parts of the lower Ohio and western Tennessee Valleys, as well as across the east-central Florida Peninsula'],
+            ['ACROSS PARTS OF CENTRAL/SOUTHERN INDIANA...WESTERN KENTUCKY...AND FAR SOUTHEASTERN ILLINOIS',
+                'across parts of central/southern Indiana, western Kentucky, and far southeastern Illinois'],
+            ['THROUGH MID EVENING ACROSS PARTS OF WESTERN INTO CENTRAL KENTUCKY',
+                'through mid evening across parts of western into central Kentucky'],
+            ['ACROSS THE MIDDLE TO UPPER TX COAST', 'across the middle to upper TX coast'],
+            ['TODAY ALONG THE MIDDLE-LOWER TEXAS COAST', 'today along the middle-lower Texas coast'],
+            ['ACROSS PARTS OF THE CENTRAL/EASTERN CAROLINAS AND COASTAL SOUTHERN MID-ATLANTIC',
+                'across parts of the central/eastern Carolinas and coastal southern Mid-Atlantic'],
+            ['FROM PORTIONS OF THE CAROLINAS TO THE MID ATLANTIC COAST', 'from portions of the Carolinas to the Mid Atlantic coast'],
+            ['THIS AFTERNOON ACROSS PARTS OF EASTERN NORTH CAROLINA', 'this afternoon across parts of eastern North Carolina'],
+            ['ACROSS PORTIONS OF THE MID MISSISSIPPI VALLEY', 'across portions of the mid Mississippi Valley'],
+        ];
+        for (const [raw, cased] of cases) expect(caseArea(raw)).toBe(cased);
+    });
+
+    test('compass regions: capitalised alone, adjectives before a place', () => {
+        expect(caseArea('OVER NORTHWEST WASHINGTON')).toBe('over northwest Washington');
+        expect(caseArea('OVER THE EASTERN CAROLINAS AND FAR SOUTHEAST VIRGINIA')).toBe('over the eastern Carolinas and far southeast Virginia');
+        expect(caseArea('ACROSS THE SOUTHEAST')).toBe('across the Southeast');
+        expect(caseArea('THE NORTHEAST AND MID-ATLANTIC')).toBe('the Northeast and Mid-Atlantic');
+        expect(caseArea('SOUTHEAST TX')).toBe('southeast TX');
+        expect(caseArea('NORTHWEST WASHINGTON AND THE PACIFIC NORTHWEST COAST')).toBe('northwest Washington and the Pacific Northwest coast');
+        expect(caseArea('NORTHERN PLAINS INTO THE UPPER MIDWEST')).toBe('northern Plains into the upper Midwest');
+    });
+
+    test('longest name wins: two-word states, DC, chained suffixes', () => {
+        expect(caseArea('WESTERN NORTH CAROLINA AND SOUTHERN WEST VIRGINIA')).toBe('western North Carolina and southern West Virginia');
+        expect(caseArea('THE DISTRICT OF COLUMBIA')).toBe('the District of Columbia');
+        expect(caseArea('ARKANSAS AND KANSAS')).toBe('Arkansas and Kansas');
+        expect(caseArea('THE CONNECTICUT RIVER VALLEY')).toBe('the Connecticut River Valley');
+        expect(caseArea('THE NEBRASKA PANHANDLE')).toBe('the Nebraska Panhandle');
+        expect(caseArea('PARTS OF THE U.S. INTERMOUNTAIN WEST')).toBe('parts of the U.S. Intermountain West');
+    });
+
+    test('postal codes that are also words stay words — unless slash-joined to a code', () => {
+        expect(caseArea('EASTERN KS/WESTERN MO')).toBe('eastern KS/western MO');
+        expect(caseArea('IN AND AROUND SOUTHERN OH')).toBe('in and around southern OH');
+        expect(caseArea('OKLAHOMA OR TEXAS')).toBe('Oklahoma or Texas');
+        expect(caseArea('THE TX/OK PANHANDLES')).toBe('the TX/OK Panhandles');
+        expect(caseArea('THE LOWER MS VALLEY')).toBe('the lower MS Valley');
+    });
+
+    test('names beyond the states: neighbours, coasts, ranges, cities on the list', () => {
+        expect(caseArea('NORTHERN MEXICO')).toBe('northern Mexico');
+        expect(caseArea('NEAR THE CANADIAN BORDER')).toBe('near the Canadian border');
+        expect(caseArea('THE CAROLINA COAST')).toBe('the Carolina coast');
+        expect(caseArea('THE EAST COAST')).toBe('the East Coast');
+        expect(caseArea('NEW YORK CITY')).toBe('New York City');
+        expect(caseArea('THE ADIRONDACKS AND WHITE MOUNTAINS')).toBe('the Adirondacks and White Mountains');
+        expect(caseArea('SAN JOAQUIN VALLEY')).toBe('San Joaquin Valley');
+    });
+
+    test('a bare place gets "across"; an empty tail is a bare sentence', () => {
+        expect(riskAreaLine({ area: 'PORTIONS OF THE OHIO VALLEY' })).toBe('Risk of severe thunderstorms across portions of the Ohio Valley.');
+        expect(riskAreaLine({ area: '' })).toBe('Risk of severe thunderstorms.');
+        expect(riskAreaLine(parseRiskCategory('THERE IS A MARGINAL RISK OF SEVERE THUNDERSTORMS'))).toBe('Risk of severe thunderstorms.');
+        expect(riskAreaLine({ regions: 'THE PLAINS' })).toBe('Risk of severe thunderstorms across the Plains.'); // no `area`: falls back
+        expect(riskAreaLine(null)).toBe('Risk of severe thunderstorms.');
+    });
+
+    test('areaCaption: the rail note, sentence-cased', () => {
+        expect(areaCaption('PARTS OF THE NORTHERN PLAINS...AND FROM THE SOUTHERN APPALACHIANS INTO THE CAROLINAS'))
+            .toBe('Parts of the northern Plains, and from the southern Appalachians into the Carolinas');
+        expect(areaCaption('')).toBeNull();
+    });
+
+    test('the list: all 50 states, DC, and the regions SPC routinely names', () => {
+        const states = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware',
+            'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana',
+            'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana',
+            'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina',
+            'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina',
+            'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia',
+            'Wisconsin', 'Wyoming', 'District of Columbia'];
+        expect(states.length).toBe(51);
+        const regions = ['Mid-Atlantic', 'New England', 'Great Lakes', 'Great Plains', 'High Plains', 'Great Basin',
+            'Ohio Valley', 'Tennessee Valley', 'Mississippi Valley', 'Missouri Valley', 'Red River', 'Rio Grande',
+            'Gulf Coast', 'Gulf of America', 'Gulf of Mexico', 'Atlantic', 'Pacific', 'Appalachians', 'Ozarks',
+            'Rockies', 'Black Hills', 'Carolinas', 'Dakotas', 'Florida Peninsula', 'Florida Panhandle', 'Florida Keys',
+            'Texas Panhandle', 'Oklahoma Panhandle', 'Big Bend', 'Delmarva', 'Arklatex', 'Four Corners',
+            'Intermountain West', 'Midwest', 'Northeast', 'Southeast', 'Southwest', 'Northwest', 'Pacific Northwest',
+            'Hudson Valley', 'Chesapeake', 'Great Salt Lake', 'Sierra Nevada', 'Cascades', 'Front Range',
+            'Edwards Plateau', 'Lake Michigan', 'Lake Superior', 'Lake Erie', 'Lake Huron', 'Lake Ontario'];
+        for (const name of [...states, ...regions]) {
+            expect(AREA_PROPER_NOUNS).toContain(name);
+            // and each one round-trips out of SPC's capitals
+            expect(caseArea(name.toUpperCase())).toBe(name);
+        }
+    });
+
+    test('plain text out: no markup is added (the caller escapes)', () => {
+        expect(caseArea('<B> & THE OHIO VALLEY')).toBe('<b> & the Ohio Valley');
+    });
+});
+
+describe('formatClock (the desk\'s Eastern clock)', () => {
+    test('US Eastern with the zone abbreviation, DST-aware', () => {
+        expect(formatClock('2026-11-12T05:23:00+00:00')).toBe('12:23 AM EST');
+        expect(formatClock('2026-08-16T12:44:00+00:00')).toBe('8:44 AM EDT');
+        expect(formatClock('2026-08-16T12:44:00+00:00', 'America/Denver')).toBe('6:44 AM MDT');
+    });
+    test('a plain space before AM/PM, never ICU\'s narrow no-break space', () => {
+        expect(formatClock('2026-11-12T17:05:00Z')).toBe('12:05 PM EST');
+        expect(formatClock('2026-11-12T17:05:00Z')).not.toMatch(/[  ]/);
+    });
+    test('null — never a broken string — for a missing or bad timestamp', () => {
+        for (const bad of [null, undefined, '', 'not-a-date']) expect(formatClock(bad)).toBeNull();
+    });
+});
+
+describe('nextOutlookAt', () => {
+    test('the next SPC slot as an instant, rolling to tomorrow after 2000 UTC', () => {
+        expect(nextOutlookAt('2026-11-12T05:23:00Z')).toBe('2026-11-12T06:00:00.000Z');
+        expect(nextOutlookAt('2026-11-12T13:00:00Z')).toBe('2026-11-12T16:30:00.000Z');
+        expect(nextOutlookAt('2026-11-12T21:00:00Z')).toBe('2026-11-13T01:00:00.000Z');
+        expect(nextOutlookAt('2026-12-31T23:59:00Z')).toBe('2027-01-01T01:00:00.000Z');
+    });
+    test('agrees with nextOutlookTime on the slot', () => {
+        for (const now of ['2026-08-16T02:00:00Z', '2026-08-16T06:01:00Z', '2026-08-16T23:30:00Z']) {
+            const at = new Date(nextOutlookAt(now));
+            const hhmm = `${String(at.getUTCHours()).padStart(2, '0')}${String(at.getUTCMinutes()).padStart(2, '0')} UTC`;
+            expect(hhmm).toBe(nextOutlookTime(now));
+        }
+    });
+    test('null on a bad date', () => {
+        expect(nextOutlookAt('nope')).toBeNull();
+    });
 });
 
 describe('parseDiscussionBody', () => {
@@ -170,6 +339,28 @@ describe('parseDiscussionBody', () => {
         const paras = parseDiscussionBody(text);
         expect(paras.length).toBe(1);
         expect(paras[0]).toMatch(/^Severe storms will develop/);
+    });
+
+    // Live 20Z Day 1 update paragraphs, Nov 5-12 2026: housekeeping that
+    // points at the PREV block we cut. Each product falls back to the summary.
+    test('a 20Z update that only points at the discussion below is dropped', () => {
+        const live = [
+            'The forecast remains on track, and no changes were needed with this update. See the previous discussion below for details.',
+            'No changes are needed to the D1 Convective Outlook. See previous discussion below for more information.',
+            'No changes are needed to the current D1 Convective Outlook. See previous discussion below for more information.',
+            'Only minor adjustments were made to clear behind ongoing convection. See previous discussion below for more information.',
+            'Only minor adjustments were made to thunderstorm coverage based on trends in radar. See previous discussion below for more information.',
+        ];
+        for (const para of live) {
+            const text = `...SUMMARY...\nA summary paragraph long enough to survive the length filter here.\n\n...20z Update...\n${para}\n\n..Halbert-E.. 11/07/2026\n\n.PREV DISCUSSION... /ISSUED 1026 AM CST Sat Nov 07 2026/\n\n...Synopsis...\nStale prose that is also comfortably past the forty character floor.\n`;
+            expect(parseDiscussionBody(text)).toEqual([]);
+        }
+    });
+
+    test('a 20Z update with real meteorology and no pointer is kept', () => {
+        const para = 'The Marginal Risk along the lower Texas coast was removed with this update. Temperatures have been gradually cooling with the air mass inland becoming overworked by ongoing rain/thunderstorm activity.';
+        const text = `...SUMMARY...\nA summary paragraph long enough to survive the length filter here.\n\n...20z Update...\n${para}\n`;
+        expect(parseDiscussionBody(text)).toEqual([para]);
     });
 
     test('the PREV marker matches 1-3 dots, any case', () => {
