@@ -48,7 +48,7 @@ const FULL_CACHE = 'public, s-maxage=900, stale-while-revalidate=3600';
 
 // The app uses boot data only for the latest edition of the reading view
 // (src/App.jsx): a ?edition= permalink or the ?view=changelog ledger loads
-// its own data, so those URLs skip the self-fetches and the block.
+// its own data, so those URLs skip the shared-store reads and the block.
 export function wantsBoot(chosen, query) {
     if (chosen !== HTML) return false;
     if (query?.edition) return false;
@@ -306,9 +306,10 @@ export default async function handler(req, res) {
         const items = await fetchAFDList(code, { signal: AbortSignal.timeout(8000) });
         const prodUrl = productUrlFromItem(items[0]);
         if (!prodUrl) throw new Error('no AFD product listed');
-        // Boot extras (AI translations + changelog sentence, both CDN-cached
-        // on this site) start now, in parallel with the product and
-        // changelog fetches; awaited last, they add at most their timeout.
+        // Boot extras (AI translations + changelog sentence, read from the
+        // shared store the AI endpoints write) start now, in parallel with
+        // the product and changelog fetches; awaited last, they add at most
+        // the store's short read timeout.
         const latestId = items[0]?.id || null;
         const extrasPending = wantsBoot(chosen, req.query) && latestId
             ? fetchBootExtras(code, latestId)

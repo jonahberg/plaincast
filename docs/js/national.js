@@ -39,9 +39,10 @@ for (const el of document.querySelectorAll('time[data-local-time]')) {
 }
 
 // The AI text, when the server could not embed it. api/national-desk.js reads
-// /api/national-lede itself and embeds the AI deck and plain-English copy when
-// they are ready for the outlook it rendered, marking each with data-ai; this
-// is the fallback for a page rendered before they were. The endpoint is
+// what /api/national-lede stored in the shared store (api/_shared-cache.js)
+// and embeds the AI deck and plain-English copy when they are ready for the
+// outlook it rendered, marking each with data-ai; this is the fallback for a
+// page rendered before they were. The endpoint is
 // always 200 in normal operation: {deck, copy, issued, cached}, or
 // {deck: null, copy: null, transient: true} when there is nothing yet.
 // Nothing is swapped in for an outlook other than the page's own

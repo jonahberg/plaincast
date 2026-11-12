@@ -1,5 +1,6 @@
 import { describe, it, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { memoryBackend, recordFetches } from './shared-cache-backend.js';
 
 // Handler tests drive the national fetchers through mock.module rather than
 // globalThis.fetch. Bun's module mocks are process-global: if another test
@@ -39,6 +40,10 @@ const {
     buildCopyHtml, buildRailHtml, buildWireHtml, buildClockHtml, buildDeskMarkdown, pickLede,
 } = await import('../api/national-desk.js');
 const { parseSpcOutlook, parseRiskCategory, calmHeadline, buildCensus } = await import('../api/_national.js');
+const { __setSharedCacheBackendForTests, ledeKey } = await import('../api/_shared-cache.js');
+
+// The shared store is module state shared by every test file: always reset.
+afterEach(() => __setSharedCacheBackendForTests(null));
 const { OFFICE_NAMES } = await import('../docs/js/offices.js');
 const { default: alerts } = await import('./fixtures/national/severe-alerts.json');
 const { default: swody1 } = await import('./fixtures/national/swody1.json');
@@ -55,9 +60,10 @@ const { default: swody3 } = await import('./fixtures/national/swody3.json');
 const SHELL = readFileSync('api/_national-shell.html', 'utf8');
 const DESK_COUNT = Object.keys(OFFICE_NAMES).length;
 
-// Page Cache-Control. Off Vercel (every test here unless it stubs the env)
-// fetchSelfJson returns null, so there is no AI text to embed and the page
-// takes the short window that lets the edge re-render once the AI text exists.
+// Page Cache-Control. Off Vercel, with no injected backend (every test here
+// unless it injects one), the shared store reads as empty, so there is no AI
+// text to embed and the page takes the short window that lets the edge
+// re-render once the AI text exists.
 const AI_CACHE = 'public, s-maxage=600, stale-while-revalidate=1800';
 const NO_AI_CACHE = 'public, s-maxage=120, stale-while-revalidate=1800';
 
@@ -830,26 +836,19 @@ describe('GET /api/national-desk (SSR /national/)', () => {
 });
 
 // ─── The AI text, embedded server-side (Nov 2026) ───────────────────
-// api/national-desk.js reads /api/national-lede through fetchSelfJson, which
-// is null off Vercel. These tests give it a (fake) preview origin and stub
-// globalThis.fetch — the handler's upstream fetchers are module-mocked
-// above, so the only network call left is the self-fetch. Same mechanics as
-// tests/api-self.test.js; env and fetch are restored after every test.
+// api/national-desk.js reads the lede entry /api/national-lede stores in the
+// shared store (api/_shared-cache.js), keyed by the outlook's issuance. These
+// tests inject an in-memory backend and record global fetch: the handler's
+// upstream fetchers are module-mocked above, so a page render must make no
+// HTTP call at all (in particular none to its own /api/).
 describe('GET /national/ with the AI deck and copy available', () => {
-    const ENV_KEYS = ['VERCEL_ENV', 'VERCEL_URL', 'VERCEL_AUTOMATION_BYPASS_SECRET'];
-    const savedEnv = Object.fromEntries(ENV_KEYS.map(k => [k, process.env[k]]));
-    const savedFetch = globalThis.fetch;
-    let selfCalls = [];
+    let backend;
+    let fetches;
 
-    // A preview origin, never production: nothing here may reach plaincast.live.
-    function serveLede(body, status = 200) {
-        process.env.VERCEL_ENV = 'preview';
-        process.env.VERCEL_URL = 'desk-test.invalid';
-        delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
-        globalThis.fetch = async (url) => {
-            selfCalls.push(String(url));
-            return Response.json(body, { status });
-        };
+    // Stores `body` the way /api/national-lede does, under the key for
+    // `issued` (this page's outlook unless a test says otherwise).
+    function serveLede(body, issued = ISSUED) {
+        backend.seed(ledeKey(issued), body);
     }
 
     const ISSUED = swody1Fresh.issuanceTime;
@@ -860,7 +859,9 @@ describe('GET /national/ with the AI deck and copy available', () => {
     ];
 
     beforeEach(() => {
-        selfCalls = [];
+        backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        fetches = recordFetches();
         severeThrows = false;
         totalsThrows = false;
         outlookThrows = { DY1: false, DY2: false, DY3: false };
@@ -873,11 +874,7 @@ describe('GET /national/ with the AI deck and copy available', () => {
         };
     });
     afterEach(() => {
-        for (const k of ENV_KEYS) {
-            if (savedEnv[k] === undefined) delete process.env[k];
-            else process.env[k] = savedEnv[k];
-        }
-        globalThis.fetch = savedFetch;
+        fetches.restore();
     });
 
     const render = async (req = createReq()) => {
@@ -887,9 +884,11 @@ describe('GET /national/ with the AI deck and copy available', () => {
     };
 
     it('same issuance: AI deck and AI copy in the first response, original one tap away, long cache', async () => {
-        serveLede({ deck: AI_DECK, copy: AI_COPY, issued: ISSUED, cached: true });
+        serveLede({ deck: AI_DECK, copy: AI_COPY, issued: ISSUED });
         const res = await render();
-        expect(selfCalls).toEqual(['https://desk-test.invalid/api/national-lede']);
+        // One store read, for this outlook; no HTTP call of any kind.
+        expect(backend.reads).toEqual([ledeKey(ISSUED)]);
+        expect(fetches.calls).toEqual([]);
         expect(res.statusCode).toBe(200);
         expect(res.headers['cache-control']).toBe(AI_CACHE);
         const html = res.body;
@@ -922,30 +921,56 @@ describe('GET /national/ with the AI deck and copy available', () => {
     });
 
     it('another issuance: the original copy, labelled, no details, no AI credit, short cache', async () => {
-        serveLede({ deck: AI_DECK, copy: AI_COPY, issued: '2026-08-16T16:30:00+00:00' });
-        const res = await render();
-        expect(res.headers['cache-control']).toBe(NO_AI_CACHE);
-        expect(res.body).not.toContain(AI_DECK);
-        expect(res.body).not.toContain(AI_COPY[0]);
-        expect(res.body).toContain('Thunderstorms with damaging wind gusts');
-        expect(res.body).toContain('<p class="desk-copy-label">From the forecasters\' discussion, in their words</p>');
-        expect(res.body).toContain('<p>Satellite and regional radar imagery');
-        expect(res.body).not.toContain('<details');
-        expect(res.body).not.toContain('Simplified by AI');
-        expect(res.body).not.toContain('data-ai');
+        // Both ways another outlook's text could be in the store: under its
+        // own key (never read for this page), or — a corrupt or colliding
+        // entry — under this page's key while naming another issuance.
+        const OTHER = '2026-08-16T16:30:00+00:00';
+        for (const seed of [
+            () => serveLede({ deck: AI_DECK, copy: AI_COPY, issued: OTHER }, OTHER),
+            () => serveLede({ deck: AI_DECK, copy: AI_COPY, issued: OTHER }),
+        ]) {
+            backend.store.clear();
+            seed();
+            const res = await render();
+            expect(res.headers['cache-control']).toBe(NO_AI_CACHE);
+            expect(res.body).not.toContain(AI_DECK);
+            expect(res.body).not.toContain(AI_COPY[0]);
+            expect(res.body).toContain('Thunderstorms with damaging wind gusts');
+            expect(res.body).toContain('<p class="desk-copy-label">From the forecasters\' discussion, in their words</p>');
+            expect(res.body).toContain('<p>Satellite and regional radar imagery');
+            expect(res.body).not.toContain('<details');
+            expect(res.body).not.toContain('Simplified by AI');
+            expect(res.body).not.toContain('data-ai');
+        }
     });
 
-    it('no answer at all (non-200, or off Vercel): exactly the original page, short cache', async () => {
-        serveLede({ error: 'busy' }, 503);
-        const res = await render();
-        expect(res.headers['cache-control']).toBe(NO_AI_CACHE);
-        expect(res.body).toContain('desk-copy-label');
-        expect(res.body).not.toContain('Simplified by AI');
-        expect(res.body).not.toContain('<details');
+    it('no entry at all (empty store, a store error, or off Vercel): exactly the original page, short cache', async () => {
+        const plain = [];
+        for (const setBackend of [
+            () => {}, // the empty in-memory store from beforeEach
+            () => __setSharedCacheBackendForTests({
+                get: async () => { throw new Error('store down'); },
+                set: async () => {},
+            }),
+            () => __setSharedCacheBackendForTests(null), // off Vercel: no store at all
+        ]) {
+            setBackend();
+            const res = await render();
+            expect(res.statusCode).toBe(200);
+            expect(res.headers['cache-control']).toBe(NO_AI_CACHE);
+            expect(res.body).toContain('desk-copy-label');
+            expect(res.body).not.toContain('Simplified by AI');
+            expect(res.body).not.toContain('<details');
+            plain.push(res.body.replace(/<time [^>]*>[^<]*<\/time>/g, ''));
+        }
+        expect(plain[1]).toBe(plain[0]);
+        expect(plain[2]).toBe(plain[0]);
+        expect(fetches.calls).toEqual([]);
     });
 
     it('deck only (the copy call failed): AI deck embedded, original copy labelled, short cache', async () => {
-        serveLede({ deck: AI_DECK, copy: null, issued: ISSUED });
+        // What /api/national-lede stores when the copy call failed: no copy key.
+        serveLede({ issued: ISSUED, deck: AI_DECK });
         const res = await render();
         expect(res.body).toContain(`id="desk-deck" data-ai>${AI_DECK}</p>`);
         expect(res.body).toContain('desk-copy-label');
@@ -955,7 +980,8 @@ describe('GET /national/ with the AI deck and copy available', () => {
     });
 
     it('copy only (the deck failed): deterministic deck, AI copy embedded, short cache', async () => {
-        serveLede({ deck: null, copy: AI_COPY, issued: ISSUED, transient: true });
+        // What /api/national-lede stores when the deck call failed: no deck key.
+        serveLede({ issued: ISSUED, copy: AI_COPY });
         const res = await render();
         expect(res.body).toContain('<p class="desk-deck" id="desk-deck">Thunderstorms with damaging wind gusts');
         expect(res.body).toContain(`<p>${AI_COPY[0]}</p>`);
@@ -967,7 +993,7 @@ describe('GET /national/ with the AI deck and copy available', () => {
     it('no discussion (summary runs as copy): AI deck fills the slot, copy never replaced, long cache', async () => {
         mockOutlooks.DY1 = { productText: swody1.productText, issuanceTime: swody1.issuanceTime };
         // Even a (bogus) copy in the answer must not replace the SUMMARY.
-        serveLede({ deck: AI_DECK, copy: AI_COPY, issued: swody1.issuanceTime });
+        serveLede({ deck: AI_DECK, copy: AI_COPY, issued: swody1.issuanceTime }, swody1.issuanceTime);
         const res = await render();
         expect(res.body).toContain(`id="desk-deck" data-ai>${AI_DECK}</p>`);
         expect(res.body).toContain('<section class="desk-copy" data-source="summary">');

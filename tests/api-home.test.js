@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { memoryBackend, recordFetches } from './shared-cache-backend.js';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,10 @@ mock.module('../api/_utils.js', () => ({
 
 const { default: handler, resolveOffice, editionSections, buildHomeSsr } = await import('../api/home.js');
 const { VARY } = await import('../api/_negotiate.js');
+const { __setSharedCacheBackendForTests, translationKey, changelogKey } = await import('../api/_shared-cache.js');
+
+// The shared store is module state shared by every test file: always reset.
+afterEach(() => __setSharedCacheBackendForTests(null));
 
 // The production shell is the shadcn app shell (scripts/app-shell.mjs) —
 // the same bytes committed as api/_home-shell.html.
@@ -315,9 +320,37 @@ describe('the homepage embeds boot data for the app', () => {
         expect(boot.office).toBe('OKX');
         expect(boot.product.productText).toBe(AFD);
         expect(boot.product.issuanceTime).toBe('2026-07-03T11:40:00+00:00');
-        // No self origin in tests → no translations → the short window.
+        // No shared store in tests (off Vercel, none injected) → no
+        // translations → the short window.
         expect(boot.translationsComplete).toBe(false);
         expect(res.headers['cache-control']).toBe('public, s-maxage=120, stale-while-revalidate=3600');
+    });
+
+    it('embeds what the AI endpoints stored for this office + edition, with no HTTP call', async () => {
+        const id = 'a1b2c3d4-5566-7788-99aa-bbccddeeff00'; // NWS product ids are UUIDs
+        mockItems = [{ id }];
+        mockProducts = { [id]: { id, productText: AFD, issuanceTime: '2026-07-03T11:40:00+00:00' } };
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        backend.seed(translationKey('OKX', id), { office: 'OKX', id, complete: true, sections: { Synopsis: 'Fog.' } });
+        backend.seed(changelogKey('OKX', id), { office: 'OKX', id, changelog: 'Warmer.', since: null, updated: '2026-07-03T11:40:00Z' });
+        // Another office's entry for the same id is never read.
+        backend.seed(translationKey('LOX', id), { office: 'LOX', id, complete: true, sections: { Synopsis: 'Wrong office.' } });
+        const fetches = recordFetches();
+        const res = mockRes();
+        try {
+            await handler(get({ query: { office: 'OKX' } }), res);
+        } finally {
+            fetches.restore();
+        }
+        const boot = bootOf(res.body);
+        expect(boot.product.id).toBe(id);
+        expect(boot.translations).toEqual({ Synopsis: 'Fog.' });
+        expect(boot.translationsComplete).toBe(true);
+        expect(boot.changelog).toEqual({ changelog: 'Warmer.', since: null, updated: '2026-07-03T11:40:00Z' });
+        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        expect(backend.reads.sort()).toEqual([changelogKey('OKX', id), translationKey('OKX', id)].sort());
+        expect(fetches.calls).toEqual([]);
     });
 
     it('fallback pages carry none (they are the committed bytes)', async () => {

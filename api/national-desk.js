@@ -12,13 +12,14 @@
 // NO MODEL CALL HERE, DELIBERATELY: the deterministic standfirst is the SPC's
 // own SUMMARY run through regexTranslate (abbreviation expansion only), and
 // the original running copy is the SPC's own post-summary discussion. The AI
-// deck and the plain-English copy come from /api/national-lede (cached per
-// issuance), read here through the edge with a 400 ms budget and embedded
-// when they are for the same outlook. When they are not ready the page ships
-// the original copy, a short CDN window, and /js/national.js swaps the AI
-// text in later — which is why the SSR lede must render #desk-deck even when
-// it is empty (the de-dup fallback leaves the slot EMPTY rather than dropping
-// it).
+// deck and the plain-English copy are made by /api/national-lede, which
+// stores them per issuance in the shared store (api/_shared-cache.js); this
+// page reads that entry directly (no HTTP call to its own API, so a render
+// can never start a model run) and embeds it when it is for the same
+// outlook. When it is not there the page ships the original copy, a short
+// CDN window, and /js/national.js swaps the AI text in later — which is why
+// the SSR lede must render #desk-deck even when it is empty (the de-dup
+// fallback leaves the slot EMPTY rather than dropping it).
 //
 // ROUTING: /national and /national/ rewrite here (vercel.json). Rewrites are
 // evaluated AFTER `handle: filesystem`, so a static docs/national/index.html
@@ -56,7 +57,7 @@ import {
     sendNegotiated, send406, setVary, selectRepresentation, acceptHeader, HTML, MARKDOWN,
 } from './_negotiate.js';
 import { sendError } from './_errors.js';
-import { fetchSelfJson } from './_self.js';
+import { ledeKey, sharedGet } from './_shared-cache.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -90,12 +91,6 @@ const DESK_COUNT = Object.keys(OFFICE_NAMES).length;
 // all five the moment the first timer fired).
 const FETCH_TIMEOUT_MS = 8000;
 const sig = () => ({ signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-
-// The AI deck and plain-English copy, read from the CDN-cached
-// /api/national-lede. A short budget: this is an edge cache read when warm,
-// and when it is cold the page must not wait on a model call — it ships the
-// original copy and /js/national.js swaps the AI text in instead.
-const LEDE_TIMEOUT_MS = 400;
 
 // Page caching. With the AI text embedded the page is final for this outlook
 // and keeps the long window. Without it (cold lede, model failure, local dev)
@@ -165,12 +160,12 @@ function sameInstant(a, b) {
     return x !== null && x === y;
 }
 
-// The lede endpoint's answer, reduced to what this page may embed for THIS
+// The lede entry from the shared store ({ issued, deck?, copy? }, written by
+// api/national-lede.js), reduced to what this page may embed for THIS
 // outlook: {deck, copy}, each null when absent, malformed, or for another
-// issuance (a cached page and a fresh endpoint can straddle a new outlook).
-// It is our own endpoint, but its JSON is still untrusted input to an HTML
+// issuance. It is our own data, but it is still untrusted input to an HTML
 // page; the size bounds are the endpoint's own (LEDE_* in _national.js), so
-// nothing it can cache is refused here.
+// nothing it can store is refused here.
 export function pickLede(lede, issuanceTime) {
     const none = { deck: null, copy: null };
     if (!lede || typeof lede !== 'object' || !sameInstant(lede.issued, issuanceTime)) return none;
@@ -256,7 +251,7 @@ export function buildRiskHtml(risk, census = []) {
 // because /js/national.js swaps it by id — dropping it would break the AI
 // deck for every reader on a no-discussion product.
 //
-// `aiDeck` is the AI deck from /api/national-lede for this same issuance,
+// `aiDeck` is the AI deck /api/national-lede stored for this same issuance,
 // embedded so the reader gets the final text in the first response; it is
 // marked data-ai so the client leaves it alone. The spec allows it even on
 // the de-dup fallback (the AI deck always distills the summary). The credit
@@ -277,7 +272,7 @@ export function buildLedeHtml({ summary, issuanceTime, deckSuppressed = false, a
 
 // The running copy. Two shapes:
 //
-//   - With `aiCopy` (plain-English paragraphs from /api/national-lede for
+//   - With `aiCopy` (plain-English paragraphs /api/national-lede stored for
 //     this issuance, translated from these same discussion paragraphs): the
 //     AI text is the visible copy, and the forecasters' own words sit one tap
 //     away in a native <details> directly beneath it.
@@ -544,16 +539,19 @@ export default async function handler(req, res) {
             fetchSpcOutlook('DY2', sig()),
             fetchSpcOutlook('DY3', sig()),
         ]);
-        // The AI deck + copy from the edge-cached lede endpoint, in parallel.
-        // fetchSelfJson never rejects (null off-Vercel, on timeout, non-200),
-        // so a bail to the baked shell below leaves nothing unhandled.
-        const ledePromise = fetchSelfJson('/api/national-lede', { timeoutMs: LEDE_TIMEOUT_MS });
-
         // HARD set: no severe feed or no Day 1 product means no front page.
         const [features, outlook] = await Promise.all([
             fetchSevereAlerts(sig()),
             fetchSpcOutlook('DY1', sig()),
         ]);
+
+        // The AI deck + copy for this outlook, from the shared store. Keyed
+        // by issuance, so the read starts once the Day 1 product is in; it
+        // runs alongside the soft set. sharedGet never rejects (null off
+        // Vercel, on a miss, an error or its short timeout), so a bail to
+        // the baked shell below leaves nothing unhandled.
+        const issuanceTime = outlook?.issuanceTime || null;
+        const ledePromise = sharedGet(ledeKey(issuanceTime));
 
         const [totalsR, dy2R, dy3R] = await softSettled;
         const totals = totalsR.status === 'fulfilled' ? totalsR.value : null;
@@ -575,7 +573,6 @@ export default async function handler(req, res) {
         // The AI copy translates the post-summary discussion, so on the
         // fallback path (the SUMMARY runs as copy) there is none to embed —
         // copy never comes from the summary, AI or not.
-        const issuanceTime = outlook?.issuanceTime || null;
         const ai = pickLede(await ledePromise, issuanceTime);
         const aiDeck = ai.deck;
         const aiCopy = deckSuppressed ? null : ai.copy;

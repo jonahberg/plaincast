@@ -3,9 +3,12 @@
 //
 // The page already fetches the latest AFD product to build its digest. Handing
 // that product to the app (plus the edition's AI translations and the "since
-// the last update" sentence the CDN already holds) lets the first React paint
-// be the finished page: final text, final positions, no skeleton, no
-// regex-then-AI swap while the reader scrolls.
+// the last update" sentence, when the AI endpoints have already stored them
+// in the shared store, api/_shared-cache.js) lets the first React paint be
+// the finished page: final text, final positions, no skeleton, no
+// regex-then-AI swap while the reader scrolls. The page reads the store
+// directly: no HTTP call to its own API, so a render (crawlers included) can
+// never start a model run.
 //
 //   <script type="application/json" id="plaincast-boot">{…}</script>
 //
@@ -21,7 +24,7 @@
 //     changelog?: { changelog: string|null, since, updated } }
 // `changelog` is present only when the server got a definitive answer for
 // THIS issuance; absent means "unknown, fetch it yourself".
-import { fetchSelfJson } from './_self.js';
+import { changelogKey, sharedGet, translationKey } from './_shared-cache.js';
 import { PROD_SCRIPT } from '../scripts/app-shell.mjs';
 
 export const BOOT_ID = 'plaincast-boot';
@@ -29,8 +32,8 @@ export const BOOT_VERSION = 1;
 
 // Cache policy: a page that carries a complete translation keeps the
 // handler's normal CDN window. One without (cold translation, partial
-// result, self-fetch timeout) is regenerated soon, so the next reader gets
-// the finished page once the translation exists.
+// result, store miss or timeout) is regenerated soon, so the next reader
+// gets the finished page once the translation exists.
 export const SHORT_CACHE = 'public, s-maxage=120, stale-while-revalidate=3600';
 
 export function cacheControlFor(boot, fullCache) {
@@ -67,8 +70,8 @@ function sameInstant(a, b) {
     return Number.isFinite(ta) && Number.isFinite(tb) && ta === tb;
 }
 
-// The translate-issuance response → { translations, complete }. Only string
-// sections survive, and only for the office + id that were asked for.
+// The stored translate-issuance payload → { translations, complete }. Only
+// string sections survive, and only for the office + id that were asked for.
 export function pickTranslations(res, office, id) {
     if (!res || typeof res !== 'object') return { translations: null, complete: false };
     if (res.office && res.office !== office) return { translations: null, complete: false };
@@ -83,9 +86,9 @@ export function pickTranslations(res, office, id) {
     return { translations, complete: res.complete === true };
 }
 
-// The /api/changelog response → the embedded value, or undefined when the
-// server does not know the answer for THIS issuance (transient failure, a
-// different latest pair, timeout).
+// The stored /api/changelog verdict → the embedded value, or undefined when
+// the server does not know the answer for THIS issuance (no entry yet, a
+// transient failure, a verdict about another pair, a store timeout).
 export function pickChangelog(res, issuanceTime) {
     if (!res || typeof res !== 'object' || res.transient) return undefined;
     if (res.changelog !== null && typeof res.changelog !== 'string') return undefined;
@@ -98,16 +101,17 @@ export function pickChangelog(res, issuanceTime) {
     };
 }
 
-// Same-site fetches of what the browser would otherwise request on load.
-// Both go through api/_self.js: short timeout, never throws, null off-Vercel.
-// Start this as soon as the edition id is known and await it last.
-export function fetchBootExtras(office, id, { timeoutMs = 400 } = {}) {
-    const q = `office=${encodeURIComponent(office)}`;
+// Two reads of the shared store, in parallel: the complete translation of
+// this office + edition (written by /api/translate-issuance), and the
+// changelog verdict whose CURRENT issuance is this edition (written by
+// /api/changelog). sharedGet never rejects: a miss, an error, its short
+// timeout and "off Vercel" are all null, and the app then fetches both the
+// way it always has. Start this as soon as the edition id is known and await
+// it last.
+export function fetchBootExtras(office, id) {
     return Promise.all([
-        // peek: a page render (crawlers included) reads cached AI text only and
-        // never starts a model run; see api/_self.js.
-        fetchSelfJson(`/api/translate-issuance?${q}&id=${encodeURIComponent(id)}`, { timeoutMs, peek: true }),
-        fetchSelfJson(`/api/changelog?${q}`, { timeoutMs, peek: true }),
+        sharedGet(translationKey(office, id)),
+        sharedGet(changelogKey(office, id)),
     ]).then(([translation, changelog]) => ({ translation, changelog }));
 }
 
