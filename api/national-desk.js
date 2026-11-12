@@ -49,7 +49,7 @@ import { regexTranslate } from './_afd-sections.js';
 import {
     groupDispatches, buildCensus, parseSpcOutlook, parseRiskCategory,
     parseDiscussionBody, digestArea, formatExpiry, nextOutlookAt, calmHeadline,
-    riskAreaLine, formatClock,
+    riskAreaLine, areaCaption, formatClock,
 } from './_national.js';
 import {
     sendNegotiated, send406, setVary, selectRepresentation, acceptHeader, HTML, MARKDOWN,
@@ -314,13 +314,15 @@ ${original.map(p => `            ${p}`).join('\n')}
 }
 
 // The day rail: today, tomorrow, and the day after. Cell shape is
-// {label, level|null, note|null} — a null level prints an em dash, and a null
-// note prints nothing at all, which is how a FAILED Day 2/3 fetch is told
-// apart from a parsed product that outlined no risk.
+// {label, level|null, note|null, caption?} — a null level prints an em dash,
+// and a null note prints nothing at all, which is how a FAILED Day 2/3 fetch
+// is told apart from a parsed product that outlined no risk. `caption` is the
+// SPC region note already cased for reading (areaCaption); the page prints it
+// in place of the raw note, while the Markdown twin keeps `note`.
 export function buildRailHtml(rails) {
     const cells = (rails || []).map((r, i) => {
         const level = r?.level ? escHtml(sentenceWord(r.level)) : '—';
-        const note = clipNote(r?.note);
+        const note = clipNote(r?.caption ?? r?.note);
         const noteHtml = note ? `<p class="desk-rail-note">${escHtml(note)}</p>` : '';
         return `        <div class="desk-rail-day${i === 0 ? ' now' : ''}">` +
             `<h3 class="desk-rail-label">${escHtml(r?.label ?? '')}</h3>` +
@@ -502,7 +504,7 @@ function railCell(label, settled) {
     if (settled?.status !== 'fulfilled' || !settled.value) return { label, level: null, note: null };
     const risk = parseRiskCategory(parseSpcOutlook(settled.value.productText).headline);
     return risk
-        ? { label, level: risk.level, note: risk.regions || null }
+        ? { label, level: risk.level, note: risk.regions || null, caption: areaCaption(risk.regions) }
         : { label, level: null, note: NO_RISK_NOTE };
 }
 
@@ -589,7 +591,7 @@ export default async function handler(req, res) {
 
         const rail = [
             risk
-                ? { label: 'Today · Day 1', level: risk.level, note: risk.regions || null }
+                ? { label: 'Today · Day 1', level: risk.level, note: risk.regions || null, caption: areaCaption(risk.regions) }
                 : { label: 'Today · Day 1', level: null, note: NO_RISK_NOTE },
             railCell('Tomorrow · Day 2', dy2R),
             railCell('Day 3', dy3R),

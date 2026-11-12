@@ -399,6 +399,16 @@ describe('buildRailHtml', () => {
         expect(html).toContain('No organized severe risk outlined');
     });
 
+    test('prints the cased caption when the cell carries one, else the raw note', () => {
+        const html = rails(
+            { label: 'Today · Day 1', level: 'SLIGHT', note: 'THE OHIO VALLEY', caption: 'The Ohio Valley' },
+            { label: 'Day 3', level: null, note: 'No organized severe risk outlined' },
+        );
+        expect(html).toContain('<p class="desk-rail-note">The Ohio Valley</p>');
+        expect(html).not.toContain('OHIO VALLEY');
+        expect(html).toContain('No organized severe risk outlined');
+    });
+
     test('a FAILED fetch renders a bare dash — never a claim about the sky', () => {
         const html = rails({ label: 'Day 3', level: null, note: null });
         expect(html).toContain('>—<');
@@ -601,6 +611,20 @@ describe('GET /api/national-desk (SSR /national/)', () => {
         expect(res.body).toContain('id="local-desk"');
         // v1's census ledger is gone — the strip replaced it
         expect(res.body).not.toContain('<dl class="ledger">');
+    });
+
+    it('cases the risk line and the rail notes on the page; the Markdown twin keeps SPC\'s text', async () => {
+        const res = createRes();
+        await handler(createReq(), res);
+        expect(res.body).toContain('<p class="desk-risk-of">Risk of severe thunderstorms across parts of the Ohio Valley, central Appalachians, Mid-Atlantic, and central High Plains.</p>');
+        expect(res.body).toContain('<p class="desk-rail-note">Parts of the Ohio Valley, central Appalachians,');
+        expect(res.body).toContain('<p class="desk-rail-note">Parts of the northern Plains, and from the southern…</p>');
+        expect(res.body).not.toMatch(/desk-rail-note">[^<]*[A-Z]{4}/); // nothing shouted
+
+        const md = createRes();
+        await handler(createReq({ headers: { accept: 'text/markdown' } }), md);
+        expect(md.body).toContain('## Slight risk of severe thunderstorms — PARTS OF THE OHIO VALLEY');
+        expect(md.body).toContain('- **Tomorrow · Day 2:** Slight — PARTS OF THE NORTHERN PLAINS');
     });
 
     it('renders two dashed rail cells when Day 2 and Day 3 both fail (soft)', async () => {
