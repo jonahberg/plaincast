@@ -31,6 +31,15 @@ import { createHash } from 'node:crypto';
 export const TRANSLATION_KEY_VERSION = 'v1'; // api/translate-issuance.js (+ translate.js prompt/sanitizer)
 export const CHANGELOG_KEY_VERSION = 'v1';   // api/changelog.js
 export const LEDE_KEY_VERSION = 'v1';        // api/national-lede.js
+// The engine's families (api/_store.js, api/cron-refresh.js). None of them is
+// tagged: a CDN purge by tag also deletes Runtime Cache items carrying that
+// tag, and the engine purges pages by tag.
+export const SECTION_KEY_VERSION = 'v1';     // ts: one section's translation, for reuse. Same prompt,
+                                             //     sanitizer and model as ti: bump the two together.
+export const EDITION_KEY_VERSION = 'v1';     // ed: an office's current + previous edition
+export const POLL_KEY_VERSION = 'v1';        // poll: the poller's state and heartbeat
+export const COUNTER_KEY_VERSION = 'v1';     // mc: model calls per UTC day
+export const LEASE_KEY_VERSION = 'v1';       // lease: one poller run at a time
 
 // TTLs, in seconds (the Runtime Cache's unit).
 export const TRANSLATION_TTL = 7 * 24 * 60 * 60;
@@ -62,6 +71,32 @@ export function changelogKey(office, currentId) {
     return `cl:${CHANGELOG_KEY_VERSION}:${o}:${currentId}`;
 }
 
+// `ed:v1:LOX`: the office's current edition and its predecessor.
+export function editionKey(office) {
+    const o = String(office ?? '').toUpperCase();
+    return OFFICE_RE.test(o) ? `ed:${EDITION_KEY_VERSION}:${o}` : null;
+}
+
+// `poll:v1`: the poller's state (newest product seen per office) and its
+// heartbeat (the time of the last successful poll).
+export const pollStateKey = () => `poll:${POLL_KEY_VERSION}`;
+
+// `lease:v1`: who is running the poller, until when.
+export const leaseKey = () => `lease:${LEASE_KEY_VERSION}`;
+
+// `mc:v1:2026-11-18`: the poller's model calls on one UTC day.
+export function modelCallsKey(day) {
+    return typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day) ? `mc:${COUNTER_KEY_VERSION}:${day}` : null;
+}
+
+// `ts:v1:LOX:<sha256 hex>`: one section's translation, keyed by a hash of
+// everything the model's answer depends on (api/_store.js sectionHash).
+export function sectionKey(office, hash) {
+    const o = String(office ?? '').toUpperCase();
+    if (!OFFICE_RE.test(o) || typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)) return null;
+    return `ts:${SECTION_KEY_VERSION}:${o}:${hash}`;
+}
+
 // `lede:v1:<ISO instant>`: the National Desk's AI pieces for one SPC Day 1
 // issuance. The instant is canonicalised so two spellings of the same
 // issuance ("…+00:00" and "…Z") share one entry.
@@ -79,12 +114,30 @@ const hashKey = (key) => createHash('sha256').update(key).digest('hex');
 
 let testBackend = null;
 let runtimePromise = null;
+let testPurge = null;
+let functionsPromise = null;
 
 // Test seam: an object with get(key) and set(key, value, options), or null to
 // restore the default. It takes priority over the environment check. Reset
 // it in afterEach: it is module state, shared by every test file in the run.
 export function __setSharedCacheBackendForTests(backend) {
     testBackend = backend || null;
+}
+
+// Test seam for purgeTag: an object with invalidateByTag(tags) and
+// dangerouslyDeleteByTag(tags), or null to restore the default.
+export function __setPurgeBackendForTests(backend) {
+    testPurge = backend || null;
+}
+
+function vercelFunctions() {
+    if (!functionsPromise) {
+        functionsPromise = import('@vercel/functions').catch((err) => {
+            console.warn('shared-cache: @vercel/functions unavailable:', err?.message || err);
+            return null;
+        });
+    }
+    return functionsPromise;
 }
 
 async function backend() {
@@ -97,10 +150,10 @@ async function backend() {
         // Loaded lazily (like @vercel/blob in _snapshots.js) so a problem in
         // the package can never stop a page function from loading; the warning
         // makes an inert store visible in the runtime logs.
-        runtimePromise = import('@vercel/functions')
-            .then(m => m.getCache({ namespace: 'plaincast', keyHashFunction: hashKey }))
+        runtimePromise = vercelFunctions()
+            .then(m => (m ? m.getCache({ namespace: 'plaincast', keyHashFunction: hashKey }) : null))
             .catch((err) => {
-                console.warn('shared-cache: @vercel/functions unavailable:', err?.message || err);
+                console.warn('shared-cache: runtime cache unavailable:', err?.message || err);
                 return null;
             });
     }
@@ -146,4 +199,69 @@ export async function sharedSet(key, value, { ttl, name } = {}) {
         if (b) await b.set(key, value, options);
     })();
     await settleWithin(write, SET_TIMEOUT_MS, undefined);
+}
+
+// ── The engine's I/O (api/_store.js, api/cron-refresh.js) ─────────────
+// Unlike sharedGet/sharedSet, these REPORT the outcome: the poller must not
+// read a timed-out lookup as "nothing stored" (that would refetch, rotate an
+// edition wrongly, purge a page needlessly or read the day's model-call count
+// as zero). They never throw either, and they never tag an item.
+
+export const STORE_READ_TIMEOUT_MS = 250;   // a page render's critical path
+export const STORE_WRITE_TIMEOUT_MS = 1500;
+const FAILED = Symbol('failed');
+
+// { ok: true, value } (value null for a miss) or { ok: false } for an
+// error, a timeout, a null key, or no store (off Vercel).
+export async function storeRead(key, { timeoutMs = STORE_READ_TIMEOUT_MS } = {}) {
+    if (typeof key !== 'string' || !key) return { ok: false };
+    const read = (async () => {
+        const b = await backend();
+        if (!b) return FAILED;
+        return b.get(key);
+    })();
+    const value = await settleWithin(read, timeoutMs, FAILED);
+    return value === FAILED ? { ok: false } : { ok: true, value: value ?? null };
+}
+
+// Stores a JSON-serialisable value, untagged. Resolves true once written;
+// false on an error, a timeout or no store.
+export async function storeWrite(key, value, { ttl, timeoutMs = STORE_WRITE_TIMEOUT_MS } = {}) {
+    if (typeof key !== 'string' || !key || value === undefined) return false;
+    const options = {};
+    if (Number.isFinite(ttl) && ttl > 0) options.ttl = Math.floor(ttl);
+    const write = (async () => {
+        const b = await backend();
+        if (!b) return false;
+        await b.set(key, value, options);
+        return true;
+    })();
+    return settleWithin(write, timeoutMs, false);
+}
+
+// Purge CDN responses by cache tag (and, per Vercel, Runtime Cache and data
+// cache items with that tag: which is why the engine's items carry none).
+// `hard` deletes (dangerouslyDeleteByTag); otherwise the entries are marked
+// stale (invalidateByTag) and served once more while they regenerate.
+// Resolves { ok: true } only when a purge API was there to call and
+// resolved: @vercel/functions resolves silently without a request context,
+// so its promise alone proves nothing. Never throws.
+const REQUEST_CONTEXT = Symbol.for('@vercel/request-context');
+export const PURGE_TIMEOUT_MS = 5000;
+
+export async function purgeTag(tags, { hard = false } = {}) {
+    const list = (Array.isArray(tags) ? tags : [tags]).filter(t => typeof t === 'string' && t && !t.includes(','));
+    if (list.length === 0) return { ok: false, reason: 'no-tags' };
+    const attempt = (async () => {
+        let api = testPurge;
+        if (!api) {
+            if (!process.env.VERCEL) return { ok: false, reason: 'off-vercel' };
+            if (!globalThis[REQUEST_CONTEXT]?.get?.()?.purge) return { ok: false, reason: 'no-purge-context' };
+            api = await vercelFunctions();
+            if (!api) return { ok: false, reason: 'no-functions-package' };
+        }
+        await (hard ? api.dangerouslyDeleteByTag(list) : api.invalidateByTag(list));
+        return { ok: true };
+    })().catch(err => ({ ok: false, reason: String(err?.message || err).slice(0, 200) }));
+    return settleWithin(attempt, PURGE_TIMEOUT_MS, { ok: false, reason: 'timeout' });
 }

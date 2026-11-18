@@ -128,3 +128,113 @@ describe('api/_shared-cache.js sharedGet / sharedSet', () => {
         expect(await sharedGet('ti:v1:LOX:x')).toEqual({ ok: true });
     });
 });
+
+// ── The engine's families and I/O (api/_store.js, api/cron-refresh.js) ──
+import {
+    editionKey, pollStateKey, leaseKey, modelCallsKey, sectionKey,
+    storeRead, storeWrite, purgeTag, __setPurgeBackendForTests,
+    STORE_READ_TIMEOUT_MS,
+} from '../api/_shared-cache.js';
+
+describe('api/_shared-cache.js engine key builders', () => {
+    it('build versioned keys per family', () => {
+        expect(editionKey('lox')).toBe('ed:v1:LOX');
+        expect(pollStateKey()).toBe('poll:v1');
+        expect(leaseKey()).toBe('lease:v1');
+        expect(modelCallsKey('2026-11-18')).toBe('mc:v1:2026-11-18');
+        expect(sectionKey('LOX', 'a'.repeat(64))).toBe(`ts:v1:LOX:${'a'.repeat(64)}`);
+    });
+
+    it('return null for input that cannot name an entry', () => {
+        for (const o of [null, '', 'LOXX', 'L0X']) expect(editionKey(o)).toBe(null);
+        for (const d of [null, '2026-1-18', 'today', 20261118]) expect(modelCallsKey(d)).toBe(null);
+        expect(sectionKey('LOX', 'abc')).toBe(null);
+        expect(sectionKey('LOX', 'G'.repeat(64))).toBe(null);
+        expect(sectionKey('LOXX', 'a'.repeat(64))).toBe(null);
+    });
+});
+
+describe('api/_shared-cache.js storeRead / storeWrite', () => {
+    afterEach(() => __setPurgeBackendForTests(null));
+
+    it('tells a miss from a failure', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        expect(await storeRead('ed:v1:LOX')).toEqual({ ok: true, value: null });
+        backend.seed('ed:v1:LOX', { a: 1 });
+        expect(await storeRead('ed:v1:LOX')).toEqual({ ok: true, value: { a: 1 } });
+
+        __setSharedCacheBackendForTests({ get: async () => { throw new Error('down'); }, set: async () => {} });
+        expect(await storeRead('ed:v1:LOX')).toEqual({ ok: false });
+        expect(await storeRead(null)).toEqual({ ok: false });
+    });
+
+    it('a hanging read is a failure after its timeout, not a miss', async () => {
+        __setSharedCacheBackendForTests({ get: () => new Promise(() => {}), set: async () => {} });
+        const t = performance.now();
+        expect(await storeRead('poll:v1')).toEqual({ ok: false });
+        expect(performance.now() - t).toBeLessThan(STORE_READ_TIMEOUT_MS + 200);
+        expect(await storeRead('poll:v1', { timeoutMs: 20 })).toEqual({ ok: false });
+    });
+
+    it('off Vercel there is no store: reads and writes fail, nothing is touched', async () => {
+        delete process.env.VERCEL;
+        expect(await storeRead('poll:v1')).toEqual({ ok: false });
+        expect(await storeWrite('poll:v1', { at: 1 })).toBe(false);
+    });
+
+    it('writes untagged, with the TTL, and reports success', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        expect(await storeWrite('ed:v1:LOX', { a: 1 }, { ttl: 3600 })).toBe(true);
+        expect(await storeWrite('poll:v1', { at: 1 })).toBe(true);
+        expect(backend.writes).toEqual([
+            { key: 'ed:v1:LOX', options: { ttl: 3600 } },
+            { key: 'poll:v1', options: {} },
+        ]);
+        expect(await storeWrite(null, { a: 1 })).toBe(false);
+        expect(await storeWrite('poll:v1', undefined)).toBe(false);
+    });
+
+    it('a failing or hanging write reports false, never throws', async () => {
+        __setSharedCacheBackendForTests({ get: async () => null, set: async () => { throw new Error('down'); } });
+        expect(await storeWrite('poll:v1', { at: 1 })).toBe(false);
+        __setSharedCacheBackendForTests({ get: async () => null, set: () => new Promise(() => {}) });
+        expect(await storeWrite('poll:v1', { at: 1 }, { timeoutMs: 20 })).toBe(false);
+    });
+});
+
+describe('api/_shared-cache.js purgeTag', () => {
+    afterEach(() => __setPurgeBackendForTests(null));
+
+    it('hard-deletes or invalidates through the injected API, with the tag list', async () => {
+        const calls = [];
+        __setPurgeBackendForTests({
+            invalidateByTag: async (t) => { calls.push(['invalidate', t]); },
+            dangerouslyDeleteByTag: async (t) => { calls.push(['delete', t]); },
+        });
+        expect(await purgeTag('office-LOX', { hard: true })).toEqual({ ok: true });
+        expect(await purgeTag(['office-LOX', 'home'])).toEqual({ ok: true });
+        expect(calls).toEqual([['delete', ['office-LOX']], ['invalidate', ['office-LOX', 'home']]]);
+    });
+
+    it('drops tags that cannot be tags (commas, empty) and refuses an empty list', async () => {
+        const calls = [];
+        __setPurgeBackendForTests({ invalidateByTag: async (t) => { calls.push(t); }, dangerouslyDeleteByTag: async () => {} });
+        expect(await purgeTag(['a,b', '', null])).toEqual({ ok: false, reason: 'no-tags' });
+        expect(calls).toEqual([]);
+    });
+
+    it('a resolved promise is not proof: no request context or off Vercel reports not purged', async () => {
+        delete process.env.VERCEL;
+        expect((await purgeTag('office-LOX', { hard: true })).ok).toBe(false);
+        process.env.VERCEL = '1';
+        expect(await purgeTag('office-LOX', { hard: true })).toEqual({ ok: false, reason: 'no-purge-context' });
+    });
+
+    it('a throwing or hanging purge API reports failure, never throws', async () => {
+        __setPurgeBackendForTests({ invalidateByTag: async () => { throw new Error('purge 500'); }, dangerouslyDeleteByTag: () => { throw new Error('sync'); } });
+        expect(await purgeTag('office-LOX')).toEqual({ ok: false, reason: 'purge 500' });
+        expect(await purgeTag('office-LOX', { hard: true })).toEqual({ ok: false, reason: 'sync' });
+    });
+});
