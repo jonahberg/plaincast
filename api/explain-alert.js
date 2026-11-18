@@ -70,12 +70,13 @@ const rateLimitCleanupTimer = setInterval(() => {
 }, 5 * 60 * 1000);
 rateLimitCleanupTimer.unref?.();
 
-const SYSTEM = `You translate National Weather Service alerts into calm, plain English for a general reader. Given an alert's official text, write a short explanation covering: what is happening, exactly where and until when, and what a person there should actually do. Rules:
+const SYSTEM = `You translate National Weather Service alerts into calm, plain English for a general reader. Given an alert's official text, write a short explanation covering: what is happening, exactly where and until when, and what the alert tells people there to do. Rules:
 - Preserve ALL specifics: place names, times, amounts, wind speeds, road names
 - Calm and factual — no hype, no exclamation points, no alarmist framing beyond what the alert itself states
 - Plain prose in 1-3 short paragraphs, 120 words maximum
-- Bold the single most important action with **markdown bold**; no headers, lists, or quotes
-- Do not add information that is not in the alert`;
+- Bold the single most important action the alert gives with **markdown bold** (bold nothing if it gives none); no headers, lists, or quotes
+- Do not add information that is not in the alert
+- Never add advice, warnings, calls to action, or reassurance that the alert does not give: every action you mention comes from the alert's own text, usually its Instructions. If the alert gives no action, do not supply one. Plaincast promises its readers that every statement on it comes from the National Weather Service; advice the alert did not give breaks that promise, however sensible it sounds`;
 
 // Translate a structured error (or a raw fetch/model failure) into the exact
 // HTTP responses the endpoint has always produced. Shared by the fresh path
