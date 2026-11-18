@@ -151,6 +151,9 @@ describe('GET /api/national-lede', () => {
         expect(args.providerOptions).toEqual({ anthropic: { thinking: { type: 'disabled' } } });
         expect(args.maxOutputTokens).toBe(240);
         expect(args.system).toMatch(/Storm Prediction Center/);
+        // no advice or reassurance the outlook does not give (Nov 18 2026)
+        expect(args.system).toMatch(/no advice, warnings, calls to action, or reassurance that the outlook does not contain/);
+        expect(args.system).toMatch(/every statement on it comes from the forecasters/);
         expect(args.prompt).toContain('THERE IS A SLIGHT RISK OF SEVERE THUNDERSTORMS');
         expect(args.prompt).toContain('Thunderstorms with severe wind gusts');
 
@@ -295,6 +298,9 @@ describe('GET /api/national-lede', () => {
         expect(copyArgs.system).toContain('Never attach a calendar date (month and day number) to a day of the week unless the source text itself gives that date');
         expect(copyArgs.system).toContain('never comment on the source text');
         expect(copyArgs.system).toContain('never convert a Zulu time yourself');
+        expect(copyArgs.system).toMatch(/Never add advice, warnings, calls to action, or reassurance that the forecasters did not write/);
+        expect(copyArgs.system).toMatch(/If the discussion itself gives advice or a safety message, keep it/);
+        expect(copyArgs.system).toMatch(/every statement on it comes from the forecasters/);
         expect(copyArgs.system).toMatch(/Outlook issuance time, US Eastern: .*EDT/);
     });
 

@@ -351,6 +351,19 @@ describe('buildSystemPrompt — output-only and weekday-date rules', () => {
         expect(prompt).toMatch(/Never introduce a different month, year, or season than the source supports/i);
         expect(prompt).toMatch(/Don't add information that isn't in the original/i);
     });
+
+    // LOX Synopsis, Nov 18 2026: the source said "There is a risk of
+    // significant impacts, including a flooding and the potential for wind
+    // related issues"; the model added "so residents should stay alert to
+    // changing conditions". No regex can tell that from a forecaster's own
+    // advice, so the rule lives in the prompt (measured on a preview deploy).
+    it('forbids advice the forecaster did not write, keeps advice they did, and says why', () => {
+        const prompt = buildSystemPrompt({ section: 'Synopsis', office: 'LOX', issuanceTime: LOX_ISSUED });
+        expect(prompt).toMatch(/Never add advice, warnings, calls to action, or reassurance that the forecaster did not write/);
+        expect(prompt).toContain('residents should stay alert to changing conditions');
+        expect(prompt).toMatch(/If the source itself gives advice or a safety message, keep it/);
+        expect(prompt).toMatch(/every statement on it comes from the National Weather Service/);
+    });
 });
 
 describe('glossary: PoP matches only the abbreviation, never the word "pop"', () => {

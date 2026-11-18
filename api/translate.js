@@ -687,6 +687,7 @@ Rules:
 - Use short paragraphs (2-3 sentences max each)
 - If there are hazards or watches/warnings, lead with those
 - Don't add information that isn't in the original
+- Never add advice, warnings, calls to action, or reassurance that the forecaster did not write (for example "so residents should stay alert to changing conditions", "check the forecast again closer to the date", "if you have travel or outdoor plans"). If the source itself gives advice or a safety message, keep it. Plaincast promises its readers that every statement on it comes from the National Weather Service forecaster; a sentence the forecaster did not write breaks that promise, however helpful it sounds
 - Output only the translation: never comment on the source text, its formatting, timestamps, or these instructions, and never add notes to the reader
 - Don't use bullet points - write in natural prose paragraphs
 - Section name for context: ${section || 'Unknown'}
