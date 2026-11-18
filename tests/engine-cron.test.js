@@ -14,7 +14,7 @@ mock.module('../api/_snapshots.js', () => ({
     putSnapshot: async () => true,
 }));
 
-const { default: handler, runPoller, FETCH_CAP, MIN_RUN_INTERVAL_MS, productForOffice, utcDay } = await import('../api/cron-refresh.js');
+const { default: handler, runPoller, cronAuthorization, FETCH_CAP, MIN_RUN_INTERVAL_MS, productForOffice, utcDay } = await import('../api/cron-refresh.js');
 const {
     __setSharedCacheBackendForTests, editionKey, pollStateKey, leaseKey, modelCallsKey,
     translationKey, changelogKey,
@@ -450,17 +450,21 @@ describe('cron-refresh: pre-translation', () => {
 });
 
 describe('cron-refresh handler: auth', () => {
-    const saved = process.env.CRON_SECRET;
+    const saved = { secret: process.env.CRON_SECRET, env: process.env.VERCEL_ENV };
     let fetches;
+    let backend;
     beforeEach(() => {
-        // No store injected, not on Vercel: a run stops at the lease, so the
-        // handler is exercised without touching NWS.
-        __setSharedCacheBackendForTests(null);
+        // An empty store: an authorized call runs (and writes its lease);
+        // NWS is unreachable (recordFetches), so the poll fails harmlessly.
+        backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
         fetches = recordFetches();
     });
     afterEach(() => {
         fetches.restore();
-        if (saved === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = saved;
+        __setSharedCacheBackendForTests(null);
+        if (saved.secret === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = saved.secret;
+        if (saved.env === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = saved.env;
     });
     const res = () => ({
         statusCode: 200, headers: {}, body: null,
@@ -469,39 +473,81 @@ describe('cron-refresh handler: auth', () => {
         status(c) { this.statusCode = c; return this; },
         json(b) { this.body = b; return this; },
     });
-
-    it('CRON_SECRET set: requires the exact bearer token', async () => {
-        process.env.CRON_SECRET = 's3cret-value';
-        for (const auth of [undefined, '', 'Bearer wrong', 'Bearer s3cret-valu', 's3cret-value', 'bearer s3cret-value']) {
-            const r = res();
-            await handler({ method: 'GET', query: {}, headers: auth === undefined ? {} : { authorization: auth } }, r);
-            expect(r.statusCode).toBe(401);
-            expect(r.body.code).toBe('forbidden');
-            expect(r.headers['cache-control']).toBe('no-store');
-        }
-        const ok = res();
-        await handler({ method: 'GET', query: {}, headers: { authorization: 'Bearer s3cret-value' } }, ok);
-        expect(ok.statusCode).toBe(200);
-        expect(ok.body.skipped).toBe('store-unavailable');
+    const call = async (headers = {}, extra = {}) => {
+        const r = res();
+        await handler({ method: 'GET', query: {}, headers, ...extra }, r);
+        return r;
+    };
+    const noWork = () => {
+        expect(backend.reads).toEqual([]);
+        expect(backend.writes).toEqual([]);
         expect(fetches.calls).toEqual([]);
+    };
+
+    it('production without CRON_SECRET: refuses every call and does no work', async () => {
+        process.env.VERCEL_ENV = 'production';
+        for (const secret of [undefined, '']) {
+            if (secret === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = secret;
+            for (const auth of [undefined, 'Bearer ', 'Bearer anything']) {
+                const r = await call(auth === undefined ? {} : { authorization: auth });
+                expect(r.statusCode).toBe(401);
+                expect(r.body.code).toBe('forbidden');
+                expect(r.body.hint).toContain('CRON_SECRET must be configured');
+                expect(r.headers['cache-control']).toBe('no-store');
+            }
+        }
+        noWork();
     });
 
-    it('CRON_SECRET unset: allowed (the lease bounds what a call can cost)', async () => {
+    it('CRON_SECRET set (any environment): requires the exact bearer token', async () => {
+        process.env.CRON_SECRET = 's3cret-value';
+        for (const env of ['production', 'preview', undefined]) {
+            if (env === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = env;
+            for (const auth of [undefined, '', 'Bearer wrong', 'Bearer s3cret-valu', 'Bearer s3cret-valuee', 's3cret-value', 'bearer s3cret-value']) {
+                const r = await call(auth === undefined ? {} : { authorization: auth });
+                expect(r.statusCode).toBe(401);
+                expect(r.body.code).toBe('forbidden');
+            }
+        }
+        noWork();
+        process.env.VERCEL_ENV = 'production';
+        const ok = await call({ authorization: 'Bearer s3cret-value' });
+        expect(ok.statusCode).toBe(200);
+        expect(ok.body.ok).toBe(true);
+        expect(ok.body.poll.ok).toBe(false); // NWS unreachable in tests
+        expect(backend.writes.some(w => w.key === leaseKey())).toBe(true);
+    });
+
+    it('outside production, a missing CRON_SECRET allows a call (hand runs on a preview)', async () => {
         delete process.env.CRON_SECRET;
-        const r = res();
-        await handler({ method: 'GET', query: {}, headers: {} }, r);
-        expect(r.statusCode).toBe(200);
-        expect(r.headers['cache-control']).toBe('no-store');
-        expect(typeof r.body.durationMs).toBe('number');
+        for (const env of ['preview', 'development', undefined]) {
+            if (env === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = env;
+            backend.store.clear();
+            const r = await call();
+            expect(r.statusCode).toBe(200);
+            expect(r.headers['cache-control']).toBe('no-store');
+            expect(typeof r.body.durationMs).toBe('number');
+        }
+    });
+
+    it('cronAuthorization compares in constant time on equal-length buffers', () => {
+        const req = (a) => ({ headers: a === undefined ? {} : { authorization: a } });
+        expect(cronAuthorization(req('Bearer abc'), { CRON_SECRET: 'abc' })).toBe('ok');
+        expect(cronAuthorization(req('Bearer abd'), { CRON_SECRET: 'abc' })).toBe('bad-token');
+        expect(cronAuthorization(req('Bearer abcd'), { CRON_SECRET: 'abc' })).toBe('bad-token');
+        expect(cronAuthorization(req(undefined), { CRON_SECRET: 'abc' })).toBe('bad-token');
+        expect(cronAuthorization(req(undefined), { VERCEL_ENV: 'production' })).toBe('missing-secret');
+        expect(cronAuthorization(req(undefined), { VERCEL_ENV: 'production', CRON_SECRET: '' })).toBe('missing-secret');
+        expect(cronAuthorization(req(undefined), { VERCEL_ENV: 'preview' })).toBe('ok');
+        expect(cronAuthorization(req(undefined), {})).toBe('ok');
     });
 
     it('GET only, no query parameters', async () => {
         delete process.env.CRON_SECRET;
-        let r = res();
-        await handler({ method: 'POST', query: {}, headers: {} }, r);
+        delete process.env.VERCEL_ENV;
+        let r = await call({}, { method: 'POST' });
         expect(r.statusCode).toBe(405);
-        r = res();
-        await handler({ method: 'GET', query: { force: '1' }, headers: {} }, r);
+        r = await call({}, { query: { force: '1' } });
         expect(r.statusCode).toBe(400);
         expect(r.body.code).toBe('unknown_param');
     });

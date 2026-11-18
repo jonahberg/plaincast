@@ -4,8 +4,9 @@
 //
 // One run, in order:
 //   1. Lease. One run at a time, and at most one run per MIN_RUN_INTERVAL_MS
-//      whoever calls (Vercel's scheduler, a person, an unauthenticated
-//      stranger when CRON_SECRET is unset): extra calls cost one store read.
+//      whoever calls (Vercel's scheduler, or a person on a preview, where a
+//      missing CRON_SECRET is allowed): extra calls cost one store read.
+//      Production refuses every call until CRON_SECRET is set.
 //   2. Poll. The AFDs issued since the last heartbeat minus a margin (the
 //      7-day list on a cold start and every FULL_RECONCILE_MS). The state
 //      records the newest product per office; the HEARTBEAT is written only
@@ -42,7 +43,7 @@ import {
 } from './_shared-cache.js';
 import {
     AI_FOR_AGENTS, EDITION_VERSION, PRETRANSLATE, STORE_RENDER,
-    allOffices, emptyState, mergeListing, officeTag, switchOn, validEdition, validState,
+    allOffices, emptyState, mergeListing, officeTag, validEdition, validState,
 } from './_store.js';
 import { fetchAFDsSince, fetchAFDWeek, fetchProductById } from './_nws-feed.js';
 
@@ -500,19 +501,30 @@ async function pretranslatePhase({ state, editions, offices, deps, env, now, ela
     await pool(candidates, TRANSLATE_CONCURRENCY, work);
 }
 
-function authorized(req, secret) {
-    if (!secret) return true;
+// Fail closed in production. Vercel's scheduler sends `Authorization:
+// Bearer <CRON_SECRET>` when that variable exists; production without it
+// refuses every call (the schedule does nothing until it is configured).
+// Outside production (a preview behind Deployment Protection, local, tests)
+// a missing secret allows the call, so the poller can be run by hand.
+// Returns 'ok', 'missing-secret' or 'bad-token'.
+export function cronAuthorization(req, env = process.env) {
+    const secret = typeof env.CRON_SECRET === 'string' ? env.CRON_SECRET : '';
+    if (!secret) return env.VERCEL_ENV === 'production' ? 'missing-secret' : 'ok';
     const got = Buffer.from(String(req.headers?.authorization || ''));
     const want = Buffer.from(`Bearer ${secret}`);
-    return got.length === want.length && timingSafeEqual(got, want);
+    return got.length === want.length && timingSafeEqual(got, want) ? 'ok' : 'bad-token';
 }
 
 export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     if (req.method !== 'GET') return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
-    // Vercel sends `Authorization: Bearer <CRON_SECRET>` when that variable
-    // exists. Without it the endpoint is open, which the lease makes cheap.
-    if (!authorized(req, process.env.CRON_SECRET)) {
+    const auth = cronAuthorization(req);
+    if (auth === 'missing-secret') {
+        return sendError(res, 401, 'forbidden', 'Not authorized', {
+            hint: 'CRON_SECRET must be configured for production; the poller does no work without it.',
+        });
+    }
+    if (auth !== 'ok') {
         return sendError(res, 401, 'forbidden', 'Not authorized', {
             hint: 'This endpoint is run by the Vercel scheduler with the project\'s CRON_SECRET.',
         });
