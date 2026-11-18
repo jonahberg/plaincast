@@ -1,0 +1,208 @@
+// The edition store: what the scheduled poller (api/cron-refresh.js) keeps
+// about every office's AFD, and the one read the page functions make to
+// render from it instead of calling api.weather.gov.
+//
+// Built on api/_shared-cache.js (the Vercel Runtime Cache): per region,
+// shared by every function of the project, separate for preview and
+// production, survives deploys, LRU-evicted. It is treated as a cache that
+// can lose anything at any time, never as a database: every reader falls
+// back to the live NWS path on a miss, a failure or any doubt.
+//
+// Two families, both untagged (a CDN purge by tag would delete tagged items):
+//
+//   poll:v1      the poller's state. `at` is the HEARTBEAT: the time of the
+//                last successful poll. `offices[CODE]` is the newest product
+//                the listing showed for that office ({ id, issuanceTime,
+//                prevId }) plus the poller's bookkeeping for it.
+//   ed:v1:CODE   { v, office, current: { id, issuanceTime, productText,
+//                storedAt, prevId }, previous: { id, issuanceTime,
+//                productText } | null }
+//
+// A page renders from the store only when ALL of these hold; otherwise it
+// takes the live path, unchanged:
+//   - PLAINCAST_STORE_RENDER=1 (read per request);
+//   - the heartbeat is at most HEARTBEAT_FRESH_MS old;
+//   - the newest product the listing showed for the office IS the stored
+//     current edition (a new issuance the poller has seen but not yet
+//     fetched, for a 403, a cap or a timeout, makes the office live);
+//   - no tie between two products with the same issuance time.
+// A forecast held past its issuance is the worst failure this design can
+// have, so every doubt resolves to the live path.
+//
+// Files prefixed with `_` are not treated as endpoints by Vercel.
+import { OFFICE_NAMES } from '../docs/js/offices.js';
+import { editionKey, pollStateKey, storeRead } from './_shared-cache.js';
+
+// ── Switches (environment, read per request; all default OFF) ─────────
+export const STORE_RENDER = 'PLAINCAST_STORE_RENDER';
+export const PRETRANSLATE = 'PLAINCAST_PRETRANSLATE';
+export const AI_FOR_AGENTS = 'PLAINCAST_AI_FOR_AGENTS';
+
+export function switchOn(name) {
+    return process.env[name] === '1';
+}
+
+// ── Offices ──────────────────────────────────────────────────────────
+// "All offices" is OFFICE_NAMES, never a list or a count kept here.
+export function allOffices() {
+    return Object.keys(OFFICE_NAMES);
+}
+
+// The product listing names the issuing office by its 4-letter ICAO id
+// ("KOTX"); the site uses the 3-letter code. Standard ids drop the leading
+// K; outside the contiguous US the id is not the code plus a prefix.
+// SWAP POINT: docs/js/offices.js is gaining a canonical
+// officeCodeFromIssuing(); replace this body with a call to it.
+const ISSUING_EXCEPTIONS = {
+    TJSJ: 'SJU', // San Juan
+    NSTU: 'PPG', // Pago Pago
+    PAFC: 'AFC', // Anchorage
+    PAFG: 'AFG', // Fairbanks
+    PAJK: 'AJK', // Juneau
+    PHFO: 'HFO', // Honolulu
+    PGUM: 'GUM', // Guam
+};
+
+export function officeFromIssuing(issuingOffice) {
+    const id = String(issuingOffice ?? '').trim().toUpperCase();
+    if (ISSUING_EXCEPTIONS[id]) return ISSUING_EXCEPTIONS[id];
+    if (/^K[A-Z]{3}$/.test(id)) return id.slice(1);
+    return null;
+}
+
+// ── CDN cache tags ───────────────────────────────────────────────────
+// Every page response that shows an office's edition carries that office's
+// tag (the homepage also carries `home`), so the poller can purge them all.
+// Kept disjoint from the shared-cache family tags (`ti`, `cl`, `lede`):
+// purging a page must never delete a stored AI result.
+export const HOME_TAG = 'home';
+export function officeTag(code) {
+    return `office-${code}`;
+}
+
+// ── Freshness ────────────────────────────────────────────────────────
+export const HEARTBEAT_FRESH_MS = 20 * 60 * 1000;
+
+export function heartbeatFresh(at, now = Date.now()) {
+    const t = Date.parse(at);
+    return Number.isFinite(t) && t <= now + 60 * 1000 && now - t <= HEARTBEAT_FRESH_MS;
+}
+
+const ID_RE = /^[\w.:-]{1,64}$/;
+const validId = (id) => typeof id === 'string' && ID_RE.test(id);
+const validText = (t) => typeof t === 'string' && t.length > 0;
+
+export const STATE_VERSION = 1;
+export const EDITION_VERSION = 1;
+
+export function emptyState() {
+    return { v: STATE_VERSION, at: null, fullAt: null, offices: {} };
+}
+
+// A stored state, or null when it is not one this code wrote.
+export function validState(state) {
+    if (!state || typeof state !== 'object' || state.v !== STATE_VERSION) return null;
+    if (!state.offices || typeof state.offices !== 'object' || Array.isArray(state.offices)) return null;
+    return state;
+}
+
+// A stored edition record for `office`, or null.
+export function validEdition(rec, office) {
+    if (!rec || typeof rec !== 'object' || rec.v !== EDITION_VERSION || rec.office !== office) return null;
+    const c = rec.current;
+    if (!c || !validId(c.id) || !validText(c.productText) || typeof c.issuanceTime !== 'string') return null;
+    return rec;
+}
+
+// The one read a page makes. Two store reads in parallel (state + edition),
+// each bounded by the store's read timeout. Resolves with
+// { current: { id, issuanceTime, productText }, previous } when the store
+// may be rendered from, or null (take the live path). `previous` is the
+// current edition's predecessor per the NWS listing, or null when the store
+// does not hold exactly that product. Never throws.
+export async function readRenderableEdition(office, { now = Date.now() } = {}) {
+    try {
+        const [st, ed] = await Promise.all([storeRead(pollStateKey()), storeRead(editionKey(office))]);
+        if (!st.ok || !ed.ok) return null;
+        const state = validState(st.value);
+        if (!state || !heartbeatFresh(state.at, now)) return null;
+        const seen = state.offices[office];
+        if (!seen || seen.tie || !validId(seen.id)) return null;
+        const rec = validEdition(ed.value, office);
+        if (!rec || rec.current.id !== seen.id) return null;
+        const p = rec.previous;
+        const previous = p && validId(p.id) && validText(p.productText)
+            && seen.prevId && p.id === seen.prevId && rec.current.prevId === seen.prevId
+            ? { id: p.id, issuanceTime: typeof p.issuanceTime === 'string' ? p.issuanceTime : null, productText: p.productText }
+            : null;
+        const c = rec.current;
+        return { current: { id: c.id, issuanceTime: c.issuanceTime, productText: c.productText }, previous };
+    } catch (err) {
+        console.warn('store: render read failed:', err?.message || err);
+        return null;
+    }
+}
+
+// ── Listing → state (pure) ───────────────────────────────────────────
+const time = (iso) => {
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? t : -Infinity;
+};
+
+// Listing items grouped by known office code, newest first. Items for
+// offices outside OFFICE_NAMES, or without an id or a time, are dropped.
+export function groupByOffice(items) {
+    const groups = new Map();
+    for (const it of Array.isArray(items) ? items : []) {
+        const code = officeFromIssuing(it?.issuingOffice);
+        if (!code || !OFFICE_NAMES[code]) continue;
+        const id = it?.id;
+        if (!validId(id) || !Number.isFinite(Date.parse(it?.issuanceTime))) continue;
+        if (!groups.has(code)) groups.set(code, []);
+        groups.get(code).push({ id, issuanceTime: it.issuanceTime });
+    }
+    for (const g of groups.values()) g.sort((a, b) => time(b.issuanceTime) - time(a.issuanceTime));
+    return groups;
+}
+
+// Merge one listing into the state. `full` (the 7-day list) is
+// authoritative for every office it covers; an incremental listing (products
+// since a time) only moves an office forward. Returns the offices whose
+// newest product changed. The office's bookkeeping (stored, purge, ...)
+// survives; it is compared against the new id by the poller.
+export function mergeListing(state, items, { full = false } = {}) {
+    const changed = [];
+    for (const [code, g] of groupByOffice(items)) {
+        const top = g[0];
+        const second = g[1] || null;
+        const prior = state.offices[code] || {};
+        let next = null;
+        if (full) {
+            next = { id: top.id, issuanceTime: top.issuanceTime, prevId: second ? second.id : null };
+        } else if (!prior.id) {
+            next = { id: top.id, issuanceTime: top.issuanceTime, prevId: second ? second.id : null };
+        } else if (top.id === prior.id) {
+            continue;
+        } else if (time(top.issuanceTime) > time(prior.issuanceTime)) {
+            // The predecessor is the next product down the window, or (when
+            // the window holds only the new one) the product we knew.
+            next = { id: top.id, issuanceTime: top.issuanceTime, prevId: second ? second.id : prior.id };
+        } else if (time(top.issuanceTime) === time(prior.issuanceTime)) {
+            // Two products, one issuance time: which one NWS lists first is
+            // not ours to guess. Live path until a newer one arrives.
+            state.offices[code] = { ...prior, tie: true };
+            continue;
+        } else {
+            continue; // older than what we know
+        }
+        next.tie = Boolean(second && time(second.issuanceTime) === time(top.issuanceTime));
+        if (prior.id !== next.id || prior.prevId !== next.prevId || Boolean(prior.tie) !== next.tie) {
+            if (prior.id !== next.id) changed.push(code);
+            const keep = { ...prior };
+            delete keep.tie;
+            state.offices[code] = { ...keep, ...next };
+            if (!next.tie) delete state.offices[code].tie;
+        }
+    }
+    return changed;
+}

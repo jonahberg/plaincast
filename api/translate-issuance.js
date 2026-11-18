@@ -13,6 +13,8 @@ import { sendError } from './_errors.js';
 import { sharedGet, sharedSet, translationKey, TRANSLATION_TTL } from './_shared-cache.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
+import { PRETRANSLATE, switchOn } from './_store.js';
+import { storeReusedSection, withReusedSections } from './_section-reuse.js';
 
 // Instance-wide cap on cold model calls per minute (each cold issuance costs
 // one call per section, so it is charged sections.length at once).
@@ -263,11 +265,20 @@ export default async function handler(req, res) {
         if (!productText) throw Object.assign(new Error('empty product'), { statusCode: 502, publicMessage: 'Empty product' });
         const issuanceTime = typeof prod.issuanceTime === 'string' ? prod.issuanceTime : null;
 
-        const sections = translatableSections(productText);
+        let sections = translatableSections(productText);
         if (sections.length === 0) throw Object.assign(new Error('no sections'), { statusCode: 502, publicMessage: 'No translatable sections' });
-        if (!coldBudget.take(sections.length)) throw overCapacityError();
+        // Section reuse (api/_section-reuse.js) only with PLAINCAST_PRETRANSLATE=1:
+        // a section translated before, for the same prompt, costs no call.
+        // Off, every section is charged and translated exactly as before.
+        const reuse = switchOn(PRETRANSLATE);
+        if (reuse) sections = await withReusedSections(office, issuanceTime, sections);
+        const needed = sections.filter(s => !s.reused).length;
+        if (needed > 0 && !coldBudget.take(needed)) throw overCapacityError();
 
-        return translateEdition({ office, id, issuanceTime, productText, sections });
+        return translateEdition({
+            office, id, issuanceTime, productText, sections,
+            onTranslated: reuse ? (s, text) => storeReusedSection(office, issuanceTime, s, text) : null,
+        });
     })();
     inFlight.set(cacheKey, work); // no await between creation and registration
 
