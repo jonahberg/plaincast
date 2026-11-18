@@ -203,9 +203,14 @@ describe('sanitizeTranslation — date ranges and lists', () => {
             ['Rain Thursday, November 18 and 19, then clearing.', 'Rain Thursday, then clearing.'],
             // first date outside the -1..+8 day window (Nov 30 for a Nov 18 issuance)
             ['Rain Monday, November 30 through December 1.', 'Rain Monday.'],
-            // days that run backwards are still one (bad) date expression
-            ['Rain Thursday, November 19 and 18.', 'Rain Thursday.'],
-            ['Rain Thursday, November 19–18 looks dry.', 'Rain Thursday looks dry.'],
+            // a dash touching two days that run backwards, ending the clause,
+            // is still a (bad) range
+            ['Rain Thursday, November 19–18.', 'Rain Thursday.'],
+            ['Rain Thursday, November 19/18, then dry.', 'Rain Thursday, then dry.'],
+            // spaced dashes are ranges too when the clause ends after the day
+            ['Rain Friday, November 19 – 20.', 'Rain Friday.'],
+            // a weekday joined through a comma: neither reading fits
+            ['Showers end Tuesday, and Thursday, November 18 through 21, stay dry.', 'Showers end Tuesday, and Thursday, stay dry.'],
         ];
         for (const [input, want] of cases) {
             expect(sanitizeTranslation(input, ctx)).toBe(want);
@@ -268,6 +273,44 @@ describe('sanitizeTranslation — date ranges and lists', () => {
         expect(sanitizeTranslation('Showers Friday, November 19 to 10:30.', ctx)).toBe('Showers Friday to 10:30.');
         // "and 3" cannot be a later November day than the 19th: not a list.
         expect(sanitizeTranslation('Rain Friday, November 19 and 3 more days of showers.', ctx)).toBe('Rain Friday and 3 more days of showers.');
+    });
+
+    it('reads a dash or "and" before a count as prose, never deleting the number', () => {
+        // In-window first date: nothing to change.
+        for (const text of [
+            'Rain arrives Thursday, November 19 — 2 rounds of storms are expected.',
+            'Rain Thursday, November 19 - 6 hours of steady rain.',
+            'Rain **Thursday, November 19** — 12-hour totals near an inch.',
+            'Rain Thursday, November 19—24 hours of rain.',
+            'Rain Thursday, November 19 — 24-hour totals near an inch.',
+            'Rain Wednesday into Thursday, November 19 and 24 hours of showers.',
+            'Thursday, November 19 – 20 looks wet.',
+        ]) {
+            expect(sanitizeTranslation(text, ctx)).toBe(text);
+        }
+        // Wrong weekday: only the first date goes; the count stays.
+        expect(sanitizeTranslation('Rain arrives Friday, November 19 — 2 rounds of storms are expected.', ctx))
+            .toBe('Rain arrives Friday — 2 rounds of storms are expected.');
+        expect(sanitizeTranslation('Rain Friday, November 19 — 24 hours of rain.', ctx)).toBe('Rain Friday — 24 hours of rain.');
+        expect(sanitizeTranslation('Rain Friday, November 19 — 24-hour totals near an inch.', ctx)).toBe('Rain Friday — 24-hour totals near an inch.');
+    });
+
+    it('accepts a weekday run joined through a comma, or the run after the comma', () => {
+        for (const text of [
+            'Showers end Wednesday, and Thursday, November 19 through 21, stay dry.',
+            'Dry Wednesday, Thursday and Friday, November 18, 19 and 20.',
+        ]) {
+            expect(sanitizeTranslation(text, ctx)).toBe(text);
+        }
+    });
+
+    it('records the limits: a backwards "and" list or a range before a quantity is read as one date', () => {
+        // Days that do not run forward are read as not a date, so the number
+        // is never removed; with a wrong first date that leaves "and 18".
+        expect(sanitizeTranslation('Rain Thursday, November 19 and 18.', ctx)).toBe('Rain Thursday, November 19 and 18.');
+        expect(sanitizeTranslation('Rain Friday, November 19 and 18.', ctx)).toBe('Rain Friday and 18.');
+        // "20 to 25 mph" reads as a quantity, not as the end of a range.
+        expect(sanitizeTranslation('Gusts Friday, November 19 and 20 to 25 mph.', ctx)).toBe('Gusts Friday and 20 to 25 mph.');
     });
 
     it('leaves separate weekday/date pairs and plain prose alone', () => {

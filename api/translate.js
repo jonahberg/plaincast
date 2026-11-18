@@ -456,14 +456,29 @@ const BOLD = '(?:\\*\\*)?';
 const FIRST_DATE = `${BOLD}(?:${MONTH_ALT})\\.?\\s+\\d{1,2}${ORDINAL}\\b${YEAR_TAIL}${BOLD}`;
 // A later day of a range or list: "19", "December 1", "**20**".
 const MORE_DAY = `${BOLD}(?:(?:${MONTH_ALT})\\.?\\s+)?${DAY_NUM}${ORDINAL}`;
-const RANGE_LINK = '(?:[ \\t]*[–—/-][ \\t]*|,?[ \\t]+(?:and|or|through|thru|to|into|until|till|&)[ \\t]+)';
-// What may follow the LAST day of a range: not a letter or clock time
-// ("10:30"), not a unit ("25 mph", "2 inches", "20 percent") and not a second
-// number ("1 to 2 inches"). Those make the number a quantity or a time, and
-// the expression stops at the first date as it always has.
-const DAY_END = '(?!\\w|:\\d|\\.\\d|[ \\t]*(?:%|°|percent\\b|mph\\b|knots?\\b|kts?\\b|kt\\b|degrees?\\b|inch(?:es)?\\b|feet\\b|foot\\b|ft\\b|miles?\\b|cm\\b|mm\\b|[AaPp]\\.?[Mm]\\b|noon\\b|midnight\\b|(?:to|or|-|–|—)[ \\t]*\\d))';
+// Two kinds of link between days. A dash or slash touching both numbers
+// ("19–20", "19-20", "19/20") is range syntax: the day after it only has to
+// be a day, not a quantity or a time (DAY_END).
+const TIGHT_LINK = '[–/-]';
+// A word ("and", "through", "to", "or"), an em dash or a spaced dash ("19 –
+// 20", "19 — 2 rounds of storms") is ordinary prose too, so the day after it
+// counts only where the clause ends or goes on as it would after a date
+// (CLAUSE_END). "and 24 hours", "— 2 rounds" and "to 25 mph" stay prose.
+const LOOSE_LINK = '(?:,?[ \\t]+(?:and|or|through|thru|to|into|until|till|&)[ \\t]+|[ \\t]*—[ \\t]*|[ \\t]+[–-][ \\t]*|[ \\t]*[–-][ \\t]+)';
+// After a tight link: not a letter or clock time ("10:30"), not a compound
+// ("24-hour"), not a unit or count ("25 mph", "2 inches", "6 hours") and not
+// a second number ("1-2 inches"). Those make the number a quantity or a time,
+// and the expression stops at the first date as it always has.
+const DAY_END = '(?!\\w|:\\d|\\.\\d|-[A-Za-z]|[ \\t]*(?:%|°|percent\\b|mph\\b|knots?\\b|kts?\\b|kt\\b|degrees?\\b|inch(?:es)?\\b|feet\\b|foot\\b|ft\\b|miles?\\b|cm\\b|mm\\b|[AaPp]\\.?[Mm]\\b|noon\\b|midnight\\b|(?:hours?|hrs?|days?|nights?|weeks?|minutes?|mins?)\\b|(?:to|or|-|–|—)[ \\t]*\\d))';
+// After a loose link: the clause ends (punctuation, line end, bold close) or
+// goes on with a word that follows a date ("Thursday, November 19 and 20
+// look dry", "... 19 and 20 with rain").
+const CLAUSE_END = '(?=\\**(?:[ \\t]*(?:[,;!?)\\n]|[.:](?!\\d)|$)|[ \\t]+(?:look|looks|will|would|could|should|may|might|can|is|are|was|were|bring|brings|see|sees|stay|stays|remain|remains|turn|turns|with|as|when|before|after|then|but|in|at|on|for|from|across|over|along|near|during|while|that|which|where)\\b))';
+// The clause ends here: punctuation (not a decimal point or a clock
+// colon), a line end or the end of the text, after any bold close.
+const CLAUSE_ENDS_RE = /^\**[ \t]*(?:[,;!?)\n]|[.:](?!\d)|$)/;
 // " and 19", "–19", " through December 1", "/20", ", 19 and 20".
-const DATE_MORE = `(?:,[ \\t]*${MORE_DAY}(?!\\w|:\\d))*${RANGE_LINK}${MORE_DAY}${DAY_END}${YEAR_TAIL}${BOLD}`;
+const DATE_MORE = `(?:,[ \\t]*${MORE_DAY}(?!\\w|:\\d))*(?:${TIGHT_LINK}${MORE_DAY}${DAY_END}|${LOOSE_LINK}${MORE_DAY}${CLAUSE_END})${YEAR_TAIL}${BOLD}`;
 // "Sunday, November 22" / "Sunday November 22nd" / "**Sunday**, November 22" /
 // "Sunday, **Nov. 22**", optionally running on as a range or list ("Thursday,
 // November 19–20", "Wednesday into Thursday, November 18 and 19"). Groups:
@@ -518,17 +533,23 @@ function parseDates(expr) {
 const windowIndex = (days, { month, day, year }) =>
     days.findIndex(x => x.month === month && x.day === day && (!year || x.year === year));
 
-// The weekdays a range belongs to, ending with `weekday`: "Wednesday into
-// Thursday" -> [3, 4]; "late **Monday** through early **Wednesday**" -> [1, 3].
-function weekdayRun(before, weekday) {
+// The weekday runs a range may belong to, each ending with `weekday`:
+// "Wednesday into Thursday" -> [[3, 4]]; "late **Monday** through early
+// **Wednesday**" -> [[1, 3]]. A weekday joined through a comma may belong to
+// the clause before ("Showers end Wednesday, and Thursday, November 19-21"),
+// so the run up to that comma is a candidate too.
+function weekdayRuns(before, weekday) {
     const run = [WEEKDAYS.indexOf(weekday)];
+    const runs = [];
     for (let i = 0; i < 6; i++) {
         const m = WEEKDAY_LINK_RE.exec(before);
         if (!m) break;
+        if (m[0].includes(',')) runs.push([...run]);
         run.unshift(WEEKDAYS.indexOf(m[1]));
         before = before.slice(0, m.index);
     }
-    return run;
+    runs.push(run);
+    return runs;
 }
 
 // The first date must be inside the window, on the first weekday of the run.
@@ -577,14 +598,15 @@ function fixWeekdayDates(text, office, issuanceTime, timeZone) {
             return inBold || removed.endsWith('**') ? head + '**' + kept : match;
         };
         let range = more ? parseDates(first + more) : null;
-        // Days that run backwards ("November 19–3", "November 19 and 3.") are
-        // still one bad date expression, but "and 3 more days" is a quantity:
-        // only a dash or slash, or a number that ends the clause, means a date.
-        if (more && !range && (/^\**[ \t]*[–—/-]/.test(more)
-            || !/^[ \t]+[A-Za-z]/.test(whole.slice(offset + match.length)))) range = [];
-        if (range && range.length !== 1) {
-            const run = weekdayRun(whole.slice(0, offset), weekday);
-            return range.length > 1 && datesFitWeekdays(days, range, run) ? match : drop(first + more);
+        // Days that do not run forward ("November 19 and 3 more days") are
+        // read as not a range: the number is never removed. Only a dash or
+        // slash touching both numbers where the clause ends ("November
+        // 19–18.") is a bad range.
+        if (more && !range && /^[–/-]/.test(more)
+            && CLAUSE_ENDS_RE.test(whole.slice(offset + match.length))) range = [];
+        if (range) {
+            const runs = weekdayRuns(whole.slice(0, offset), weekday);
+            return range.length > 1 && runs.some(run => datesFitWeekdays(days, range, run)) ? match : drop(first + more);
         }
         // A single date, or a run-on that is not a date range: the first date
         // alone is checked against the weekday before it, as it always was.
