@@ -102,6 +102,69 @@ export function changedParagraphs(prevText, currText) {
     });
 }
 
+// ── The changelog core ───────────────────────────────────────────────
+// Shared by this endpoint and the scheduled poller (api/cron-refresh.js):
+// one prompt, one verdict rule, one shared-cache key per current issuance.
+//
+// The verdict for CURRENT (id currentId, text currText, issued `updated`)
+// against its predecessor (prevText, issued `since`). Resolves with
+// { payload } for a real verdict (a sentence, or null for "nothing changed"
+// or a trivial change), already stored in memory and the shared store; or
+// { transient: true } for an empty model answer, which is never stored.
+// `charge()` is asked for the one model call and must return true, or this
+// throws over_capacity. A model error is thrown to the caller.
+export async function summarizeChange({ office, currentId, currText, prevText, since, updated, charge }) {
+    const changes = changedParagraphs(prevText, currText).slice(0, 6);
+    if (changes.length === 0) {
+        const payload = { changelog: null, since, updated };
+        if (currentId) {
+            setCache(currentId, payload);
+            await storeShared(office, currentId, payload);
+        }
+        return { payload };
+    }
+
+    // Verdicts are stored in the shared cache, which survives deploys:
+    // bump the version in api/_shared-cache.js when this output's rules
+    // change.
+    const system = `You summarize what changed between two consecutive National Weather Service Area Forecast Discussions. Given the NEW or CHANGED passages from the latest update, write ONE warm, plain-English sentence (max ~30 words) describing what changed for a general reader: shifts in timing, rain or snow chances, temperatures, hazards, or forecaster confidence. No preamble, no markdown, no lists, no quotes. If the changes are purely administrative or trivial (minor wording, aviation/TAF codes only), respond with exactly: NONE`;
+    const prompt = `Forecast office: ${OFFICE_NAMES[office]}.\n\nNEW OR CHANGED PASSAGES FROM THE LATEST UPDATE:\n\n${changes.join('\n\n')}`;
+
+    if (!charge()) throw overCapacityError();
+    const result = await generateText({
+        model: MODEL,
+        providerOptions: PROVIDER_OPTIONS,
+        system,
+        prompt,
+        maxOutputTokens: 240,
+        abortSignal: AbortSignal.timeout(15000),
+    });
+
+    let changelog = (result.text || '').trim();
+    let trivial = false;
+    if (result.finishReason === 'content-filter' || /^none[.!]?$/i.test(changelog)) {
+        changelog = null;
+        trivial = true; // a real verdict: the changes aren't newsworthy
+    } else if (!changelog) {
+        // Empty model output is a transient failure, not a verdict — do
+        // not cache it anywhere or the ledger fabricates "minor refinements".
+        return { transient: true };
+    }
+
+    const payload = { changelog, since, updated, ...(trivial ? { trivial } : {}) };
+    if (currentId) {
+        setCache(currentId, payload);
+        await storeShared(office, currentId, payload);
+    }
+    return { payload };
+}
+
+// Whether summarizeChange would call the model for this pair (the poller
+// reserves the call against its daily budget first).
+export function needsModelCall(prevText, currText) {
+    return changedParagraphs(prevText, currText).length > 0;
+}
+
 // Requests for a specific (non-latest) issuance pair get long CDN caching —
 // a completed pair of AFDs never changes, so the summary is effectively
 // immutable. The latest pair keeps a shorter window (a newer AFD supersedes it).
@@ -203,51 +266,15 @@ export default async function handler(req, res) {
         const updated = currProd?.issuanceTime || null;
         if (!currText || !prevText) return { status: 200, cacheHeader: null, body: { changelog: null } };
 
-        const changes = changedParagraphs(prevText, currText).slice(0, 6);
-        if (changes.length === 0) {
-            const payload = { changelog: null, since, updated };
-            if (currentId) {
-                setCache(currentId, payload);
-                await storeShared(office, currentId, payload);
-            }
-            if (!pinnedId) latestMemo.set(office, { payload, time: Date.now() });
-            return { status: 200, cacheHeader, body: { ...payload, cached: false } };
-        }
-
-        // Verdicts are stored in the shared cache, which survives deploys:
-        // bump the version in api/_shared-cache.js when this output's rules
-        // change.
-        const system = `You summarize what changed between two consecutive National Weather Service Area Forecast Discussions. Given the NEW or CHANGED passages from the latest update, write ONE warm, plain-English sentence (max ~30 words) describing what changed for a general reader: shifts in timing, rain or snow chances, temperatures, hazards, or forecaster confidence. No preamble, no markdown, no lists, no quotes. If the changes are purely administrative or trivial (minor wording, aviation/TAF codes only), respond with exactly: NONE`;
-        const prompt = `Forecast office: ${OFFICE_NAMES[office]}.\n\nNEW OR CHANGED PASSAGES FROM THE LATEST UPDATE:\n\n${changes.join('\n\n')}`;
-
-        if (!coldBudget.take()) throw overCapacityError();
-        const result = await generateText({
-            model: MODEL,
-            providerOptions: PROVIDER_OPTIONS,
-            system,
-            prompt,
-            maxOutputTokens: 240,
-            abortSignal: AbortSignal.timeout(15000),
+        const verdict = await summarizeChange({
+            office, currentId, currText, prevText, since, updated,
+            charge: () => coldBudget.take(),
         });
-
-        let changelog = (result.text || '').trim();
-        let trivial = false;
-        if (result.finishReason === 'content-filter' || /^none[.!]?$/i.test(changelog)) {
-            changelog = null;
-            trivial = true; // a real verdict: the changes aren't newsworthy
-        } else if (!changelog) {
-            // Empty model output is a transient failure, not a verdict — do
-            // not cache it anywhere or the ledger fabricates "minor refinements".
+        if (verdict.transient) {
             return { status: 200, cacheHeader: 'public, s-maxage=60', body: { changelog: null, since, updated, transient: true } };
         }
-
-        const payload = { changelog, since, updated, ...(trivial ? { trivial } : {}) };
-        if (currentId) {
-            setCache(currentId, payload);
-            await storeShared(office, currentId, payload);
-        }
-        if (!pinnedId) latestMemo.set(office, { payload, time: Date.now() });
-        return { status: 200, cacheHeader, body: { ...payload, cached: false } };
+        if (!pinnedId) latestMemo.set(office, { payload: verdict.payload, time: Date.now() });
+        return { status: 200, cacheHeader, body: { ...verdict.payload, cached: false } };
     })();
     inFlight.set(flightKey, work); // no await between creation and registration
 
