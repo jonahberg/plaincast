@@ -2,7 +2,6 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { OFFICE_TIMEZONES } from '@data/offices.js';
-import { renderDiffHTML } from '@data/diff.js';
 import { sectionDomId, translateToPlainEnglish } from '@/lib/afd';
 import { mapTranslation, peekTranslation, postTranslation } from '@/lib/ai';
 import { track } from '@/lib/track';
@@ -91,11 +90,9 @@ export const ForecastSection = memo(function ForecastSection({
         return () => { cancelled = true; observer?.disconnect(); };
     }, [aiEligible, section, office, productId, issuanceTime]);
 
+    // `diff.html` is rendered by App with the diff (diff.js loads on demand).
     const changed = diff && (diff.status === 'changed' || diff.status === 'added');
-    const diffHTML = useMemo(
-        () => (changed ? renderDiffHTML(diff) : null),
-        [changed, diff]
-    );
+    const diffHTML = changed ? diff.html : null;
 
     // An editorial block, not a card: a hairline rule, the serif title, and
     // on the same row (under it on phones) the quiet tab control plus the AI

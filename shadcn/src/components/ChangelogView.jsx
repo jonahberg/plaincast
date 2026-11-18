@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 import { OFFICE_NAMES, OFFICE_TIMEZONES } from '@data/offices.js';
 import { computeDiff, renderDiffHTML } from '@data/diff.js';
@@ -17,7 +17,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ChangelogSkeleton } from '@/components/ChangelogFrame';
 
 // ─── The edition ledger (?view=changelog) ───────────────────────────
 // Reverse-chronological record of every retained issuance: what each
@@ -25,6 +25,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 // full text diff one fold away. Port of the vanilla client's
 // showChangelogView (docs/js/app.js); the data layer is shared
 // (docs/js/timeline.js + diff.js).
+//
+// Loaded on demand (App.jsx): this module is a chunk fetched only for the
+// ledger. App renders the frame around it (back link, title, standfirst —
+// ChangelogFrame.jsx) and the same loading skeleton while the chunk
+// arrives, so the frame stays put and the skeleton never changes shape.
 
 const BATCH = 8;      // pairs per page (BATCH + 1 product fetches)
 const LOOKBACK = 40;  // list metadata to page through (~1 week)
@@ -171,7 +176,7 @@ function Entry({ entry, office, tz, isLatest, onOpenEdition }) {
     );
 }
 
-export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
+export function ChangelogView({ office, onOpenEdition, announce }) {
     const tz = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
     const name = OFFICE_NAMES[office] || office;
     const [state, setState] = useState({ status: 'loading' });
@@ -242,40 +247,8 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
     const latestId = data.current.items[0]?.id;
 
     return (
-        <section aria-labelledby="changelog-title">
-            <div className="mb-8">
-                <a
-                    href={`/o/${office}/`}
-                    onClick={(e) => {
-                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-                        e.preventDefault();
-                        onBack();
-                    }}
-                    className="inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline pointer-coarse:min-h-11"
-                >
-                    <ArrowLeft className="size-3.5" aria-hidden="true" />
-                    Back to the forecast
-                </a>
-                <h1 id="changelog-title" className="mt-4 font-serif text-[2rem] leading-[1.1] font-semibold tracking-[-0.02em] text-balance sm:text-[2.5rem]">
-                    Forecast changelog{'\u00a0'}— {name} <span className="font-normal text-muted-foreground">({office})</span>
-                </h1>
-                <p className="mt-3 max-w-[60ch] text-[15px] leading-6 text-muted-foreground">
-                    Every revision to the {name} forecast, newest first — what changed with each update,
-                    and whether the forecasters' confidence rose or fell.
-                </p>
-            </div>
-
-            {state.status === 'loading' && (
-                <div aria-busy="true" aria-label="Loading the changelog">
-                    {[0, 1, 2].map(i => (
-                        <div key={i} className="space-y-3 border-t py-7">
-                            <Skeleton className="h-5 w-72 max-w-full" />
-                            <Skeleton className="h-4 w-full max-w-[37rem]" />
-                            <Skeleton className="h-4 w-2/3" />
-                        </div>
-                    ))}
-                </div>
-            )}
+        <>
+            {state.status === 'loading' && <ChangelogSkeleton />}
 
             {state.status === 'error' && (
                 <Alert variant="destructive">
@@ -316,6 +289,6 @@ export function ChangelogView({ office, onOpenEdition, onBack, announce }) {
                     )}
                 </div>
             )}
-        </section>
+        </>
     );
 }

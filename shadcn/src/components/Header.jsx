@@ -20,7 +20,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function Header({
-    office, shareUrl, onOfficeChange, onShowKbd, theme, onToggleTheme, selectRef,
+    office, shareUrl, onOfficeChange, onShowKbd, onKbdIntent, theme, onToggleTheme, selectRef,
     pickerOpen, onPickerOpenChange,
 }) {
     // After a pick, focus must NOT return to the trigger: a focused trigger
@@ -156,6 +156,7 @@ export function Header({
                         <TooltipTrigger asChild>
                             <Button
                                 variant="ghost" size="icon" onClick={onShowKbd}
+                                onPointerEnter={onKbdIntent} onFocus={onKbdIntent}
                                 aria-label="Keyboard shortcuts" className="hidden sm:inline-flex md:size-8 pointer-coarse:size-11"
                             >
                                 <Keyboard />

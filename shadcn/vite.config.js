@@ -73,15 +73,28 @@ export default defineConfig({
                     const name = info.names?.[0] || info.name || '';
                     return name.endsWith('.css') ? 'assets/app.css' : 'assets/[name][extname]';
                 },
+                // On-demand chunks (assets/ChangelogView.js, KbdDialog.js,
+                // sonner.js, diff.js — named after the module App.jsx and
+                // lib/toast.js import) are fetched long after the page, maybe
+                // after a deploy has replaced them, by an app.js that is still
+                // the old build. With unhashed names nothing stops that pairing,
+                // so imports between chunks keep their real names: a chunk from
+                // a newer build then binds the same-named export or fails to
+                // link (the loader's fallback), never a different function
+                // that happens to share a minified one-letter name.
+                // (~0.4 KB brotli.)
+                minifyInternalExports: false,
                 // Vendor split: the framework and the component primitives
                 // change far less often than the app code, so returning
                 // visitors keep them cached across deploys.
+                // @radix-ui/react-dialog is deliberately absent: only the
+                // on-demand shortcuts dialog uses it, so it ships in that
+                // chunk (assets/KbdDialog.js), not on first load.
                 manualChunks: {
                     vendor: [
                         'react',
                         'react-dom',
                         '@radix-ui/react-accordion',
-                        '@radix-ui/react-dialog',
                         '@radix-ui/react-progress',
                         '@radix-ui/react-select',
                         '@radix-ui/react-separator',
