@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "headers": {
+    "cache-control": "public, s-maxage=900, stale-while-revalidate=3600",
+    "content-type": "text/html; charset=utf-8",
+    "vary": "Accept, Accept-Encoding"
+  },
+  "body": "<<HEAD>>\n        <p class=\"ssr-meta\">Area Forecast Discussion · National Weather Service Los Angeles (LOX) · issued Friday, July 3 at 4:40 AM PDT.</p>\n        <p class=\"ssr-changelog\">Revised in 1 passage since the 10:38 PM discussion. <a href=\"/o/LOX/?view=changelog\">See every revision</a>.</p>\n        <article class=\"forecast-section ssr\">\n            <h2 class=\"section-title\">Synopsis</h2>\n            <p>Low clouds and fog will continue each night and morning with a chance of drizzle near the coasts through the weekend across the region.</p>\n        </article>\n        <article class=\"forecast-section ssr\">\n            <h2 class=\"section-title\">Short Term</h2>\n            <p>Marine layer around 1500 feet deep this morning. A wknd warming trend is expected as high pressure builds over the region with temperatures above normal in the valleys by Saturday afternoon and evening.</p>\n        </article>\n        <article class=\"forecast-section ssr\">\n            <h2 class=\"section-title\">Long Term</h2>\n            <p>Models are in good agreement that troughing returns early next week bringing a cooling trend and increasing onshore flow across the area.</p>\n        </article>\n        <p class=\"ssr-note\">This is the plain-text edition, decoded without AI so it loads anywhere. The full Plaincast experience — plain-English summaries beside the annotated original, with the <a href=\"/o/LOX/?view=changelog\">forecast changelog</a> — loads automatically with JavaScript, or <a href=\"/?office=LOX\">open the interactive edition</a>.</p>\n    <<MID>><<SCRIPT>><<TAIL>>"
+}
