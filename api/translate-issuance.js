@@ -4,9 +4,9 @@
 // text never changes for a given product id, so one translation pass serves
 // every reader from cache — a front-page spike hits the CDN, not the model.
 import { generateText } from 'ai';
-import { OFFICE_NAMES, SECTION_NAMES } from '../docs/js/offices.js';
+import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
-import { extractSections } from './_afd-sections.js';
+import { displayKey, translatableSections } from './_translatable.js';
 import { annotateZuluTimes, buildSystemPrompt, sanitizeTranslation, stripHeaderStamp } from './translate.js';
 import { getSnapshot, putSnapshot } from './_snapshots.js';
 import { sendError } from './_errors.js';
@@ -86,34 +86,15 @@ function completeSharedPayload(entry, office, id) {
     return entry;
 }
 
-// Mirror the client parser's section keying (SECTION_NAMES map, else Title Case)
-// so returned keys line up with what app.js renders.
-export function displayKey(rawKey) {
-    return SECTION_NAMES[rawKey] || rawKey.charAt(0) + rawKey.slice(1).toLowerCase();
-}
-
-// Sections that are never AI-translated: alerts render from the live alerts
-// API, and sub-minimum fragments aren't worth a model call.
-const SKIP_KEYS = new Set(['Active Alerts']);
-const MIN_SECTION_CHARS = 20;
-const MAX_SECTION_CHARS = 10000;
-const MAX_SECTIONS = 10;
+// Which sections are translated, and under which key (pure; shared with the
+// page functions, which join stored translations to the sections they render).
+export { displayKey, translatableSections };
 
 // ── The translation core ─────────────────────────────────────────────
 // Shared by this endpoint and the scheduled poller (api/cron-refresh.js):
 // one code path, one prompt and one sanitizer (both from translate.js), and
 // the same shared-cache keys, so whichever runs first pays and the other is
 // served the stored result.
-
-// The sections of one product that get a model call, in document order:
-// [{ key: <display key>, text }].
-export function translatableSections(productText) {
-    return extractSections(productText)
-        .map(s => ({ key: displayKey(s.key), text: s.text }))
-        .filter(s => !SKIP_KEYS.has(s.key))
-        .filter(s => s.text.length >= MIN_SECTION_CHARS && s.text.length <= MAX_SECTION_CHARS)
-        .slice(0, MAX_SECTIONS);
-}
 
 // One model call for one section: the sanitized translation, or null for a
 // refusal, an empty answer, an error or a timeout. Individual failures
