@@ -25,7 +25,9 @@
 //   - the newest product the listing showed for the office IS the stored
 //     current edition (a new issuance the poller has seen but not yet
 //     fetched, for a 403, a cap or a timeout, makes the office live);
-//   - no tie between two products with the same issuance time.
+//   - no tie between two products with the same issuance time;
+//   - the poller's hard purge of the office's pages succeeded for this
+//     edition (a purge that cannot happen keeps the office live).
 // A forecast held past its issuance is the worst failure this design can
 // have, so every doubt resolves to the live path.
 //
@@ -128,6 +130,10 @@ export async function readRenderableEdition(office, { now = Date.now() } = {}) {
         if (!state || !heartbeatFresh(state.at, now)) return null;
         const seen = state.offices[office];
         if (!seen || seen.tie || !validId(seen.id)) return null;
+        // Only once the CDN copies of the previous edition were hard-deleted
+        // for THIS edition: if the purge API is unavailable, the office stays
+        // on the live path and its short cache windows, as before the engine.
+        if (seen.purge?.id !== seen.id) return null;
         const rec = validEdition(ed.value, office);
         if (!rec || rec.current.id !== seen.id) return null;
         const p = rec.previous;
@@ -165,11 +171,14 @@ export function groupByOffice(items) {
     return groups;
 }
 
-// Merge one listing into the state. `full` (the 7-day list) is
-// authoritative for every office it covers; an incremental listing (products
-// since a time) only moves an office forward. Returns the offices whose
-// newest product changed. The office's bookkeeping (stored, purge, ...)
-// survives; it is compared against the new id by the poller.
+// Merge one listing into the state. Never moves an office backward: a
+// product issued earlier than the one already known is ignored, in either
+// mode (the 7-day list can lag the incremental listing by minutes). The
+// full list (`full`) also corrects the predecessor of the product already
+// known; an incremental listing (products since a time) only moves an
+// office forward. Returns the offices whose newest product changed. The
+// office's bookkeeping (stored, purge, ...) survives; the poller compares
+// it against the new id.
 export function mergeListing(state, items, { full = false } = {}) {
     const changed = [];
     for (const [code, g] of groupByOffice(items)) {
@@ -177,15 +186,15 @@ export function mergeListing(state, items, { full = false } = {}) {
         const second = g[1] || null;
         const prior = state.offices[code] || {};
         let next = null;
-        if (full) {
-            next = { id: top.id, issuanceTime: top.issuanceTime, prevId: second ? second.id : null };
-        } else if (!prior.id) {
+        if (!prior.id) {
             next = { id: top.id, issuanceTime: top.issuanceTime, prevId: second ? second.id : null };
         } else if (top.id === prior.id) {
-            continue;
+            if (!full) continue;
+            // Same newest product: the full list knows its real predecessor.
+            next = { id: top.id, issuanceTime: prior.issuanceTime, prevId: second ? second.id : prior.prevId ?? null };
         } else if (time(top.issuanceTime) > time(prior.issuanceTime)) {
-            // The predecessor is the next product down the window, or (when
-            // the window holds only the new one) the product we knew.
+            // The predecessor is the next product down the listing, or (when
+            // an incremental window holds only the new one) the product we knew.
             next = { id: top.id, issuanceTime: top.issuanceTime, prevId: second ? second.id : prior.id };
         } else if (time(top.issuanceTime) === time(prior.issuanceTime)) {
             // Two products, one issuance time: which one NWS lists first is
@@ -193,7 +202,7 @@ export function mergeListing(state, items, { full = false } = {}) {
             state.offices[code] = { ...prior, tie: true };
             continue;
         } else {
-            continue; // older than what we know
+            continue; // older than what we know: a lagging listing
         }
         next.tie = Boolean(second && time(second.issuanceTime) === time(top.issuanceTime));
         if (prior.id !== next.id || prior.prevId !== next.prevId || Boolean(prior.tie) !== next.tie) {

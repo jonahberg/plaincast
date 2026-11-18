@@ -20,6 +20,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { memoryBackend, recordFetches } from './shared-cache-backend.js';
+import { OFFICE_NAMES } from '../docs/js/offices.js';
 
 mock.module('ai', () => ({
     generateText: async () => { throw new Error('a page render must never call AI'); },
@@ -161,6 +162,12 @@ const officeShell = (query) => {
     return baked;
 };
 
+// The office count is printed in the homepage copy ("every one of the 68
+// forecast offices"); it comes from OFFICE_NAMES, which is growing. The
+// goldens were rendered with 68.
+const GOLDEN_OFFICES = 68;
+const countFree = (body) => (typeof body === 'string' ? body.replace(/\b\d+ forecast offices\b/g, '<<N>> forecast offices') : body);
+
 const CASES = [
     { name: 'office-html', page: 'office', query: { code: 'LOX' } },
     { name: 'office-html-translated', page: 'office', query: { code: 'LOX' }, seed: true },
@@ -225,7 +232,9 @@ describe('engine switches off: office page and homepage are origin/main, byte fo
             const golden = JSON.parse(readFileSync(file, 'utf8'));
             expect(got.status).toBe(golden.status);
             expect(got.headers).toEqual(golden.headers);
-            expect(got.body).toBe(golden.body);
+            expect(countFree(got.body)).toBe(countFree(golden.body));
+            // Byte for byte while the office list is the one the goldens saw.
+            if (Object.keys(OFFICE_NAMES).length === GOLDEN_OFFICES) expect(got.body).toBe(golden.body);
             // A render makes no HTTP call of its own (NWS is module-mocked).
             expect(fetches.calls).toEqual([]);
         });
@@ -241,7 +250,7 @@ describe('engine switches off: office page and homepage are origin/main, byte fo
             backend.seed(modelCallsKey('2026-07-03'), { day: '2026-07-03', calls: 1 });
             const got = await render(c, backend);
             const golden = JSON.parse(readFileSync(join(GOLDEN_DIR, `${c.name}.json`), 'utf8'));
-            expect(got).toEqual(golden);
+            expect({ ...got, body: countFree(got.body) }).toEqual({ ...golden, body: countFree(golden.body) });
             for (const key of backend.reads) expect(key).toMatch(/^(ti|cl):/);
             expect(backend.writes).toEqual([]);
             expect(fetches.calls).toEqual([]);

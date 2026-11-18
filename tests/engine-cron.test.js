@@ -191,6 +191,34 @@ describe('cron-refresh: polling and the edition store', () => {
         expect(purge.calls.length).toBe(2);
     });
 
+    it('a reconcile against a lagging 7-day list keeps the newer stored edition', async () => {
+        nws.add('LOX', 'lox-1', '2026-11-18T05:00:00+00:00');
+        await run();
+        nws.add('LOX', 'lox-2', '2026-11-18T12:02:00+00:00');
+        later(); await run();
+        expect(backend.peek(editionKey('LOX')).current.id).toBe('lox-2');
+        // Six hours on, the full list is due and lags: it tops out at lox-1.
+        nws.products.delete('lox-2');
+        clock += 6 * 60 * MIN + MIN;
+        const s = await run();
+        expect(s.poll.mode).toBe('full');
+        expect(s.newEditions).toEqual([]);
+        expect(backend.peek(pollStateKey()).offices.LOX.id).toBe('lox-2');
+        expect(backend.peek(editionKey('LOX')).current.id).toBe('lox-2');
+    });
+
+    it('purge failures keep the office off the store: the page stays live', async () => {
+        const { readRenderableEdition } = await import('../api/_store.js');
+        nws.add('LOX', 'lox-1', '2026-11-18T05:00:00+00:00');
+        purge.fail();
+        await run({ PLAINCAST_STORE_RENDER: '1' });
+        expect(backend.peek(editionKey('LOX')).current.id).toBe('lox-1');
+        expect(await readRenderableEdition('LOX', { now: clock })).toBe(null);
+        purge.fail(false);
+        later(); await run({ PLAINCAST_STORE_RENDER: '1' });
+        expect((await readRenderableEdition('LOX', { now: clock }))?.current.id).toBe('lox-1');
+    });
+
     it('a failed purge is retried from state next run; switch off → no purge at all', async () => {
         nws.add('LOX', 'lox-1', '2026-11-18T05:00:00+00:00');
         await run(); // switch off

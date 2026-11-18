@@ -118,6 +118,30 @@ describe('mergeListing', () => {
         expect(state.offices.LOX.id).toBe('lox-5');
     });
 
+    it('the full list never moves an office back to an earlier product (a lagging list)', () => {
+        const state = emptyState();
+        state.offices.LOX = { id: 'lox-3', issuanceTime: '2026-11-18T11:00:00+00:00', prevId: 'lox-2', stored: 'lox-3' };
+        const changed = mergeListing(state, [
+            item('KLOX', 'lox-2', '2026-11-18T05:00:00+00:00'),
+            item('KLOX', 'lox-1', '2026-11-17T23:00:00+00:00'),
+        ], { full: true });
+        expect(changed).toEqual([]);
+        expect(state.offices.LOX).toEqual({ id: 'lox-3', issuanceTime: '2026-11-18T11:00:00+00:00', prevId: 'lox-2', stored: 'lox-3' });
+    });
+
+    it('the full list corrects the predecessor of the product already known', () => {
+        const state = emptyState();
+        // An incremental window missed lox-2b, so lox-2 was taken as the predecessor.
+        state.offices.LOX = { id: 'lox-3', issuanceTime: '2026-11-18T11:00:00+00:00', prevId: 'lox-2', stored: 'lox-3' };
+        const changed = mergeListing(state, [
+            item('KLOX', 'lox-3', '2026-11-18T11:00:00+00:00'),
+            item('KLOX', 'lox-2b', '2026-11-18T08:00:00+00:00'),
+            item('KLOX', 'lox-2', '2026-11-18T05:00:00+00:00'),
+        ], { full: true });
+        expect(changed).toEqual([]);
+        expect(state.offices.LOX).toMatchObject({ id: 'lox-3', prevId: 'lox-2b', stored: 'lox-3' });
+    });
+
     it('two products with one issuance time mark the office as a tie (live path)', () => {
         const state = emptyState();
         state.offices.LOX = { id: 'lox-2', issuanceTime: '2026-11-18T05:00:00+00:00', prevId: 'lox-1' };
@@ -159,7 +183,7 @@ describe('readRenderableEdition', () => {
     });
     const state = (over = {}) => ({
         v: 1, at: '2026-11-18T11:55:00Z', fullAt: '2026-11-18T08:00:00Z',
-        offices: { LOX: { id: 'lox-3', issuanceTime: '2026-11-18T11:00:00+00:00', prevId: 'lox-2', stored: 'lox-3' } },
+        offices: { LOX: { id: 'lox-3', issuanceTime: '2026-11-18T11:00:00+00:00', prevId: 'lox-2', stored: 'lox-3', purge: { id: 'lox-3', n: 1 } } },
         ...over,
     });
     function seed(s, r) {
@@ -185,6 +209,15 @@ describe('readRenderableEdition', () => {
         expect((await readRenderableEdition('LOX', { now: NOW })).previous).toBe(null);
         seed(state(), record({ previous: null }));
         expect((await readRenderableEdition('LOX', { now: NOW })).previous).toBe(null);
+    });
+
+    it('no successful hard purge for this edition → null (the purge API may be unavailable)', async () => {
+        for (const purge of [undefined, { id: 'lox-2', n: 2 }]) {
+            const s = state();
+            s.offices.LOX.purge = purge;
+            seed(s, record());
+            expect(await readRenderableEdition('LOX', { now: NOW })).toBe(null);
+        }
     });
 
     it('stale heartbeat → null (live path)', async () => {

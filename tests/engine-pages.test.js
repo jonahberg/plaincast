@@ -103,10 +103,10 @@ function liveScenario({ prev = true } = {}) {
     }
 }
 
-function seedStore(backend, { at = new Date().toISOString(), prev = true, seenId = CURR_ID, office = 'LOX', text = CURR } = {}) {
+function seedStore(backend, { at = new Date().toISOString(), prev = true, seenId = CURR_ID, office = 'LOX', text = CURR, purged = true } = {}) {
     backend.seed(pollStateKey(), {
         v: 1, at, fullAt: at,
-        offices: { [office]: { id: seenId, issuanceTime: CURR_TIME, prevId: PREV_ID, stored: CURR_ID, storedPrev: prev ? PREV_ID : null } },
+        offices: { [office]: { id: seenId, issuanceTime: CURR_TIME, prevId: PREV_ID, stored: CURR_ID, storedPrev: prev ? PREV_ID : null, ...(purged ? { purge: { id: seenId, n: 1 } } : {}) } },
     });
     backend.seed(editionKey(office), {
         v: 1, office,
@@ -204,6 +204,16 @@ describe('PLAINCAST_STORE_RENDER=1: office page', () => {
         expect(nwsCalls).toEqual([]);
         expect(res.body).not.toContain('Revised in');
         expect(res.body).toContain('<article class="forecast-section ssr">');
+    });
+
+    it('no successful purge for this edition → the live path with today\'s cache policy', async () => {
+        seedStore(backend, { purged: false });
+        const res = await office();
+        expect(nwsCalls[0]).toBe('list:LOX');
+        expect(res.headers['cache-control']).toBe(SHORT_CACHE);
+        backend.seed(translationKey('LOX', CURR_ID), completeTi());
+        const full = await office();
+        expect(full.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
     });
 
     it('stale heartbeat → the live path', async () => {
