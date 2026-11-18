@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FileWarning, RefreshCw, WifiOff, X } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { OFFICE_NAMES, OFFICE_TIMEZONES } from '@data/offices.js';
 import { computeDiff } from '@data/diff.js';
@@ -16,13 +15,13 @@ import { currentRoute, officeUrl } from '@/lib/route';
 import { headFor, officeFeedHref } from '@/lib/seo';
 import { track } from '@/lib/track';
 import { formatIssueTime, timeAgo } from '@/lib/format';
+import { toast } from '@/lib/toast';
 import { useTheme } from '@/hooks/useTheme';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Toaster } from '@/components/ui/sonner';
 
 import { Header } from '@/components/Header';
 import { PageIntro } from '@/components/PageIntro';
@@ -33,6 +32,7 @@ import { AlertsSection } from '@/components/AlertsSection';
 import { Footer } from '@/components/Footer';
 import { KbdDialog } from '@/components/KbdDialog';
 import { ChangelogView } from '@/components/ChangelogView';
+import { ToasterHost } from '@/components/ToasterHost';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const OFFICE_KEY = 'plaincast-office';
@@ -810,7 +810,7 @@ export default function App() {
                 <Footer office={office} rawUrl={!inChangelog && ready ? state.rawUrl : null} />
             </div>
             <KbdDialog open={kbdOpen} onOpenChange={setKbdOpen} />
-            <Toaster theme={theme} position="bottom-right" />
+            <ToasterHost theme={theme} />
         </TooltipProvider>
     );
 }

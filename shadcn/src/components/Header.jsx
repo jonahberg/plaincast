@@ -1,11 +1,11 @@
 import { CloudSun, Github, Keyboard, LocateFixed, Moon, Share2, Sun } from 'lucide-react';
 import { useRef } from 'react';
-import { toast } from 'sonner';
 
 import { OFFICE_NAMES } from '@data/offices.js';
 import { OFFICE_GROUPS } from '@/lib/offices-groups';
 import { findNearestOffice } from '@/lib/nws';
 import { officeTitle } from '@/lib/seo';
+import { prefetchToasts, toast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -132,7 +132,10 @@ export function Header({
                 <div className="ml-auto flex shrink-0 items-center gap-0.5 md:gap-0">
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={locate} aria-label="Use my location" className="md:size-8 pointer-coarse:size-11">
+                            <Button
+                                variant="ghost" size="icon" onClick={locate} aria-label="Use my location" className="md:size-8 pointer-coarse:size-11"
+                                onPointerEnter={prefetchToasts} onPointerDown={prefetchToasts} onFocus={prefetchToasts}
+                            >
                                 <LocateFixed />
                             </Button>
                         </TooltipTrigger>
@@ -140,7 +143,10 @@ export function Header({
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={share} aria-label="Share forecast link" className="md:size-8 pointer-coarse:size-11">
+                            <Button
+                                variant="ghost" size="icon" onClick={share} aria-label="Share forecast link" className="md:size-8 pointer-coarse:size-11"
+                                onPointerEnter={prefetchToasts} onPointerDown={prefetchToasts} onFocus={prefetchToasts}
+                            >
                                 <Share2 />
                             </Button>
                         </TooltipTrigger>
