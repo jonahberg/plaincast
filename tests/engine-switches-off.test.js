@@ -48,7 +48,7 @@ const { default: homeHandler } = await import('../api/home.js');
 const { renderOfficePage } = await import('../scripts/build-offices.mjs');
 const { PROD_SCRIPT } = await import('../scripts/app-shell.mjs');
 const shared = await import('../api/_shared-cache.js');
-const { __setSharedCacheBackendForTests, translationKey, changelogKey } = shared;
+const { __setSharedCacheBackendForTests, translationKey, changelogKey, editionKey, pollStateKey, sectionKey, modelCallsKey } = shared;
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GOLDEN_DIR = join(ROOT, 'tests', 'fixtures', 'engine-golden');
@@ -227,6 +227,23 @@ describe('engine switches off: office page and homepage are origin/main, byte fo
             expect(got.headers).toEqual(golden.headers);
             expect(got.body).toBe(golden.body);
             // A render makes no HTTP call of its own (NWS is module-mocked).
+            expect(fetches.calls).toEqual([]);
+        });
+
+        it(`${c.name}: a full, fresh engine store changes nothing while the switches are off`, async () => {
+            // A heartbeat from now and a stored edition whose text differs from
+            // NWS's: if any switch-off path read it, the body would change.
+            const at = new Date().toISOString();
+            const other = CURR.replace('Low clouds and fog', 'STORED EDITION TEXT');
+            backend.seed(pollStateKey(), { v: 1, at, fullAt: at, offices: { LOX: { id: CURR_ID, issuanceTime: CURR_TIME, prevId: PREV_ID, stored: CURR_ID } } });
+            backend.seed(editionKey('LOX'), { v: 1, office: 'LOX', current: { id: CURR_ID, issuanceTime: CURR_TIME, productText: other, storedAt: at, prevId: PREV_ID }, previous: null });
+            backend.seed(sectionKey('LOX', 'a'.repeat(64)), { office: 'LOX', key: 'Synopsis', hash: 'a'.repeat(64), text: 'x' });
+            backend.seed(modelCallsKey('2026-07-03'), { day: '2026-07-03', calls: 1 });
+            const got = await render(c, backend);
+            const golden = JSON.parse(readFileSync(join(GOLDEN_DIR, `${c.name}.json`), 'utf8'));
+            expect(got).toEqual(golden);
+            for (const key of backend.reads) expect(key).toMatch(/^(ti|cl):/);
+            expect(backend.writes).toEqual([]);
             expect(fetches.calls).toEqual([]);
         });
     }

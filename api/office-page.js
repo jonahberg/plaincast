@@ -16,8 +16,20 @@
 // request path, so the sitewide CSP/security headers still apply here.
 //
 // CONTENT NEGOTIATION: this URL serves two representations. `Accept:
-// text/markdown` gets the same decoded sections as prose (api/_edition-markdown.js,
-// still no AI); anything else gets the page. Every response path sets
+// text/markdown` gets the same decoded sections as prose (api/_edition-markdown.js:
+// no AI, unless PLAINCAST_AI_FOR_AGENTS=1 and a complete stored translation of
+// this edition exists, then labelled as such); anything else gets the page.
+//
+// THE ENGINE (api/_store.js, api/cron-refresh.js), switches read per request,
+// all default off:
+//   PLAINCAST_STORE_RENDER=1   render from the poller's edition store (zero
+//                              NWS calls) when it is fresh and current; tag
+//                              every response with the office's cache tag.
+//   PLAINCAST_AI_FOR_AGENTS=1  the stored AI text in <main> and the Markdown,
+//                              labelled, with the NWS original kept; the
+//                              issuance time as <time> and dateModified.
+// With both off, every response is byte-for-byte the pre-engine page
+// (tests/engine-switches-off.test.js). Every response path sets
 // `Vary: Accept` — with two bodies behind one URL, omitting it lets the CDN
 // hand an agent the HTML variant or a browser the Markdown one, whichever
 // landed in the cache first.
@@ -40,11 +52,20 @@ import {
     sendNegotiated, send406, setVary, selectRepresentation, acceptHeader, HTML, MARKDOWN,
 } from './_negotiate.js';
 import { sendError } from './_errors.js';
-import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot } from './_boot.js';
+import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot, SHORT_CACHE } from './_boot.js';
+import { AI_FOR_AGENTS, STORE_RENDER, officeTag, readRenderableEdition, switchOn } from './_store.js';
+import { displayKey, translatableSections } from './_translatable.js';
+import { aiParagraphs } from './_ai-text.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const FULL_CACHE = 'public, s-maxage=900, stale-while-revalidate=3600';
+// A page rendered from the edition store (PLAINCAST_STORE_RENDER=1). The
+// poller hard-deletes the office's tagged copies the moment it sees a new
+// issuance, so the CDN may keep a page longer than the live path can.
+export const STORE_CACHE = 'public, s-maxage=1800, stale-while-revalidate=3600';
+// The CDN cache tag header (comma-separated tags).
+export const CACHE_TAG_HEADER = 'Vercel-Cache-Tag';
 
 // The app uses boot data only for the latest edition of the reading view
 // (src/App.jsx): a ?edition= permalink or the ?view=changelog ledger loads
@@ -190,18 +211,45 @@ export function editionSections(productText) {
     return out;
 }
 
+// The decoded sections with their AI text attached (the Markdown twin's
+// input when PLAINCAST_AI_FOR_AGENTS=1 shows it); unchanged without `ai`.
+export function withAi(sections, ai) {
+    if (!ai) return sections;
+    return sections.map(s => (ai.get(s.key) ? { ...s, ai: ai.get(s.key) } : s));
+}
+
 // Assemble the server-rendered #sections content: dateline, optional
 // deterministic changelog line (no AI), one <article> per narrative section,
 // and a closing line pointing at the interactive experience.
-export function buildSsrHtml(code, city, productText, issuanceTime, changelogHtml) {
+//
+// `opts` exists only with PLAINCAST_AI_FOR_AGENTS=1 (absent, the output is
+// byte-for-byte the switch-off page):
+//   machineTime  the issuance time as <time datetime> in the dateline;
+//   ai           Map(raw section key → stored translation) when a COMPLETE
+//                set for this exact edition covers every rendered section
+//                (aiForSections). Each section then leads with the AI text,
+//                labelled as an AI summary, and keeps the NWS text in a
+//                closed <details> labelled as the original.
+export function buildSsrHtml(code, city, productText, issuanceTime, changelogHtml, opts = null) {
+    const ai = opts?.ai || null;
     const articles = [];
     for (const s of editionSections(productText)) {
         const name = SECTION_NAMES[s.key] || titleCase(s.key);
-        const body = s.paras.map(p => `            <p>${escHtml(regexTranslate(p))}</p>`).join('\n');
+        const nws = s.paras.map(p => `            <p>${escHtml(regexTranslate(p))}</p>`).join('\n');
+        const aiText = ai ? ai.get(s.key) : null;
+        if (aiText) {
+            articles.push(
+                `        <article class="forecast-section ssr">\n` +
+                `            <h2 class="section-title">${escHtml(name)}</h2>\n` +
+                `${aiSectionBody(aiText, s.paras)}\n` +
+                `        </article>`
+            );
+            continue;
+        }
         articles.push(
             `        <article class="forecast-section ssr">\n` +
             `            <h2 class="section-title">${escHtml(name)}</h2>\n` +
-            `${body}\n` +
+            `${nws}\n` +
             `        </article>`
         );
     }
@@ -210,16 +258,89 @@ export function buildSsrHtml(code, city, productText, issuanceTime, changelogHtm
     const tz = OFFICE_TIMEZONES[code] || 'America/Los_Angeles';
     const issued = formatIssued(issuanceTime, tz);
     const metaLine = issued
-        ? `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}) · issued ${escHtml(issued)}.</p>\n`
+        ? `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}) · issued ${issuedHtml(issued, issuanceTime, opts?.machineTime)}.</p>\n`
         : `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}).</p>\n`;
 
-    const note =
-        `        <p class="ssr-note">This is the plain-text edition, decoded without AI so it loads anywhere. ` +
-        `The full Plaincast experience — plain-English summaries beside the annotated original, with the ` +
-        `<a href="/o/${escHtml(code)}/?view=changelog">forecast changelog</a> — loads automatically with JavaScript, ` +
-        `or <a href="/?office=${escHtml(code)}">open the interactive edition</a>.</p>`;
+    const note = ai
+        ? `        <p class="ssr-note">Each section above opens with a plain-English summary written by AI (Claude) from the ` +
+          `National Weather Service's text, which follows it as the original. The full Plaincast experience — the ` +
+          `annotated original, with the <a href="/o/${escHtml(code)}/?view=changelog">forecast changelog</a> — loads ` +
+          `automatically with JavaScript, or <a href="/?office=${escHtml(code)}">open the interactive edition</a>.</p>`
+        : `        <p class="ssr-note">This is the plain-text edition, decoded without AI so it loads anywhere. ` +
+          `The full Plaincast experience — plain-English summaries beside the annotated original, with the ` +
+          `<a href="/o/${escHtml(code)}/?view=changelog">forecast changelog</a> — loads automatically with JavaScript, ` +
+          `or <a href="/?office=${escHtml(code)}">open the interactive edition</a>.</p>`;
 
     return `\n${metaLine}${changelogHtml || ''}${articles.join('\n')}\n${note}\n    `;
+}
+
+// "issued <date>", with the instant as machine-readable data when asked.
+export function issuedHtml(issued, issuanceTime, machineTime) {
+    const iso = machineTime ? isoInstant(issuanceTime) : null;
+    return iso ? `<time datetime="${escHtml(iso)}">${escHtml(issued)}</time>` : escHtml(issued);
+}
+
+function isoInstant(t) {
+    if (typeof t !== 'string' || !Number.isFinite(Date.parse(t))) return null;
+    return t;
+}
+
+// The label every AI summary carries in the HTML, and the one on the NWS
+// original that follows it. Shared with api/home.js.
+export const AI_LABEL_HTML = 'Plain-English summary written by AI (Claude) from the National Weather Service text below.';
+export const NWS_ORIGINAL_HTML = 'The original: National Weather Service text, shorthand expanded';
+
+// One section's body when the AI summary is shown: the label, the summary
+// (the app's own Plain English formatting), then the NWS text, closed.
+export function aiSectionBody(aiText, paras) {
+    const summary = aiParagraphs(aiText).map(p => `            <p>${p}</p>`).join('\n');
+    const nws = paras.map(p => `                <p>${escHtml(regexTranslate(p))}</p>`).join('\n');
+    return `            <p class="ssr-ai-label"><small>${AI_LABEL_HTML}</small></p>\n` +
+        `${summary}\n` +
+        `            <details class="ssr-original">\n` +
+        `                <summary>${NWS_ORIGINAL_HTML}</summary>\n` +
+        `${nws}\n` +
+        `            </details>`;
+}
+
+// The stored translation for each server-rendered section, or null when the
+// AI text cannot be shown. Shown only for a COMPLETE set whose value names
+// exactly this office, edition and product text, and in which every one of
+// the first `limit` rendered sections has exactly one translatable
+// counterpart (same display key, same source text) with a non-empty
+// translation. Any doubt → null → the page renders as with the switch off.
+export function aiForSections(productText, entry, office, id, limit = Infinity) {
+    if (!entry || typeof entry !== 'object' || entry.office !== office || entry.id !== id || entry.complete !== true) return null;
+    if (typeof entry.productText !== 'string' || entry.productText !== productText) return null;
+    const map = entry.sections;
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return null;
+    const translatable = translatableSections(productText);
+    const out = new Map();
+    for (const s of pickSections(extractSections(productText))) {
+        if (out.size >= limit) break;
+        if (sectionParagraphs(s.text).length === 0) continue; // as editionSections
+        const d = displayKey(s.key);
+        const twins = translatable.filter(t => t.key === d);
+        if (twins.length !== 1 || twins[0].text !== s.text) return null;
+        const text = map[d];
+        if (typeof text !== 'string' || !text.trim() || aiParagraphs(text).length === 0) return null;
+        out.set(s.key, text);
+    }
+    return out.size ? out : null;
+}
+
+// dateModified (the issuance instant) in the office page's WebPage JSON-LD
+// (scripts/build-offices.mjs officeJsonLd). PLAINCAST_AI_FOR_AGENTS=1 only.
+export function withDateModified(html, code, issuanceTime) {
+    const iso = isoInstant(issuanceTime);
+    if (!iso) return html;
+    const anchor = `"@id": "https://plaincast.live/o/${code}/",`;
+    const at = html.indexOf(anchor);
+    if (at < 0) return html;
+    const lineStart = html.lastIndexOf('\n', at) + 1;
+    const indent = html.slice(lineStart, at);
+    const value = JSON.stringify(iso).replace(/</g, '\\u003c');
+    return html.slice(0, at + anchor.length) + `\n${indent}"dateModified": ${value},` + html.slice(at + anchor.length);
 }
 
 // Both representations of the "what changed" line, or neither. Kept as one
@@ -235,31 +356,80 @@ async function deterministicChangelog(code, items, currText) {
         const prevUrl = productUrlFromItem(items[1]);
         if (!prevUrl) return EMPTY_CHANGELOG;
         const prev = await fetchAFDProduct(prevUrl, { signal: AbortSignal.timeout(5000) });
-        const prevText = typeof prev?.productText === 'string' ? prev.productText : '';
-        if (!prevText) return EMPTY_CHANGELOG;
-        const { changedParagraphs } = await import('./changelog.js');
-        const n = changedParagraphs(prevText, currText).length;
-        if (n === 0) return EMPTY_CHANGELOG;
-        const tz = OFFICE_TIMEZONES[code] || 'America/Los_Angeles';
-        let since = '';
-        try {
-            const d = new Date(prev?.issuanceTime);
-            if (!Number.isNaN(d.getTime())) {
-                since = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
-            }
-        } catch { /* omit time */ }
-        const passages = n === 1 ? 'passage' : 'passages';
-        const sinceTxt = since ? ` since the ${since} discussion` : ' since the previous discussion';
-        return {
-            html: `        <p class="ssr-changelog">Revised in ${n} ${passages}${escHtml(sinceTxt)}. ` +
-                `<a href="/o/${escHtml(code)}/?view=changelog">See every revision</a>.</p>\n`,
-            markdown: `Revised in ${n} ${passages}${sinceTxt}. ` +
-                `[See every revision](https://plaincast.live/o/${code}/?view=changelog).`,
-        };
+        return await changelogLines(code, prev, currText);
     } catch (err) {
         console.warn('office-page: changelog line skipped:', err?.message || err);
         return EMPTY_CHANGELOG;
     }
+}
+
+// The same line from an edition already in hand (the store's predecessor).
+export async function changelogFromPrevious(code, prev, currText) {
+    try {
+        return await changelogLines(code, prev, currText);
+    } catch (err) {
+        console.warn('office-page: changelog line skipped:', err?.message || err);
+        return EMPTY_CHANGELOG;
+    }
+}
+
+async function changelogLines(code, prev, currText) {
+    const prevText = typeof prev?.productText === 'string' ? prev.productText : '';
+    if (!prevText) return EMPTY_CHANGELOG;
+    const { changedParagraphs } = await import('./changelog.js');
+    const n = changedParagraphs(prevText, currText).length;
+    if (n === 0) return EMPTY_CHANGELOG;
+    const tz = OFFICE_TIMEZONES[code] || 'America/Los_Angeles';
+    let since = '';
+    try {
+        const d = new Date(prev?.issuanceTime);
+        if (!Number.isNaN(d.getTime())) {
+            since = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
+        }
+    } catch { /* omit time */ }
+    const passages = n === 1 ? 'passage' : 'passages';
+    const sinceTxt = since ? ` since the ${since} discussion` : ' since the previous discussion';
+    return {
+        html: `        <p class="ssr-changelog">Revised in ${n} ${passages}${escHtml(sinceTxt)}. ` +
+            `<a href="/o/${escHtml(code)}/?view=changelog">See every revision</a>.</p>\n`,
+        markdown: `Revised in ${n} ${passages}${sinceTxt}. ` +
+            `[See every revision](https://plaincast.live/o/${code}/?view=changelog).`,
+    };
+}
+
+// The edition a page renders, from the store (PLAINCAST_STORE_RENDER=1, and
+// only when api/_store.js says it may) or live from api.weather.gov:
+// { product: { id, issuanceTime, productText }, changelog, extrasPending,
+//   fromStore }. `wantExtras` starts the shared-store reads for the edition's
+// AI translation and changelog sentence as soon as its id is known. The live
+// path throws on any NWS problem (→ the caller's baked fallback).
+export async function storeEdition(code, wantExtras) {
+    const stored = await readRenderableEdition(code);
+    if (!stored) return null;
+    const { current } = stored;
+    const extrasPending = wantExtras ? fetchBootExtras(code, current.id) : null;
+    const changelog = stored.previous ? await changelogFromPrevious(code, stored.previous, current.productText) : EMPTY_CHANGELOG;
+    return { product: current, changelog, extrasPending, fromStore: true };
+}
+
+export async function liveEdition(code, wantExtras) {
+    const items = await fetchAFDList(code, { signal: AbortSignal.timeout(8000) });
+    const prodUrl = productUrlFromItem(items[0]);
+    if (!prodUrl) throw new Error('no AFD product listed');
+    // Boot extras (AI translations + changelog sentence, read from the
+    // shared store the AI endpoints write) start now, in parallel with
+    // the product and changelog fetches; awaited last, they add at most
+    // the store's short read timeout.
+    const latestId = items[0]?.id || null;
+    const extrasPending = wantExtras && latestId ? fetchBootExtras(code, latestId) : null;
+    const prod = await fetchAFDProduct(prodUrl, { signal: AbortSignal.timeout(8000) });
+    const text = typeof prod?.productText === 'string' ? prod.productText : '';
+    if (!text) throw new Error('empty AFD product');
+    const changelog = await deterministicChangelog(code, items, text);
+    return {
+        product: { id: prod?.id || latestId, issuanceTime: prod?.issuanceTime, productText: text },
+        changelog, extrasPending, fromStore: false,
+    };
 }
 
 export default async function handler(req, res) {
@@ -302,48 +472,54 @@ export default async function handler(req, res) {
     const edition = validEdition(req.query?.edition);
     if (edition) baked = pinEditionMeta(baked, code, edition);
 
-    try {
-        const items = await fetchAFDList(code, { signal: AbortSignal.timeout(8000) });
-        const prodUrl = productUrlFromItem(items[0]);
-        if (!prodUrl) throw new Error('no AFD product listed');
-        // Boot extras (AI translations + changelog sentence, read from the
-        // shared store the AI endpoints write) start now, in parallel with
-        // the product and changelog fetches; awaited last, they add at most
-        // the store's short read timeout.
-        const latestId = items[0]?.id || null;
-        const extrasPending = wantsBoot(chosen, req.query) && latestId
-            ? fetchBootExtras(code, latestId)
-            : null;
-        const prod = await fetchAFDProduct(prodUrl, { signal: AbortSignal.timeout(8000) });
-        const text = typeof prod?.productText === 'string' ? prod.productText : '';
-        if (!text) throw new Error('empty AFD product');
+    // Switches, read per request (api/_store.js). All off: the live path
+    // below, byte for byte as before.
+    const storeRender = switchOn(STORE_RENDER);
+    const aiForAgents = switchOn(AI_FOR_AGENTS);
+    // Every response that shows this office's edition carries its tag, so
+    // the poller's purge reaches every cached copy, live or stored.
+    if (storeRender) res.setHeader(CACHE_TAG_HEADER, officeTag(code));
 
-        const changelog = await deterministicChangelog(code, items, text);
-        const ssr = buildSsrHtml(code, city, text, prod?.issuanceTime, changelog.html);
+    try {
+        const boot = wantsBoot(chosen, req.query);
+        const wantExtras = boot || aiForAgents;
+        const src = (storeRender ? await storeEdition(code, wantExtras) : null) || await liveEdition(code, wantExtras);
+        const { product, changelog, extrasPending } = src;
+        const text = product.productText;
+        const extras = extrasPending ? await extrasPending : null;
+        const ai = aiForAgents ? aiForSections(text, extras?.translation, code, product.id) : null;
+        const ssr = buildSsrHtml(code, city, text, product.issuanceTime, changelog.html,
+            aiForAgents ? { ai, machineTime: true } : null);
         if (!baked.includes(LOADING_DIV)) throw new Error('skeleton marker missing from template');
 
         const canonical = `https://plaincast.live/o/${code}/`;
         const markdown = renderEditionMarkdown({
             code, city,
-            sections: editionSections(text),
-            issued: formatIssued(prod?.issuanceTime, OFFICE_TIMEZONES[code] || 'America/Los_Angeles'),
+            sections: withAi(editionSections(text), ai),
+            issued: formatIssued(product.issuanceTime, OFFICE_TIMEZONES[code] || 'America/Los_Angeles'),
             changelogNote: changelog.markdown,
             canonical,
             moreHref: canonical,
+            ...(aiForAgents ? { aiIncluded: Boolean(ai), issuedIso: product.issuanceTime } : {}),
         });
 
         // replacer fn: `$`-sequences in forecast text must not be interpreted
         let html = baked.replace(LOADING_DIV, () => ssr);
-        let cacheControl = FULL_CACHE;
-        if (extrasPending) {
-            const boot = buildBoot({
+        if (aiForAgents) html = withDateModified(html, code, product.issuanceTime);
+        const fullCache = src.fromStore ? STORE_CACHE : FULL_CACHE;
+        let cacheControl = fullCache;
+        if (boot && extrasPending) {
+            const bootData = buildBoot({
                 office: code,
-                product: { id: prod?.id || latestId, issuanceTime: prod?.issuanceTime, productText: text },
-                extras: await extrasPending,
+                product: { id: product.id, issuanceTime: product.issuanceTime, productText: text },
+                extras,
             });
-            html = insertBoot(html, boot);
-            cacheControl = cacheControlFor(boot, FULL_CACHE);
+            html = insertBoot(html, bootData);
+            cacheControl = cacheControlFor(bootData, fullCache);
         }
+        // With the AI switch on, a page still waiting for its translation is
+        // regenerated soon, in both representations, so the AI text lands.
+        if (aiForAgents && !ai) cacheControl = SHORT_CACHE;
         return sendNegotiated(req, res, {
             [HTML]: html,
             [MARKDOWN]: markdown,
