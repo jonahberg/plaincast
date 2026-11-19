@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "headers": {
+    "cache-control": "public, s-maxage=300",
+    "content-type": "text/markdown; charset=utf-8",
+    "vary": "Accept, Accept-Encoding"
+  },
+  "body": "# Los Angeles (LOX) — the NWS forecast in plain English\n\n> Area Forecast Discussion · National Weather Service Los Angeles (LOX).\n\nThis is the National Weather Service's own discussion with its shorthand expanded — no AI summary, no editing. Discussions are reissued 3 to 4 times a day.\n\n---\n\nFull edition, with the AI plain-English summary beside the annotated original: [https://plaincast.live/o/LOX/](https://plaincast.live/o/LOX/)\n\nSource: [National Weather Service](https://www.weather.gov) Los Angeles (LOX). Every office: [/sitemap.xml](https://plaincast.live/sitemap.xml). RSS: `https://plaincast.live/api/feed?office=LOX`.\n\n_Canonical: https://plaincast.live/o/LOX/_\n\n[Home](https://plaincast.live/) · [The National Desk](https://plaincast.live/national/) · [About](https://plaincast.live/about) · [Contact](https://plaincast.live/contact) · [Privacy](https://plaincast.live/privacy) · [llms.txt](https://plaincast.live/llms.txt)\n"
+}

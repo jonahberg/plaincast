@@ -4,15 +4,17 @@
 // text never changes for a given product id, so one translation pass serves
 // every reader from cache — a front-page spike hits the CDN, not the model.
 import { generateText } from 'ai';
-import { OFFICE_NAMES, SECTION_NAMES } from '../docs/js/offices.js';
+import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
-import { extractSections } from './_afd-sections.js';
+import { displayKey, translatableSections } from './_translatable.js';
 import { annotateZuluTimes, buildSystemPrompt, sanitizeTranslation, stripHeaderStamp } from './translate.js';
 import { getSnapshot, putSnapshot } from './_snapshots.js';
 import { sendError } from './_errors.js';
 import { sharedGet, sharedSet, translationKey, TRANSLATION_TTL } from './_shared-cache.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
+import { PRETRANSLATE, switchOn } from './_store.js';
+import { storeReusedSection, withReusedSections } from './_section-reuse.js';
 
 // Instance-wide cap on cold model calls per minute (each cold issuance costs
 // one call per section, so it is charged sections.length at once).
@@ -84,18 +86,83 @@ function completeSharedPayload(entry, office, id) {
     return entry;
 }
 
-// Mirror the client parser's section keying (SECTION_NAMES map, else Title Case)
-// so returned keys line up with what app.js renders.
-function displayKey(rawKey) {
-    return SECTION_NAMES[rawKey] || rawKey.charAt(0) + rawKey.slice(1).toLowerCase();
+// Which sections are translated, and under which key (pure; shared with the
+// page functions, which join stored translations to the sections they render).
+export { displayKey, translatableSections };
+
+// ── The translation core ─────────────────────────────────────────────
+// Shared by this endpoint and the scheduled poller (api/cron-refresh.js):
+// one code path, one prompt and one sanitizer (both from translate.js), and
+// the same shared-cache keys, so whichever runs first pays and the other is
+// served the stored result.
+
+// One model call for one section: the sanitized translation, or null for a
+// refusal, an empty answer, an error or a timeout. Individual failures
+// degrade gracefully: the client falls back to per-section POST
+// /api/translate for any key missing from the edition's map.
+// The prompt and sanitizer live in translate.js: bump the version in
+// api/_shared-cache.js when this output's rules change.
+export async function translateSection({ office, issuanceTime, key, text }) {
+    try {
+        const result = await generateText({
+            model: MODEL,
+            providerOptions: PROVIDER_OPTIONS,
+            system: buildSystemPrompt({ section: key, office, issuanceTime }),
+            prompt: annotateZuluTimes(stripHeaderStamp(text), office, issuanceTime),
+            maxOutputTokens: 2048,
+            abortSignal: AbortSignal.timeout(15000),
+        });
+        if (result.finishReason === 'content-filter') return null;
+        // Same output guard as /api/translate, before cache + snapshot.
+        const out = sanitizeTranslation((result.text || '').trim(), { office, issuanceTime });
+        return out || null;
+    } catch (e) {
+        return null;
+    }
 }
 
-// Sections that are never AI-translated: alerts render from the live alerts
-// API, and sub-minimum fragments aren't worth a model call.
-const SKIP_KEYS = new Set(['Active Alerts']);
-const MIN_SECTION_CHARS = 20;
-const MAX_SECTION_CHARS = 10000;
-const MAX_SECTIONS = 10;
+// Translate a whole edition in one parallel pass. `sections` defaults to
+// translatableSections(productText); a section that carries `reused` (a
+// stored translation of the same text, see api/_store.js) costs no call.
+// `onTranslated(section, text)` sees every fresh section translation (the
+// poller stores them for reuse). Throws a 502 when nothing translated.
+// productText rides along so a snapshot can reconstruct the full edition
+// (facsimile column included) after NWS deletes the product.
+export async function translateEdition({
+    office, id, issuanceTime, productText,
+    sections = translatableSections(productText),
+    onTranslated = null,
+}) {
+    const settled = await Promise.all(sections.map(async (s) => {
+        if (typeof s.reused === 'string' && s.reused) return { key: s.key, text: s.reused };
+        const text = await translateSection({ office, issuanceTime, key: s.key, text: s.text });
+        if (text && onTranslated) {
+            try { await onTranslated(s, text); } catch { /* reuse is an optimisation */ }
+        }
+        return text ? { key: s.key, text } : null;
+    }));
+    const translations = {};
+    for (const t of settled) {
+        if (t) translations[t.key] = t.text;
+    }
+    if (Object.keys(translations).length === 0) {
+        throw Object.assign(new Error('all sections failed'), { statusCode: 502, publicMessage: 'Translation unavailable' });
+    }
+    const complete = Object.keys(translations).length === sections.length;
+    return { office, id, issuanceTime, productText, sections: translations, complete };
+}
+
+// A COMPLETE result is kept in this instance's memory, the durable
+// snapshot and the shared store. A partial one must not be frozen: the
+// caller never passes it here. The shared write is awaited: a write left
+// running after the response can be lost when the function is frozen.
+export async function persistTranslation(office, id, payload) {
+    setCache(`${office}|${id}`, payload);
+    await Promise.all([
+        putSnapshot(office, id, payload),
+        sharedSet(translationKey(office, id), { ...payload, office, id, complete: true }, { ttl: TRANSLATION_TTL }),
+    ]);
+}
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') return sendError(res, 405, 'method_not_allowed', 'GET only', { allow: ['GET'] });
@@ -179,48 +246,20 @@ export default async function handler(req, res) {
         if (!productText) throw Object.assign(new Error('empty product'), { statusCode: 502, publicMessage: 'Empty product' });
         const issuanceTime = typeof prod.issuanceTime === 'string' ? prod.issuanceTime : null;
 
-        const sections = extractSections(productText)
-            .map(s => ({ key: displayKey(s.key), text: s.text }))
-            .filter(s => !SKIP_KEYS.has(s.key))
-            .filter(s => s.text.length >= MIN_SECTION_CHARS && s.text.length <= MAX_SECTION_CHARS)
-            .slice(0, MAX_SECTIONS);
+        let sections = translatableSections(productText);
         if (sections.length === 0) throw Object.assign(new Error('no sections'), { statusCode: 502, publicMessage: 'No translatable sections' });
-        if (!coldBudget.take(sections.length)) throw overCapacityError();
+        // Section reuse (api/_section-reuse.js) only with PLAINCAST_PRETRANSLATE=1:
+        // a section translated before, for the same prompt, costs no call.
+        // Off, every section is charged and translated exactly as before.
+        const reuse = switchOn(PRETRANSLATE);
+        if (reuse) sections = await withReusedSections(office, issuanceTime, sections);
+        const needed = sections.filter(s => !s.reused).length;
+        if (needed > 0 && !coldBudget.take(needed)) throw overCapacityError();
 
-        // Translate the whole issuance in one parallel pass. Individual
-        // section failures degrade gracefully — the client falls back to
-        // per-section POST /api/translate for any key missing here.
-        // The prompt and sanitizer live in translate.js: bump the version in
-        // api/_shared-cache.js when this output's rules change.
-        const settled = await Promise.all(sections.map(async (s) => {
-            try {
-                const result = await generateText({
-                    model: MODEL,
-                    providerOptions: PROVIDER_OPTIONS,
-                    system: buildSystemPrompt({ section: s.key, office, issuanceTime }),
-                    prompt: annotateZuluTimes(stripHeaderStamp(s.text), office, issuanceTime),
-                    maxOutputTokens: 2048,
-                    abortSignal: AbortSignal.timeout(15000),
-                });
-                if (result.finishReason === 'content-filter') return null;
-                // Same output guard as /api/translate, before cache + snapshot.
-                const text = sanitizeTranslation((result.text || '').trim(), { office, issuanceTime });
-                return text ? { key: s.key, text } : null;
-            } catch (e) {
-                return null;
-            }
-        }));
-        const translations = {};
-        for (const t of settled) {
-            if (t) translations[t.key] = t.text;
-        }
-        if (Object.keys(translations).length === 0) {
-            throw Object.assign(new Error('all sections failed'), { statusCode: 502, publicMessage: 'Translation unavailable' });
-        }
-        // productText rides along so a snapshot can reconstruct the full
-        // edition (facsimile column included) after NWS deletes the product.
-        const complete = Object.keys(translations).length === sections.length;
-        return { office, id, issuanceTime, productText, sections: translations, complete };
+        return translateEdition({
+            office, id, issuanceTime, productText, sections,
+            onTranslated: reuse ? (s, text) => storeReusedSection(office, issuanceTime, s, text) : null,
+        });
     })();
     inFlight.set(cacheKey, work); // no await between creation and registration
 
@@ -237,11 +276,7 @@ export default async function handler(req, res) {
         // a retry heals it. The shared write is awaited: a write left running
         // after the response can be lost when the function is frozen.
         if (payload.complete) {
-            setCache(cacheKey, payload);
-            await Promise.all([
-                putSnapshot(office, id, payload),
-                sharedSet(translationKey(office, id), { ...payload, office, id, complete: true }, { ttl: TRANSLATION_TTL }),
-            ]);
+            await persistTranslation(office, id, payload);
             res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=2592000');
         } else {
             res.setHeader('Cache-Control', 'public, s-maxage=300');

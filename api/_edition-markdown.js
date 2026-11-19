@@ -6,15 +6,20 @@
 // the forecaster's reasoning as prose. This renders the SAME decoded content
 // the server already puts in #sections, with the chrome removed.
 //
-// NO AI HERE, DELIBERATELY — same contract as the SSR HTML. Everything below is
-// the National Weather Service's own text run through regexTranslate
-// (abbreviation expansion only). An agent asking for Markdown must not silently
-// trigger model spend, and must not receive a summary it did not ask for.
+// NO AI BY DEFAULT. Everything below is the National Weather Service's own
+// text run through regexTranslate (abbreviation expansion only), unless
+// PLAINCAST_AI_FOR_AGENTS=1 and the page holds a complete, stored
+// translation of this exact edition (api/office-page.js aiForSections). Then
+// each section leads with the AI summary, labelled as written by Claude from
+// the NWS text, followed by that text labelled as the original, and the
+// preamble says so for this response. A render never triggers model spend:
+// the AI text is read from the store, never generated here.
 //
 // Files prefixed with `_` are not treated as endpoints by Vercel.
 
-import { SECTION_NAMES } from '../docs/js/offices.js';
+import { OFFICE_NAMES, SECTION_NAMES } from '../docs/js/offices.js';
 import { regexTranslate } from './_afd-sections.js';
+import { aiMarkdownParagraphs } from './_ai-text.js';
 
 const FOOTER_LINKS = '[Home](https://plaincast.live/) · '
     + '[The National Desk](https://plaincast.live/national/) · '
@@ -38,19 +43,55 @@ function safeHeading(key) {
         .trim() || 'Discussion';
 }
 
+// The preamble line, per response: whether THIS body carries AI text.
+export const PREAMBLE_NO_AI = 'This is the National Weather Service\'s own discussion with its shorthand expanded — '
+    + 'no AI summary, no editing. Discussions are reissued 3 to 4 times a day.';
+export const PREAMBLE_AI = 'This response includes AI-generated text: each section opens with a plain-English summary '
+    + 'written by Claude, an AI model, from the National Weather Service\'s text, followed by that text itself '
+    + '(the original, with its shorthand expanded). The original is authoritative. Discussions are reissued '
+    + '3 to 4 times a day.';
+export const HOME_NO_AI = 'This edition is the National Weather Service\'s own text with its shorthand expanded; '
+    + 'no AI summary is included in this response.';
+export const AI_LABEL_MD = '**AI summary** (written by Claude from the National Weather Service text below):';
+export const NWS_LABEL_MD = '**Original National Weather Service text** (shorthand expanded):';
+
+// One section's body lines: the NWS paragraphs, or (with `s.ai`) the
+// labelled AI summary, then the labelled original.
+function sectionLines(s) {
+    const lines = [];
+    if (s.ai) {
+        lines.push(AI_LABEL_MD, '');
+        for (const p of aiMarkdownParagraphs(s.ai)) lines.push(p, '');
+        lines.push(NWS_LABEL_MD, '');
+    }
+    for (const p of s.paras) {
+        lines.push(regexTranslate(p));
+        lines.push('');
+    }
+    lines.pop();
+    return lines;
+}
+
+// "issued <date>", with the ISO instant after it when asked (AI switch on).
+function issuedText(issued, issuedIso) {
+    if (!issued) return '';
+    const iso = typeof issuedIso === 'string' && Number.isFinite(Date.parse(issuedIso)) ? issuedIso : null;
+    return iso ? `${issued} (${iso})` : issued;
+}
+
 // One decoded AFD, as Markdown. `sections` is the already-picked,
-// already-paragraphed shape the SSR HTML uses: [{ key, paras: [string] }].
+// already-paragraphed shape the SSR HTML uses: [{ key, paras: [string], ai? }].
+// `aiIncluded` and `issuedIso` are passed only with PLAINCAST_AI_FOR_AGENTS=1.
 export function renderEditionMarkdown({
-    code, city, sections, issued, changelogNote, canonical, moreHref,
+    code, city, sections, issued, changelogNote, canonical, moreHref, aiIncluded = false, issuedIso = null,
 }) {
     const lines = [];
     lines.push(`# ${city} (${code}) — the NWS forecast in plain English`);
     lines.push('');
     lines.push(`> Area Forecast Discussion · National Weather Service ${city} (${code})`
-        + `${issued ? ` · issued ${issued}` : ''}.`);
+        + `${issued ? ` · issued ${issuedText(issued, issuedIso)}` : ''}.`);
     lines.push('');
-    lines.push('This is the National Weather Service\'s own discussion with its shorthand expanded — '
-        + 'no AI summary, no editing. Discussions are reissued 3 to 4 times a day.');
+    lines.push(aiIncluded ? PREAMBLE_AI : PREAMBLE_NO_AI);
     if (changelogNote) {
         lines.push('');
         lines.push(changelogNote);
@@ -60,11 +101,7 @@ export function renderEditionMarkdown({
         lines.push('');
         lines.push(`## ${safeHeading(s.key)}`);
         lines.push('');
-        for (const p of s.paras) {
-            lines.push(regexTranslate(p));
-            lines.push('');
-        }
-        lines.pop();
+        lines.push(...sectionLines(aiIncluded ? s : { ...s, ai: null }));
     }
 
     lines.push('');
@@ -88,7 +125,9 @@ export function renderEditionMarkdown({
 // The homepage's Markdown: what Plaincast is, then today's edition. An agent
 // that lands on `/` with no other context should be able to answer "what is
 // this site, and should I use it" from this alone.
-export function renderHomeMarkdown({ code, city, sections, issued, edition }) {
+// `aiIncluded` and `issuedIso` as for renderEditionMarkdown (AI switch only).
+// (`aiIncluded` undefined, the switch off: no statement either way, as before.)
+export function renderHomeMarkdown({ code, city, sections, issued, edition, aiIncluded, issuedIso = null }) {
     const lines = [];
     lines.push('# Plaincast — what the forecast actually says');
     lines.push('');
@@ -104,7 +143,7 @@ export function renderHomeMarkdown({ code, city, sections, issued, edition }) {
     lines.push('');
     lines.push('## How to use it');
     lines.push('');
-    lines.push('- Any of 68 forecast offices: `https://plaincast.live/o/<CODE>/` — a three-letter NWS office code, e.g. [/o/OKX/](https://plaincast.live/o/OKX/) for New York. Every code is listed in [/llms.txt](https://plaincast.live/llms.txt).');
+    lines.push(`- Any of ${Object.keys(OFFICE_NAMES).length} forecast offices: \`https://plaincast.live/o/<CODE>/\` — a three-letter NWS office code, e.g. [/o/OKX/](https://plaincast.live/o/OKX/) for New York. Every code is listed in [/llms.txt](https://plaincast.live/llms.txt).`);
     lines.push('- What changed since the previous discussion: `https://plaincast.live/o/<CODE>/?view=changelog`');
     lines.push('- Where the weather is today, nationally: [The National Desk](https://plaincast.live/national/)');
     lines.push('- RSS per office: `https://plaincast.live/api/feed?office=<CODE>`');
@@ -119,17 +158,20 @@ export function renderHomeMarkdown({ code, city, sections, issued, edition }) {
         lines.push('');
         lines.push(`## Today's edition — ${city} (${code})`);
         lines.push('');
-        lines.push(`> ${issued ? `Issued ${issued}. ` : ''}This is the edition the site opens to by default; `
+        lines.push(`> ${issued ? `Issued ${issuedText(issued, issuedIso)}. ` : ''}This is the edition the site opens to by default; `
             + `it is not a national summary. Read another office at \`https://plaincast.live/o/<CODE>/\`.`);
+        if (aiIncluded === true) {
+            lines.push('');
+            lines.push(PREAMBLE_AI);
+        } else if (aiIncluded === false) {
+            lines.push('');
+            lines.push(HOME_NO_AI);
+        }
         for (const s of sections) {
             lines.push('');
             lines.push(`### ${safeHeading(s.key)}`);
             lines.push('');
-            for (const p of s.paras) {
-                lines.push(regexTranslate(p));
-                lines.push('');
-            }
-            lines.pop();
+            lines.push(...sectionLines(aiIncluded === true ? s : { ...s, ai: null }));
         }
         lines.push('');
         lines.push(`Full ${city} edition: [https://plaincast.live/o/${code}/](https://plaincast.live/o/${code}/)`);
