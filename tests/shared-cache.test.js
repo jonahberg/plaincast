@@ -15,8 +15,8 @@ afterEach(() => {
 
 describe('api/_shared-cache.js key builders', () => {
     it('build versioned keys per family', () => {
-        expect(translationKey('LOX', 'a1b2-c3')).toBe('ti:v3:LOX:a1b2-c3');
-        expect(translationKey('lox', 'a1b2-c3')).toBe('ti:v3:LOX:a1b2-c3');
+        expect(translationKey('LOX', 'a1b2-c3')).toBe('ti:v4:LOX:a1b2-c3');
+        expect(translationKey('lox', 'a1b2-c3')).toBe('ti:v4:LOX:a1b2-c3');
         expect(changelogKey('OKX', 'cur-1')).toBe('cl:v3:OKX:cur-1');
         expect(ledeKey('2026-11-12T05:23:00Z')).toBe('lede:v3:2026-11-12T05:23:00.000Z');
     });

@@ -485,7 +485,8 @@ describe('buildSystemPrompt — output-only and weekday-date rules', () => {
         const prompt = buildSystemPrompt({ section: 'Synopsis', office: 'LOX', issuanceTime: LOX_ISSUED });
         expect(prompt).toMatch(/Never add advice, warnings, calls to action, or reassurance that the forecaster did not write/);
         expect(prompt).toContain('residents should stay alert to changing conditions');
-        expect(prompt).toMatch(/If the source itself gives advice or a safety message, keep it/);
+        expect(prompt).toMatch(/If the source itself gives advice, a safety message or a call to action, keep it/);
+        expect(prompt).toContain('stay tuned for updates'); // PR #49 measurement: HGX's call to action was dropped
         // Nov 18 2026: the reason is neutral. "Plaincast promises its readers
         // that every statement on it comes from the National Weather Service"
         // is the likely cause of the model stating provenance and issue times.
@@ -510,10 +511,15 @@ describe('buildSystemPrompt — output-only and weekday-date rules', () => {
 
     it('never explains how a date was worked out, and never describes formatting or tables', () => {
         const prompt = buildSystemPrompt({ section: 'Messages', office: 'OKX', issuanceTime: '2026-11-18T23:42:00+00:00' });
-        expect(prompt).toMatch(/Never explain how you worked out a day or date/);
-        expect(prompt).toContain('Since this forecast was issued on Wednesday, ...');
-        expect(prompt).toMatch(/inline in the sentence it belongs to, and move on/);
-        expect(prompt).toMatch(/Never describe formatting, abbreviations, codes or table layout/);
+        expect(prompt).toMatch(/never mentions the issue date or issuance time, never appends a calendar date to a day the source only names, and never says how a day or date was worked out/);
+        // PR #49 measurement: the model echoed the quoted bad examples
+        // ("based on the issue date", "This is a table of"), so these two
+        // rules carry none.
+        expect(prompt).not.toContain('based on the issue date');
+        expect(prompt).not.toContain('This is a table of');
+        expect(prompt).toMatch(/Never describe the source's formatting, abbreviations, codes or layout/);
+        // ...and it dropped days the forecaster named (OKX Discussion).
+        expect(prompt).toMatch(/Every day or time the forecaster names stays in the translation/);
     });
 
     it('gives the calendar, office and section as reference material after the rules, never to restate', () => {

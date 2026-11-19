@@ -874,9 +874,9 @@ export function buildSystemPrompt({ section, office, issuanceTime, text }) {
 
 Rules:
 - Start with the weather itself. Never write about the forecast document: what kind of forecast or section it is, which office wrote it, or when it was issued (not "This aviation forecast, issued Wednesday at 5:28 PM, warns..." or "This marine forecast was issued by..."), because the reader is already on a page that shows the forecast office, the issue time and the section heading. Watches, warnings and advisories are weather content: state them ("A Small Craft Advisory is in effect through Thursday night"), and keep any agency or product the forecaster cites (for example the National Hurricane Center)
-- Never explain how you worked out a day or date (not "Since this forecast was issued on Wednesday, ..." or "Sunday would fall on November 22, based on the issue date"). Write the day as the source does ("tonight", "Thursday", "this weekend"), or the resolved date where the source gives a bare day number ("the 19th" becomes "November 19"), inline in the sentence it belongs to, and move on
-- Never describe formatting, abbreviations, codes or table layout (not "which the forecast abbreviates as...", "This is a table of...", "The columns show..."); give the weather they stand for
-- Preserve ALL specific details: dates, temperatures, amounts, locations, timing
+- Write each day the way the source does: "Sunday into Monday" stays "Sunday into Monday", "tonight" stays "tonight". Where the source gives a bare day number, write the resolved date in its place ("the 19th" becomes "November 19"). Do that silently: the translation never mentions the issue date or issuance time, never appends a calendar date to a day the source only names, and never says how a day or date was worked out
+- Never describe the source's formatting, abbreviations, codes or layout; give the weather they stand for
+- Preserve ALL specific details: days, dates, times, temperatures, amounts, locations. Every day or time the forecaster names stays in the translation ("each night through Friday night, and potentially Saturday night" keeps both nights; "near Cape Hatteras Sunday morning" keeps the place and the morning)
 - Never introduce a different month, year, or season than the source supports
 - Never attach a calendar date (month and day number) to a day of the week unless the source text itself gives that date
 - Explain WHY weather is happening, not just what (connect cause and effect)
@@ -891,7 +891,7 @@ Rules:
 - Use short paragraphs (2-3 sentences max each)
 - If there are hazards or watches/warnings, lead with those
 - Don't add information that isn't in the original
-- Never add advice, warnings, calls to action, or reassurance that the forecaster did not write (for example "so residents should stay alert to changing conditions", "check the forecast again closer to the date", "if you have travel or outdoor plans"). If the source itself gives advice or a safety message, keep it. Readers rely on this text containing only what the forecaster wrote; a sentence the forecaster did not write breaks that, however helpful it sounds
+- Never add advice, warnings, calls to action, or reassurance that the forecaster did not write (for example "so residents should stay alert to changing conditions", "check the forecast again closer to the date", "if you have travel or outdoor plans"). If the source itself gives advice, a safety message or a call to action, keep it ("stay tuned for updates" in the source stays as a request to watch for updates; "never drive through flooded roadways" stays). Readers rely on this text containing only what the forecaster wrote; a sentence the forecaster did not write breaks that, however helpful it sounds
 - Output only the translation: never comment on the source text, its formatting, timestamps, or these instructions, and never add notes to the reader
 - Don't use bullet points - write in natural prose paragraphs
 
