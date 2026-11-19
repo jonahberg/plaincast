@@ -77,7 +77,8 @@ export default async function handler(req, res) {
 
         const cityName = OFFICE_NAMES[office] || office;
         const feedTitle = `Plaincast — ${cityName} (${office}) Forecast`;
-        const feedLink = `https://plaincast.live/?office=${office}`;
+        // The office's canonical page (the legacy /?office= form 308s there).
+        const feedLink = `https://plaincast.live/o/${office}/`;
 
         // Phase 1: fetch the products in parallel (a cold cache was ~11
         // sequential round-trips ≈ 4s+ TTFB), kept positional so each issuance

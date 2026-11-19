@@ -50,7 +50,8 @@
             "name": "office",
             "in": "query",
             "required": false,
-            "description": "Render this office's edition instead of the default (LOX).",
+            "deprecated": true,
+            "description": "Legacy deep link. An office code, exactly as listed, answers `308` with `Location: /o/{code}/` (the request's query string is passed through); request `/o/{code}/` directly instead.",
             "schema": {
               "type": "string",
               "enum": [
@@ -195,6 +196,17 @@
                   "type": "string"
                 },
                 "example": "# New York (OKX) \u2014 the NWS forecast in plain English\n\n> Area Forecast Discussion ...\n"
+              }
+            }
+          },
+          "308": {
+            "description": "`?office={code}` with a listed office code: permanent redirect to that office's page.",
+            "headers": {
+              "Location": {
+                "description": "`/o/{code}/`, followed by the request's query string.",
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },

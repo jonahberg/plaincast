@@ -24,6 +24,14 @@
   "crons": [
     { "path": "/api/cron-refresh", "schedule": "*/5 * * * *" }
   ],
+  "redirects": [
+    {
+      "source": "/",
+      "has": [{ "type": "query", "key": "office", "value": "^(?<code>ALY|BGM|RNK|BOX|BUF|BTV|CAR|CHS|RLX|CAE|GSP|OKX|MHX|PHI|PBZ|GYX|RAH|CTP|AKQ|LWX|ILM|FFC|BMX|HUN|JAN|JAX|KEY|MLB|MEG|MFL|MOB|MRX|OHX|TAE|TBW|ILX|LOT|ILN|CLE|DMX|DTX|APX|GRR|GRB|IND|JKL|EAX|ARX|LMK|MQT|MKX|IWX|PAH|DVN|SGF|LSX|ABR|BIS|DLH|FGF|GID|MPX|LBF|OAX|UNR|FSD|AMA|BRO|CRP|FWD|DDC|GLD|HGX|LCH|LZK|LUB|MAF|LIX|OUN|SJT|EWX|SHV|TOP|TSA|ICT|BYZ|BOI|CYS|BOU|LKN|GGW|GJT|TFX|MSO|PIH|PUB|REV|RIW|SLC|ABQ|EPZ|FGZ|VEF|PSR|TWC|HNX|EKA|LOX|MFR|PDT|PQR|STO|SGX|MTR|SEW|OTX|AFC|AFG|GUM|HFO|AJK|PPG|SJU)$" }],
+      "destination": "/o/:code/",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/api", "destination": "/api/api-not-found" },

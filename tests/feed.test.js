@@ -122,6 +122,15 @@ describe('GET /api/feed — unique per-edition permalinks', () => {
         expect(new Set(links).size).toBe(links.length);
     });
 
+    it('the channel links the office\'s canonical page, not the legacy /?office= form', async () => {
+        twoEditionScenario();
+        const res = createRes();
+        await feedHandler(createReq({ query: { office: 'OKX' } }), res);
+        const channel = res.body.slice(0, res.body.indexOf('<item>'));
+        expect(channel).toContain('<link>https://plaincast.live/o/OKX/</link>');
+        expect(res.body).not.toContain('plaincast.live/?office=');
+    });
+
     it('guid is the permalink itself, marked isPermaLink="true"', async () => {
         twoEditionScenario();
         const res = createRes();

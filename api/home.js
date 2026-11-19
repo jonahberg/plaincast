@@ -54,9 +54,12 @@ const MAX_SECTIONS = 2;
 
 const FULL_CACHE = 'public, s-maxage=900, stale-while-revalidate=3600';
 
-// `/?office=OKX` is the legacy form documented in llms.txt and still linked
-// from the SSR note. Honour it, but only for offices that exist — the value is
-// echoed into HTML, so it is validated against OFFICE_NAMES, never trusted.
+// `/?office=OKX` is the legacy deep link. vercel.json 308s it to /o/OKX/
+// before this function runs, for every office code in its exact (uppercase)
+// form. What still reaches here — a lowercase or unknown code, or `vercel dev`,
+// which does not evaluate `has` — renders as before: a real office's edition,
+// validated against OFFICE_NAMES (the value is echoed into HTML, never
+// trusted), else the default.
 export function resolveOffice(raw) {
     const code = String(raw || '').toUpperCase();
     return OFFICE_NAMES[code] ? code : DEFAULT_OFFICE;
@@ -184,10 +187,11 @@ export default async function handler(req, res) {
         baked = loadTemplate();
     } catch (err) {
         // Shell missing from the bundle. Deliberately NOT a redirect to
-        // /o/<CODE>/: api/office-page.js redirects back here on the same
-        // failure, and a preview deploy on 2026-08-21 turned exactly that pair
-        // into an infinite 307 loop when .vercelignore stripped the template
-        // out of both bundles. Serve the words instead — a plain page is a
+        // /o/<CODE>/: api/office-page.js loads the same shell, and a preview
+        // deploy on 2026-08-21 turned exactly that pair (it then redirected
+        // back here) into an infinite 307 loop when .vercelignore stripped
+        // the template out of both bundles. Neither handler redirects on this
+        // failure now; both serve the words instead — a plain page is a
         // worse homepage, a loop is no homepage at all.
         console.error('home: shell unavailable:', err);
     }

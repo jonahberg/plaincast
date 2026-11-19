@@ -27,7 +27,7 @@ conditions API cannot.
 - Anything needing a forecast Plaincast made itself. It makes none. Every word originates with the NWS or the SPC.
 
 **How to call it:**
-- One office: `GET https://plaincast.live/o/<CODE>/` (3-letter NWS office code, e.g. `OKX`). The legacy `https://plaincast.live/?office=<CODE>` also works.
+- One office: `GET https://plaincast.live/o/<CODE>/` (3-letter NWS office code, e.g. `OKX`). The legacy `https://plaincast.live/?office=<CODE>` answers a permanent redirect (308) to that URL.
 - Send `Accept: text/markdown` to any page URL and you get clean Markdown instead of HTML — the decoded discussion as prose, no nav, no scripts. This site is acceptmarkdown.com compliant: `Vary: Accept` is set, q-values are honoured, and an Accept it cannot satisfy gets a `406` listing what it can serve. Pages also advertise `<link rel="alternate" type="text/markdown">`.
 - Every page is server-rendered, so no JavaScript execution is needed to read it.
 - No API key, no rate limit for reading pages, no account. Please send a descriptive User-Agent.
@@ -40,7 +40,7 @@ conditions API cannot.
 - Highlights 230+ meteorological jargon terms with hover/tap tooltip definitions
 - Shows forecaster confidence level based on language analysis
 - Displays active weather alerts with full detail modals
-- Dedicated page per office at https://plaincast.live/o/<CODE>/ (canonical form, e.g. https://plaincast.live/o/OKX/); the legacy query form https://plaincast.live/?office=OKX also works
+- Dedicated page per office at https://plaincast.live/o/<CODE>/ (canonical form, e.g. https://plaincast.live/o/OKX/); the legacy query form https://plaincast.live/?office=OKX redirects there
 - Forecast Changelog view per office showing what changed between consecutive discussions: https://plaincast.live/o/<CODE>/?view=changelog (e.g. https://plaincast.live/o/OKX/?view=changelog)
 
 ## Developer resources

@@ -20,11 +20,12 @@
 // and ship it through includeFiles. docs/index.html remains the file humans
 // edit and the local-dev homepage; this is its committed twin.
 //
-// The same office roster also drives three hand-written files, whose office
+// The same office roster also drives four hand-written files, whose office
 // LISTS (only) this script regenerates:
 //   api/_national-shell.html  the National Desk's office index
 //   docs/llms.txt             the "## Supported NWS Offices" section
 //   docs/openapi.json         every `office` enum
+//   vercel.json               the codes the legacy /?office= redirect matches
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -42,6 +43,7 @@ export const HOME_SHELL = join(API, '_home-shell.html');
 export const NATIONAL_SHELL = join(API, '_national-shell.html');
 export const LLMS_TXT = join(DOCS, 'llms.txt');
 export const OPENAPI = join(DOCS, 'openapi.json');
+export const VERCEL_JSON = join(__dirname, '..', 'vercel.json');
 
 // Exact strings from docs/index.html that vary per office.
 const TITLE_TEMPLATE = 'Plaincast - What the forecast actually says';
@@ -221,6 +223,23 @@ export function renderOpenApiEnums(spec, codes = Object.keys(OFFICE_NAMES)) {
     return out;
 }
 
+// vercel.json: the legacy /?office=<CODE> deep link answers 308 to
+// /o/<CODE>/ (Vercel evaluates `redirects` before the filesystem and the
+// rewrites; the request's query string, `office` included, passes through).
+// The `has` value is an exact alternation of the roster, so an unknown,
+// malformed or lowercase code does not match and falls through to
+// api/home.js as before. Anchored explicitly, so it means the same whether
+// or not the platform anchors `has` values itself. Rewritten in place, as
+// text: a JSON round-trip would reformat the whole file.
+export function officeRedirectPattern(codes = Object.keys(OFFICE_NAMES)) {
+    return `^(?<code>${codes.join('|')})$`;
+}
+const OFFICE_REDIRECT_RE = /("key": "office", "value": ")\^\(\?<code>[A-Z|]*\)\$(")/;
+export function renderVercelRedirect(text, codes = Object.keys(OFFICE_NAMES)) {
+    if (!OFFICE_REDIRECT_RE.test(text)) throw new Error('vercel.json: the /?office= redirect\'s `has` value was not found');
+    return text.replace(OFFICE_REDIRECT_RE, (_, open, close) => `${open}${officeRedirectPattern(codes)}${close}`);
+}
+
 export function buildAll() {
     const template = buildAppShell();
     const codes = Object.keys(OFFICE_NAMES);
@@ -240,6 +259,7 @@ export function buildAll() {
     writeFileSync(NATIONAL_SHELL, injectOfficeIndex(readFileSync(NATIONAL_SHELL, 'utf8')));
     writeFileSync(LLMS_TXT, renderLlmsOffices(readFileSync(LLMS_TXT, 'utf8')));
     writeFileSync(OPENAPI, renderOpenApiEnums(readFileSync(OPENAPI, 'utf8')));
+    writeFileSync(VERCEL_JSON, renderVercelRedirect(readFileSync(VERCEL_JSON, 'utf8'), codes));
     return codes.length;
 }
 

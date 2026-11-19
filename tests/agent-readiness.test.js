@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PAGE_SLUGS } from '../api/_pages.js';
+import { OFFICE_NAMES } from '../docs/js/offices.js';
+import { officeRedirectPattern } from '../scripts/build-offices.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (...p) => readFileSync(join(ROOT, ...p), 'utf8');
@@ -84,6 +86,64 @@ describe('vercel.json routing invariants', () => {
         const csp = JSON.stringify(vercel.headers);
         expect(csp).toContain("script-src 'self'");
         expect(csp).toContain('X-Frame-Options');
+    });
+});
+
+// The legacy deep link /?office=<CODE> answers 308 to /o/<CODE>/. Vercel
+// evaluates `redirects` before the filesystem and the rewrites, matches the
+// `has` query value as a regex, substitutes its named group into the
+// destination, and passes the request's query string through (`office`
+// included). The simulation below runs the pattern both as written and
+// wrapped in ^(?:…)$, so it holds whether or not the platform anchors it.
+describe('vercel.json: the legacy /?office=<CODE> redirect', () => {
+    const redirect = (vercel.redirects || []).find(r => r.has?.some(h => h.type === 'query' && h.key === 'office'));
+    const has = redirect?.has?.find(h => h.key === 'office');
+    const follow = (search, anchored) => {
+        const params = new URLSearchParams(search);
+        const values = params.getAll('office');
+        if (!values.length) return null;
+        const m = values[values.length - 1].match(new RegExp(anchored ? `^(?:${has.value})$` : has.value));
+        if (!m) return null;
+        return `${redirect.destination.replace(':code', m.groups.code)}?${params}`;
+    };
+
+    it('is one permanent (308) redirect from / only, to /o/:code/', () => {
+        expect(redirect).toBeTruthy();
+        expect(redirect.source).toBe('/');
+        expect(redirect.permanent).toBe(true);
+        expect(redirect.destination).toBe('/o/:code/');
+        expect(redirect.has.length).toBe(1);
+    });
+
+    it('matches exactly the roster, generated from OFFICE_NAMES (else run bun scripts/build-offices.mjs)', () => {
+        expect(has.value).toBe(officeRedirectPattern(Object.keys(OFFICE_NAMES)));
+    });
+
+    for (const anchored of [false, true]) {
+        const mode = anchored ? 'platform-anchored' : 'as written';
+        it(`sends every office code to its page, keeping view and edition (${mode})`, () => {
+            for (const code of Object.keys(OFFICE_NAMES)) {
+                expect(follow(`office=${code}`, anchored)).toBe(`/o/${code}/?office=${code}`);
+            }
+            expect(follow('office=OKX&view=changelog', anchored)).toBe('/o/OKX/?office=OKX&view=changelog');
+            expect(follow('edition=a1b2-c3&office=LOT', anchored)).toBe('/o/LOT/?edition=a1b2-c3&office=LOT');
+        });
+
+        it(`lets unknown, malformed and lowercase codes fall through to the homepage (${mode})`, () => {
+            for (const v of ['ZZZ', 'okx', 'OKXX', 'XOKX', 'OK', '', 'OKX/', 'OKX ', '../OKX', 'LOX|OKX']) {
+                expect(follow(`office=${encodeURIComponent(v)}`, anchored)).toBe(null);
+            }
+            expect(follow('view=changelog', anchored)).toBe(null);
+        });
+    }
+
+    it('cannot loop: no destination is /, and no handler redirects back to /?office=', () => {
+        expect(redirect.destination.startsWith('/o/')).toBe(true);
+        for (const f of ['office-page.js', 'home.js', 'not-found.js']) {
+            const src = read('api', f);
+            expect(src).not.toMatch(/setHeader\(\s*['"]Location['"]/);
+            expect(src).not.toMatch(/href="\/\?office=/);
+        }
     });
 });
 

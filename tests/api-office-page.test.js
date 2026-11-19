@@ -154,9 +154,10 @@ describe('GET /api/office-page (SSR /o/<CODE>/ pages)', () => {
         // still the baked per-office document (canonical + JS bootstrap intact)
         expect(res.body).toContain('<link rel="canonical" href="https://plaincast.live/o/LOX/">');
         expect(res.body).toContain('src="/assets/app.js"');
-        // links back into the interactive experience
+        // links back into the interactive experience — but never through the
+        // legacy /?office= form, which now 308s back to this very page
         expect(res.body).toContain('/o/LOX/?view=changelog');
-        expect(res.body).toContain('/?office=LOX');
+        expect(res.body).not.toContain('href="/?office=');
     });
 
     it('carries the issuance time as data: <time datetime> in the dateline, dateModified in its only JSON-LD block', async () => {
@@ -286,6 +287,18 @@ describe('office-page helpers', () => {
         const html = buildSsrHtml('LOX', 'Los Angeles', text, '2026-07-03T11:40:00+00:00', '');
         expect(html).not.toContain('<script>alert');
         expect(html).toContain('&lt;script&gt;');
+    });
+
+    // The shell-missing branch used to 307 to /?office=<CODE>, which
+    // vercel.json now 308s back to /o/<CODE>/: a loop. It serves this instead.
+    it('minimalOfficeHtml: a real document, self-canonical, H1 inside <main>, Markdown escaped', async () => {
+        const { minimalOfficeHtml } = await import('../api/office-page.js');
+        const html = minimalOfficeHtml('LOX', 'Los Angeles', '# Los Angeles (LOX)\n\n<b>x</b> & more');
+        expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
+        expect(html).toContain('<link rel="canonical" href="https://plaincast.live/o/LOX/">');
+        expect(html).toMatch(/<main>\s*<h1>Los Angeles \(LOX\)/);
+        expect(html).toContain('&lt;b&gt;x&lt;/b&gt; &amp; more');
+        expect(html).not.toContain('?office=');
     });
 
     it('validEdition accepts UUID-ish ids and rejects everything else', () => {

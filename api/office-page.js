@@ -45,12 +45,12 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OFFICE_NAMES, OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
-import { renderOfficePage, escHtml } from '../scripts/build-offices.mjs';
+import { renderOfficePage, escHtml, officeTitle } from '../scripts/build-offices.mjs';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractSections, regexTranslate } from './_afd-sections.js';
 import { renderEditionMarkdown } from './_edition-markdown.js';
 import {
-    sendNegotiated, send406, setVary, selectRepresentation, acceptHeader, HTML, MARKDOWN,
+    sendNegotiated, send406, selectRepresentation, acceptHeader, HTML, MARKDOWN,
 } from './_negotiate.js';
 import { sendError } from './_errors.js';
 import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot, SHORT_CACHE } from './_boot.js';
@@ -146,6 +146,31 @@ export function loadTemplate() {
 
 function titleCase(key) {
     return String(key).toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());
+}
+
+// Last-resort HTML when the shell cannot be loaded at all: the office's
+// Markdown representation in a real document, with its canonical and a real
+// H1 inside <main> (the heading rule), so the URL still says what it is.
+export function minimalOfficeHtml(code, city, markdown) {
+    const canonical = `https://plaincast.live/o/${code}/`;
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escHtml(officeTitle(city))}</title>
+    <link rel="canonical" href="${canonical}">
+    <link rel="alternate" type="text/markdown" href="${canonical}">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main>
+<h1>${escHtml(city)} (${escHtml(code)}) — the National Weather Service forecast in plain English</h1>
+<pre>${escHtml(markdown)}</pre>
+</main>
+</body>
+</html>
+`;
 }
 
 // Pick the top narrative sections (document order). Falls back to any
@@ -261,15 +286,17 @@ export function buildSsrHtml(code, city, productText, issuanceTime, changelogHtm
         ? `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}) · issued ${issuedHtml(issued, issuanceTime)}.</p>\n`
         : `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}).</p>\n`;
 
+    // No link to "the interactive edition": it is this URL (the legacy
+    // /?office=<CODE> form now 308s back here), and it loads over this text
+    // whenever JavaScript runs.
     const note = ai
         ? `        <p class="ssr-note">Each section above opens with a plain-English summary written by AI (Claude) from the ` +
           `National Weather Service's text, which follows it as the original. The full Plaincast experience — the ` +
           `annotated original, with the <a href="/o/${escHtml(code)}/?view=changelog">forecast changelog</a> — loads ` +
-          `automatically with JavaScript, or <a href="/?office=${escHtml(code)}">open the interactive edition</a>.</p>`
+          `automatically with JavaScript.</p>`
         : `        <p class="ssr-note">This is the plain-text edition, decoded without AI so it loads anywhere. ` +
           `The full Plaincast experience — plain-English summaries beside the annotated original, with the ` +
-          `<a href="/o/${escHtml(code)}/?view=changelog">forecast changelog</a> — loads automatically with JavaScript, ` +
-          `or <a href="/?office=${escHtml(code)}">open the interactive edition</a>.</p>`;
+          `<a href="/o/${escHtml(code)}/?view=changelog">forecast changelog</a> — loads automatically with JavaScript.</p>`;
 
     return `\n${metaLine}${changelogHtml || ''}${articles.join('\n')}\n${note}\n    `;
 }
@@ -465,12 +492,20 @@ export default async function handler(req, res) {
         baked = renderOfficePage(loadTemplate(), code, city);
     } catch (err) {
         // Template missing from the bundle — cannot reproduce the baked page.
-        // Degrade to a redirect into the interactive app rather than an error.
+        // Serve the office's Markdown twin as a plain document. NEVER a
+        // redirect: this used to 307 to /?office=<CODE>, which vercel.json
+        // now 308s straight back to /o/<CODE>/ — an endless loop on exactly
+        // the failure this branch exists for (and api/home.js shares the
+        // same shell, so a redirect anywhere else meets the same fate).
         console.error('office-page: template unavailable:', err);
-        setVary(res);
-        res.setHeader('Cache-Control', 'public, s-maxage=60');
-        res.setHeader('Location', `/?office=${code}`);
-        return res.status(307).send('');
+        const canonical = officePageId(code);
+        const markdown = renderEditionMarkdown({
+            code, city, sections: [], issued: null, changelogNote: '', canonical, moreHref: canonical,
+        });
+        return sendNegotiated(req, res, {
+            [HTML]: minimalOfficeHtml(code, city, markdown),
+            [MARKDOWN]: markdown,
+        }, { cacheControl: 'public, s-maxage=60' });
     }
 
     // Pinned-edition permalink (from RSS): point the share meta at that
