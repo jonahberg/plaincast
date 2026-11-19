@@ -82,6 +82,8 @@ server-rendered `/national/`, `/about`, `/contact`, `/privacy`, `/developers` an
   up and 16px on phones. The header bar, the page and the footer all share its edges, on
   the server-rendered pages too (`.container`).
 - **Measure:** prose is capped at `65ch`. At 1440px that is about 69 characters per line.
+- **Header:** below `md` the National Desk is a newspaper icon link in the nav's slot; below
+  `sm` the picker shows the office name only; Share hides below 375px.
 - **Forecast sections are ruled editorial blocks, not cards.**
   - Each has a hairline `border-t` and about 2.5rem of vertical padding.
   - The serif `<h2>` title sits on the left. On the right of the same row sit the
@@ -102,8 +104,9 @@ server-rendered `/national/`, `/about`, `/contact`, `/privacy`, `/developers` an
      at a fixed height from the first frame: the edition picker, then the
      alert status (nothing while alerts load, a muted "No active alerts", or a
      foreground link such as "5 active alerts: Coastal Flood Watch, High Surf
-     Advisory +3", truncated, never wrapped; destructive only while a
-     Severe/Extreme warning is live).
+     Advisory +3", condensed to fit by whole names (two names, one, then the count
+     alone, each with an accurate "+N"), never wrapped and never cut mid-word;
+     destructive only while a Severe/Extreme warning is live).
   5. The "Since the … update" callout: brand left rule, serif, with "See every revision"
      and RSS beneath.
   6. The almanac strip: hairline-ruled, one row on desktop and a 3-column grid on phones.
@@ -114,7 +117,9 @@ server-rendered `/national/`, `/about`, `/contact`, `/privacy`, `/developers` an
   - The Active Alerts card is the LAST section, so live alerts arriving append below. It is
     pinned first only while a Severe/Extreme warning is live (safety outranks stability).
   - The almanac reserves its "Now" and "Normal high" cells for the latest edition (blank
-    while loading, a dash if no reading comes).
+    while loading). A reading that settles empty drops its cell and the rest close up; 4 to
+    6 cells stay two rows on phones and one from sm, so the strip's height never changes.
+    CTP, MQT and RNK never reserve "Normal high".
   - The "A newer edition has been issued" notice floats over the bottom of the viewport
     instead of entering the flow above the forecast.
 - **Touch targets:** on a coarse pointer every control has at least a 44×44 CSS px hit area.
