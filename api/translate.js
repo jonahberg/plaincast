@@ -471,10 +471,20 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
 // ("12/0454Z.") already gets a correct local time from annotateZuluTimes.
 // Anchored to the start of the text (no m flag): a mid-text "11/220" stays.
 const HEADER_STAMP_RE = /^\s*(?:\d{1,2}\/\d{3,4}\s*(?:AM|PM)\b\.?\s*)+/i;
+// Most offices open a section with "Issued at 528 PM CST Wed Nov 18 2026"
+// (MFL Key Messages: "Updated at 635 PM EST ..."), and the model restated it
+// (HGX Aviation, Nov 18 2026: "This aviation forecast, issued Wednesday
+// evening, November 18, 2026, at 5:28 PM Central time, warns..."). The page
+// already shows the issue time, so the line leaves the PROMPT too. Only that
+// exact header shape at the head of the section ("at" optional: MKX writes
+// "Issued 545 AM CDT Mon Sep 28 2026"), after any qualifier lines such as
+// "(00Z TAF Issuance)" or "(Rest of today through Thursday)", which are
+// content and stay (group 1).
+const ISSUED_LINE_RE = /^(\s*(?:\([^()\n]*\)[ \t]*\r?\n\s*)*)(?:Issued|Updated)(?:[ \t]+at)?[ \t]+\d{1,4}[ \t]*(?:AM|PM)[ \t]+[A-Z]{2,5}[ \t]+(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)[ \t]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[ \t]+\d{1,2}[ \t]+\d{4}[ \t]*(?:\r?\n\s*|$)/i;
 
 export function stripHeaderStamp(text) {
     if (typeof text !== 'string') return text;
-    const out = text.replace(HEADER_STAMP_RE, '');
+    const out = text.replace(HEADER_STAMP_RE, '').replace(ISSUED_LINE_RE, '$1');
     return out.trim() ? out : text;
 }
 

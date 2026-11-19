@@ -64,6 +64,87 @@ describe('stripHeaderStamp (prompt assembly only)', () => {
     });
 });
 
+// Nov 18 2026 (PR #48 measurement): most offices open a section with an
+// "Issued at 528 PM CST Wed Nov 18 2026" line, and the model restated it
+// ("This aviation forecast, issued Wednesday evening, November 18, 2026, at
+// 5:28 PM Central time, warns..."). It leaves the PROMPT only, like the LOX
+// stamp; a qualifier line above it ("(00Z TAF Issuance)") is content and stays.
+describe('stripHeaderStamp — "Issued at" / "Updated at" header lines', () => {
+    const live = (office) => JSON.parse(readFileSync(new URL(`./fixtures/afd/live-2026-11-18/${office}.json`, import.meta.url), 'utf8'));
+    const section = (office, key) => extractSections(live(office).productText).find(s => s.key === key).text;
+
+    it('removes a leading "Issued at" line (HGX Marine, LOT Discussion, BOU Fire Weather)', () => {
+        const marine = section('HGX', 'MARINE');
+        expect(marine.startsWith('Issued at 1201 PM CST Wed Nov 18 2026\n\nNortheast winds near 20 knots')).toBe(true);
+        expect(stripHeaderStamp(marine).startsWith('Northeast winds near 20 knots')).toBe(true);
+        expect(stripHeaderStamp(section('LOT', 'DISCUSSION')).startsWith('A strong low-level wind field')).toBe(true);
+        expect(stripHeaderStamp(section('BOU', 'FIRE WEATHER')).startsWith('The Red Flag Warning will remain')).toBe(true);
+    });
+
+    it('keeps the qualifier line above it (HGX Aviation, MFL Aviation and Short Term)', () => {
+        const hgx = section('HGX', 'AVIATION');
+        expect(hgx.startsWith('(00Z TAF Issuance)\nIssued at 528 PM CST Wed Nov 18 2026\n\nConditions will')).toBe(true);
+        expect(stripHeaderStamp(hgx).startsWith('(00Z TAF Issuance)\nConditions will gradually deteriorate')).toBe(true);
+        expect(stripHeaderStamp(section('MFL', 'AVIATION')).startsWith('(00Z TAFS)\nShowers continue across')).toBe(true);
+        expect(stripHeaderStamp(section('MFL', 'SHORT TERM')).startsWith('(Rest of today through Thursday)\nCoastal convergence')).toBe(true);
+        expect(stripHeaderStamp(section('MFL', 'LONG TERM')).startsWith('(Thursday night through Tuesday)\nOn Friday, global models')).toBe(true);
+    });
+
+    it('removes the same-shaped "Updated at" line (MFL Key Messages)', () => {
+        const messages = section('MFL', 'KEY MESSAGES');
+        expect(messages.startsWith('Updated at 635 PM EST Wed Nov 18 2026\n\n')).toBe(true);
+        const out = stripHeaderStamp(messages);
+        expect(out).not.toContain('Updated at');
+        expect(out.trimStart().startsWith('- There is an increased threat of urban flooding')).toBe(true);
+    });
+
+    it('changes nothing else in the section', () => {
+        const hgx = section('HGX', 'AVIATION');
+        expect(stripHeaderStamp(hgx)).toBe(hgx.replace('Issued at 528 PM CST Wed Nov 18 2026\n\n', ''));
+        const marine = section('HGX', 'MARINE');
+        expect(stripHeaderStamp(marine)).toBe(marine.replace('Issued at 1201 PM CST Wed Nov 18 2026\n\n', ''));
+    });
+
+    it('handles other zones, 3- and 4-digit times and upper case', () => {
+        expect(stripHeaderStamp('Issued at 1232 AM EST Wed Nov 18 2026\n\nStrong winds.')).toBe('Strong winds.');
+        expect(stripHeaderStamp('Issued at 905 AM AKST Thu Dec 3 2026\nSnow tonight.')).toBe('Snow tonight.');
+        expect(stripHeaderStamp('Issued at 410 PM ChST Fri Nov 20 2026\n\nTrade winds.')).toBe('Trade winds.');
+        expect(stripHeaderStamp('ISSUED AT 528 PM CST WED NOV 18 2026\n\nFOG LATE.')).toBe('FOG LATE.');
+    });
+
+    it('accepts the form without "at" (MKX Update, Sep 28 2026)', () => {
+        const mkx = JSON.parse(readFileSync(new URL('./fixtures/afd/live-2026-09-28/MKX.json', import.meta.url), 'utf8'));
+        const update = extractSections(mkx.productText).find(s => s.key === 'UPDATE').text;
+        expect(update.startsWith('Issued 545 AM CDT Mon Sep 28 2026\n\nPatchy fog')).toBe(true);
+        expect(stripHeaderStamp(update).startsWith('Patchy fog')).toBe(true);
+        // "Updated to discuss ..." (OKX What has changed) is content, not a header.
+        const okx = 'Updated to discuss the potential for a coastal storm Sunday \ninto Monday.';
+        expect(stripHeaderStamp(okx)).toBe(okx);
+    });
+
+    it('leaves a mid-text or differently shaped "Issued at" alone', () => {
+        for (const text of [
+            'Fog tonight.\nIssued at 528 PM CST Wed Nov 18 2026\n\nMore fog.',
+            'Issued at 5 PM, the Flood Watch covers all zones through Thursday.',
+            'Issued at 528 PM CST, the advisory runs through Thursday.',
+            '(00Z TAF Issuance)\nVFR through the period.',
+        ]) {
+            expect(stripHeaderStamp(text)).toBe(text);
+        }
+    });
+
+    it('never empties a section that is only the header line', () => {
+        const only = 'Issued at 528 PM CST Wed Nov 18 2026';
+        expect(stripHeaderStamp(only)).toBe(only);
+    });
+
+    it('still strips the LOX stamp, and leaves the LOX Zulu stamp (annotated instead)', () => {
+        expect(stripHeaderStamp('18/104 PM.\n\nCool, below normal temperatures.')).toBe('Cool, below normal temperatures.');
+        const aviation = section('LOX', 'AVIATION');
+        expect(stripHeaderStamp(aviation)).toBe(aviation); // "18/1736Z." (see the Zulu-stamp test above)
+    });
+});
+
 describe('sanitizeTranslation — weekday/date pairs', () => {
     const ctx = { office: 'LOX', issuanceTime: LOX_ISSUED };
 
