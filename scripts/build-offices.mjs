@@ -164,17 +164,23 @@ export function renderOfficePage(template, code, city) {
     return html;
 }
 
-// lastmod defaults to the generation date (YYYY-MM-DD). Google ignores
-// changefreq/priority but does read <lastmod>, so every URL carries one.
-export function renderSitemap(codes, lastmod = new Date().toISOString().slice(0, 10)) {
-    const urls = [`  <url><loc>https://plaincast.live/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`];
-    urls.push(`  <url><loc>https://plaincast.live/national/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>`);
+// No <lastmod>, on purpose. Search engines read it as a claim about when the
+// page's content last changed, and no date this generator can know is true:
+// the homepage, /national/ and every office page change several times a day
+// (each new NWS issuance), and the four prose pages render from one shared
+// module (api/_pages.js) and shell, so a git date is not per page, and the
+// commit that changes a page could not carry its own date here. A
+// generation date was false for all of them. Deterministic: the output
+// depends only on the office list, so regenerating changes nothing.
+export function renderSitemap(codes) {
+    const urls = ['  <url><loc>https://plaincast.live/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>'];
+    urls.push('  <url><loc>https://plaincast.live/national/</loc><changefreq>daily</changefreq><priority>0.9</priority></url>');
     // Trust anchors: static prose, so they change on deploy rather than daily.
     for (const slug of ['about', 'contact', 'developers', 'privacy']) {
-        urls.push(`  <url><loc>https://plaincast.live/${slug}</loc><lastmod>${lastmod}</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>`);
+        urls.push(`  <url><loc>https://plaincast.live/${slug}</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>`);
     }
     for (const code of codes) {
-        urls.push(`  <url><loc>https://plaincast.live/o/${code}/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>`);
+        urls.push(`  <url><loc>https://plaincast.live/o/${code}/</loc><changefreq>daily</changefreq><priority>0.8</priority></url>`);
     }
     return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

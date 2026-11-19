@@ -31,21 +31,21 @@ describe('per-office SEO pages stay in sync with the app shell (shadcn/index.htm
         expect(readFileSync(join(ROOT, 'api', '_home-shell.html'), 'utf8')).toBe(template);
     });
 
-    it('sitemap.xml matches the generator', () => {
-        // <lastmod> is stamped with the generation date, so pin the comparison
-        // to the committed file's own date (else this drifts daily).
+    it('sitemap.xml matches the generator, which is deterministic', () => {
         const committed = readFileSync(join(DOCS, 'sitemap.xml'), 'utf8');
-        const lastmod = committed.match(/<lastmod>(\d{4}-\d{2}-\d{2})<\/lastmod>/)?.[1];
-        expect(lastmod).toBeTruthy();
-        expect(committed).toBe(renderSitemap(codes, lastmod));
+        expect(committed).toBe(renderSitemap(codes));
+        expect(renderSitemap(codes)).toBe(renderSitemap(codes));
     });
 
-    it('every sitemap URL carries a YYYY-MM-DD <lastmod>', () => {
+    // A generation date in <lastmod> was false for every URL: the edition
+    // pages change several times a day, the prose pages rarely. No URL
+    // carries one; changefreq stays.
+    it('no sitemap URL carries a <lastmod>; every URL keeps its changefreq', () => {
         const committed = readFileSync(join(DOCS, 'sitemap.xml'), 'utf8');
         const locs = [...committed.matchAll(/<loc>/g)].length;
-        const stamps = [...committed.matchAll(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/g)].length;
         expect(locs).toBe(codes.length + 6); // homepage + /national/ + 4 prose pages + every office
-        expect(stamps).toBe(locs);
+        expect(committed).not.toContain('<lastmod>');
+        expect([...committed.matchAll(/<changefreq>(?:daily|monthly)<\/changefreq>/g)].length).toBe(locs);
     });
 
     it('the sitemap lists the trust-anchor pages and the developer portal', () => {
