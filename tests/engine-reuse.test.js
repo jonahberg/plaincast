@@ -72,6 +72,8 @@ describe('on-demand translation: section reuse only with PLAINCAST_PRETRANSLATE=
         const r = await translate('reuse-off-1');
         expect(r.body.complete).toBe(true);
         expect(modelCalls.length).toBe(2);
+        // The reader path keeps the AI SDK's default retries (only the poller sets 0).
+        for (const c of modelCalls) expect('maxRetries' in c).toBe(false);
         expect(backend.reads.some(k => k.startsWith('ts:'))).toBe(false);
         expect(backend.writes.some(w => w.key.startsWith('ts:'))).toBe(false);
     });

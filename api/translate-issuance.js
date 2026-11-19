@@ -10,7 +10,7 @@ import { displayKey, translatableSections } from './_translatable.js';
 import { annotateZuluTimes, buildSystemPrompt, sanitizeTranslation, stripHeaderStamp } from './translate.js';
 import { getSnapshot, putSnapshot } from './_snapshots.js';
 import { sendError } from './_errors.js';
-import { sharedGet, sharedSet, translationKey, TRANSLATION_TTL } from './_shared-cache.js';
+import { sharedGet, sharedSetReported, translationKey, TRANSLATION_TTL } from './_shared-cache.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
 import { PRETRANSLATE, switchOn } from './_store.js';
@@ -102,7 +102,10 @@ export { displayKey, translatableSections };
 // /api/translate for any key missing from the edition's map.
 // The prompt and sanitizer live in translate.js: bump the version in
 // api/_shared-cache.js when this output's rules change.
-export async function translateSection({ office, issuanceTime, key, text }) {
+// `maxRetries` (the AI SDK's retry count) is passed only by the poller,
+// which sets 0 so one reserved call is one request; the endpoint keeps the
+// SDK default.
+export async function translateSection({ office, issuanceTime, key, text, maxRetries }) {
     try {
         const result = await generateText({
             model: MODEL,
@@ -111,6 +114,7 @@ export async function translateSection({ office, issuanceTime, key, text }) {
             prompt: annotateZuluTimes(stripHeaderStamp(text), office, issuanceTime),
             maxOutputTokens: 2048,
             abortSignal: AbortSignal.timeout(15000),
+            ...(maxRetries === undefined ? {} : { maxRetries }),
         });
         if (result.finishReason === 'content-filter') return null;
         // Same output guard as /api/translate, before cache + snapshot.
@@ -132,10 +136,11 @@ export async function translateEdition({
     office, id, issuanceTime, productText,
     sections = translatableSections(productText),
     onTranslated = null,
+    maxRetries,
 }) {
     const settled = await Promise.all(sections.map(async (s) => {
         if (typeof s.reused === 'string' && s.reused) return { key: s.key, text: s.reused };
-        const text = await translateSection({ office, issuanceTime, key: s.key, text: s.text });
+        const text = await translateSection({ office, issuanceTime, key: s.key, text: s.text, maxRetries });
         if (text && onTranslated) {
             try { await onTranslated(s, text); } catch { /* reuse is an optimisation */ }
         }
@@ -156,12 +161,16 @@ export async function translateEdition({
 // snapshot and the shared store. A partial one must not be frozen: the
 // caller never passes it here. The shared write is awaited: a write left
 // running after the response can be lost when the function is frozen.
-export async function persistTranslation(office, id, payload) {
+// Resolves true when the shared-store write landed (the poller marks an
+// edition done only then; the snapshot is best-effort and not reported).
+export async function persistTranslation(office, id, payload, { timeoutMs } = {}) {
     setCache(`${office}|${id}`, payload);
-    await Promise.all([
+    const [, stored] = await Promise.all([
         putSnapshot(office, id, payload),
-        sharedSet(translationKey(office, id), { ...payload, office, id, complete: true }, { ttl: TRANSLATION_TTL }),
+        sharedSetReported(translationKey(office, id), { ...payload, office, id, complete: true },
+            { ttl: TRANSLATION_TTL, ...(timeoutMs ? { timeoutMs } : {}) }),
     ]);
+    return stored;
 }
 
 export default async function handler(req, res) {

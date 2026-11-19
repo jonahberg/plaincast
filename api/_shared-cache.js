@@ -189,16 +189,25 @@ export async function sharedGet(key) {
 // Stores a JSON-serialisable value. `ttl` is in seconds. Entries are tagged
 // with their family (`ti`, `cl`, `lede`) so one family can be expired from
 // the dashboard without a deploy. Resolves when written, failed or timed out.
-export async function sharedSet(key, value, { ttl, name } = {}) {
-    if (typeof key !== 'string' || !key || value === undefined) return;
+export async function sharedSet(key, value, opts = {}) {
+    await sharedSetReported(key, value, opts);
+}
+
+// sharedSet that REPORTS: resolves true once written, false on an error, a
+// timeout, a null key or no store. Same tagging and timeout as sharedSet.
+// The poller uses it so a paid result whose write was lost is retried.
+export async function sharedSetReported(key, value, { ttl, name, timeoutMs = SET_TIMEOUT_MS } = {}) {
+    if (typeof key !== 'string' || !key || value === undefined) return false;
     const options = { tags: [key.split(':')[0]] };
     if (Number.isFinite(ttl) && ttl > 0) options.ttl = Math.floor(ttl);
     if (typeof name === 'string' && name) options.name = name;
     const write = (async () => {
         const b = await backend();
-        if (b) await b.set(key, value, options);
+        if (!b) return false;
+        await b.set(key, value, options);
+        return true;
     })();
-    await settleWithin(write, SET_TIMEOUT_MS, undefined);
+    return settleWithin(write, timeoutMs, false);
 }
 
 // ── The engine's I/O (api/_store.js, api/cron-refresh.js) ─────────────
