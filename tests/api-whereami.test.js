@@ -47,6 +47,22 @@ describe('whereami', () => {
         await handler({ method: 'GET', headers: { 'x-vercel-ip-latitude': '41.1', 'x-vercel-ip-longitude': '-104.8' } }, res);
         expect(res.code).toBe(204);
     });
+    test('resolves the office from cwa, not an Alaska sub-grid gridId', async () => {
+        // Live /points/61.2181,-149.9003 (Anchorage), 2026-11-18: gridId AER, cwa AFC.
+        globalThis.fetch = async () => new Response(JSON.stringify({ properties: { gridId: 'AER', cwa: 'AFC' } }), { status: 200 });
+        const res = mockRes();
+        await handler({ method: 'GET', headers: { 'x-vercel-ip-latitude': '61.2181', 'x-vercel-ip-longitude': '-149.9003' } }, res);
+        expect(res.code).toBe(200);
+        expect(res.body).toEqual({ office: 'AFC', city: 'Anchorage' });
+    });
+    test('American Samoa has no grid, only a cwa', async () => {
+        // Live /points/-14.2756,-170.702 (Pago Pago), 2026-11-18: gridId null, cwa PPG.
+        globalThis.fetch = async () => new Response(JSON.stringify({ properties: { gridId: null, cwa: 'PPG' } }), { status: 200 });
+        const res = mockRes();
+        await handler({ method: 'GET', headers: { 'x-vercel-ip-latitude': '-14.2756', 'x-vercel-ip-longitude': '-170.702' } }, res);
+        expect(res.code).toBe(200);
+        expect(res.body).toEqual({ office: 'PPG', city: 'Pago Pago' });
+    });
     test('garbage headers -> 204 without fetching', async () => {
         globalThis.fetch = async () => { throw new Error('must not fetch'); };
         const res = mockRes();

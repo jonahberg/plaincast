@@ -1,0 +1,132 @@
+{
+ "source": "https://api.weather.gov/alerts/active (Severe/Extreme Alaska warnings, trimmed to the fields the Wire reads)",
+ "fetched": "2026-11-18",
+ "features": [
+  {
+   "properties": {
+    "event": "Coastal Flood Warning",
+    "severity": "Severe",
+    "senderName": "NWS Fairbanks AK",
+    "areaDesc": "Yukon Delta Coast",
+    "expires": "2026-11-19T03:00:00-09:00",
+    "ends": "2026-11-19T03:00:00-09:00",
+    "parameters": {
+     "AWIPSidentifier": [
+      "CFWAFG"
+     ],
+     "WMOidentifier": [
+      "WHAK49 PAFG 182209"
+     ]
+    }
+   }
+  },
+  {
+   "properties": {
+    "event": "High Wind Warning",
+    "severity": "Severe",
+    "senderName": "NWS Fairbanks AK",
+    "areaDesc": "Eastern Alaska Range North of Trims Camp",
+    "expires": "2026-11-19T07:00:00-09:00",
+    "ends": "2026-11-19T15:00:00-09:00",
+    "parameters": {
+     "AWIPSidentifier": [
+      "NPWAFG"
+     ],
+     "WMOidentifier": [
+      "WWAK73 PAFG 182154"
+     ]
+    }
+   }
+  },
+  {
+   "properties": {
+    "event": "Winter Storm Warning",
+    "severity": "Severe",
+    "senderName": "NWS Fairbanks AK",
+    "areaDesc": "Upper Kuskokwim Valley",
+    "expires": "2026-11-19T07:00:00-09:00",
+    "ends": "2026-11-19T15:00:00-09:00",
+    "parameters": {
+     "AWIPSidentifier": [
+      "WSWWCZ"
+     ],
+     "WMOidentifier": [
+      "WWAK42 PAFG 182139"
+     ]
+    }
+   }
+  },
+  {
+   "properties": {
+    "event": "High Wind Warning",
+    "severity": "Severe",
+    "senderName": "NWS Anchorage AK",
+    "areaDesc": "Pribilof Islands",
+    "expires": "2026-11-18T15:00:00-09:00",
+    "ends": "2026-11-18T15:00:00-09:00",
+    "parameters": {
+     "AWIPSidentifier": [
+      "NPWALU"
+     ],
+     "WMOidentifier": [
+      "WWAK72 PAFC 181740"
+     ]
+    }
+   }
+  },
+  {
+   "properties": {
+    "event": "Storm Warning",
+    "severity": "Severe",
+    "senderName": "NWS Anchorage AK",
+    "areaDesc": "North and West of Nunivak Island",
+    "expires": "2026-11-18T15:30:00-09:00",
+    "ends": "2026-11-18T17:00:00-09:00",
+    "parameters": {
+     "AWIPSidentifier": [
+      "CWFALU"
+     ],
+     "WMOidentifier": [
+      "FZAK52 PAFC 181201"
+     ]
+    }
+   }
+  },
+  {
+   "properties": {
+    "event": "Storm Warning",
+    "severity": "Severe",
+    "senderName": "NWS Anchorage AK",
+    "areaDesc": "Bering Sea Offshore 171W to 180 and North of 56N",
+    "expires": "2026-11-18T16:30:00-09:00",
+    "ends": "2026-11-18T17:00:00-09:00",
+    "parameters": {
+     "AWIPSidentifier": [
+      "OFFALU"
+     ],
+     "WMOidentifier": [
+      "FZAK62 PAFC 181201"
+     ]
+    }
+   }
+  },
+  {
+   "properties": {
+    "event": "Heavy Freezing Spray Warning",
+    "severity": "Severe",
+    "senderName": "NWS Fairbanks AK",
+    "areaDesc": "Point Franklin to Cape Halkett out to 15 NM",
+    "expires": "2026-11-18T06:00:00-09:00",
+    "ends": "2026-11-18T17:00:00-09:00",
+    "parameters": {
+     "AWIPSidentifier": [
+      "CWFNSB"
+     ],
+     "WMOidentifier": [
+      "FZAK51 PAFG 180048"
+     ]
+    }
+   }
+  }
+ ]
+}

@@ -466,6 +466,15 @@ describe('buildWireHtml', () => {
         expect(html).toContain('wire-extreme');
     });
 
+    test('an uncovered issuer with a senderName is named by it, still unlinked', () => {
+        const html = buildWireHtml([row({ code: 'AT1', city: null, sender: 'NWS National Tsunami Warning Center' })]);
+        expect(html).toContain('<span class="wire-office">NWS National Tsunami Warning Center</span>');
+        expect(html).not.toContain('href="/o/AT1/"');
+        const md = buildDeskMarkdown({ census: [], fullCensus: [], totals: null, quiet: 0, risk: null, summary: null,
+            copy: [], rail: [], rows: [row({ code: 'AT1', city: null, sender: 'NWS National Tsunami Warning Center' })], issuanceTime: null, nextAt: null });
+        expect(md).toContain('- NWS National Tsunami Warning Center — Tornado Warning');
+    });
+
     test('second line: area digest · office-local expiry', () => {
         const html = buildWireHtml([row({
             code: 'PUB', city: 'Pueblo',

@@ -1,7 +1,7 @@
 import { describe, test, expect, afterEach } from 'bun:test';
 import { readFileSync, existsSync } from 'node:fs';
 import {
-    officeFromAlert, groupDispatches, buildCensus, parseSpcOutlook,
+    officeFromAlert, dispatchOffice, groupDispatches, buildCensus, parseSpcOutlook,
     parseRiskCategory, parseDiscussionBody, digestArea, formatExpiry, nextOutlookTime,
     caseArea, riskAreaLine, areaCaption, AREA_PROPER_NOUNS, formatClock, nextOutlookAt,
 } from '../api/_national.js';
@@ -17,6 +17,9 @@ import { OFFICE_NAMES } from '../docs/js/offices.js';
 // state beyond a constant, so double-instantiation is safe).
 import { fetchSevereAlerts, fetchAlertTotals, fetchSpcDy1, fetchSpcOutlook } from '../api/_utils.js?real';
 import alerts from './fixtures/national/severe-alerts.json';
+// Live Severe/Extreme Alaska warnings, 2026-11-18: AWIPS ids carry ZONE codes
+// (ALU, WCZ, NSB) while the WMO heading names the issuing office.
+import alaska from './fixtures/national/alaska-zone-alerts.json';
 import swody1 from './fixtures/national/swody1.json';
 import swody1Fresh from './fixtures/national/swody1-fresh.json';
 // Live 05:23Z Nov 12 2026 Day 1 (11:23 PM CST Nov 11): the "today across
@@ -58,6 +61,33 @@ describe('groupDispatches', () => {
         const rows = groupDispatches([f('Severe Thunderstorm Warning', 'Severe', 'SVRCYS')], NAMES);
         expect(rows[0].code).toBe('CYS');
         expect(rows[0].city).toBeNull();
+        expect(rows[0].sender).toBeNull();
+    });
+    test('every office in the live fixture is named once the roster covers it', () => {
+        const rows = groupDispatches(alerts.features, OFFICE_NAMES);
+        expect(rows.length).toBeGreaterThan(0);
+        for (const r of rows) expect(r.city).toBe(OFFICE_NAMES[r.code]);
+        expect(rows.map(r => r.code)).toContain('CYS');
+    });
+    test('Alaska zone codes join their issuing office (WMO heading), not a bare code', () => {
+        const rows = groupDispatches(alaska.features, OFFICE_NAMES);
+        expect(rows.map(r => r.code).sort()).toEqual(['AFC', 'AFG']);
+        const afc = rows.find(r => r.code === 'AFC');
+        expect(afc.city).toBe('Anchorage');
+        expect(afc.count).toBe(3); // NPWALU + CWFALU + OFFALU, all PAFC
+        expect(rows.find(r => r.code === 'AFG').count).toBe(4); // AFG + WCZ + NSB zones
+    });
+    test('an unknown issuer is labelled by its senderName, a bare "NWS" is not', () => {
+        const tsu = { event: 'Tsunami Warning', severity: 'Extreme', senderName: 'NWS National Tsunami Warning Center',
+            parameters: { AWIPSidentifier: ['TSUWCA'], WMOidentifier: ['WEPA41 PAAQ 181200'] } };
+        expect(dispatchOffice(tsu, OFFICE_NAMES)).toEqual({ code: 'WCA', city: null, sender: 'NWS National Tsunami Warning Center' });
+        const wbc = { senderName: 'NWS', parameters: { AWIPSidentifier: ['XXXWBC'], WMOidentifier: ['WWUS00 KWBC 181200'] } };
+        expect(dispatchOffice(wbc, OFFICE_NAMES)).toEqual({ code: 'WBC', city: null, sender: null });
+        expect(dispatchOffice({ parameters: { WMOidentifier: ['WWUS00 KWBC 181200'] } }, OFFICE_NAMES)).toBeNull();
+    });
+    test('a known office in the AWIPS id wins over the WMO heading', () => {
+        const p = { parameters: { AWIPSidentifier: ['SVRPUB'], WMOidentifier: ['WUUS55 KBOU 152204'] } };
+        expect(dispatchOffice(p, OFFICE_NAMES).code).toBe('PUB');
     });
     test('live fixture produces rows without throwing', () => {
         expect(Array.isArray(groupDispatches(alerts.features, NAMES))).toBe(true);

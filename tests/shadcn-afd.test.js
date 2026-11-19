@@ -16,7 +16,7 @@ import {
     translateToPlainEnglish,
 } from '../shadcn/src/lib/afd.js';
 import { GLOSSARY } from '../docs/js/glossary.js';
-import { alertWindow, classifyAlertKind, findNearestOffice } from '../shadcn/src/lib/nws.js';
+import { alertIsFromOffice, alertWindow, classifyAlertKind, findNearestOffice } from '../shadcn/src/lib/nws.js';
 import { formatTranslationHTML } from '../shadcn/src/lib/ai.js';
 
 const FIXTURE = await Bun.file(new URL('./fixtures/afd/lox-classic-synopsis.txt', import.meta.url)).text();
@@ -129,6 +129,31 @@ describe('alert helpers', () => {
     it('finds the nearest office by coordinates', () => {
         expect(findNearestOffice(34.05, -118.24)).toBe('LOX');   // Los Angeles
         expect(findNearestOffice(41.88, -87.63)).toBe('LOT');    // Chicago
+    });
+
+    it('finds the new offices too, Guam and Puerto Rico included', () => {
+        expect(findNearestOffice(13.48, 144.79)).toBe('GUM');    // Hagåtña
+        expect(findNearestOffice(18.47, -66.11)).toBe('SJU');    // San Juan
+        expect(findNearestOffice(-14.28, -170.70)).toBe('PPG');  // Pago Pago
+        expect(findNearestOffice(58.30, -134.42)).toBe('AJK');   // Juneau
+        expect(findNearestOffice(42.65, -73.75)).toBe('ALY');    // Albany
+    });
+});
+
+describe('alertIsFromOffice', () => {
+    const alert = (wmo, senderName = '') => ({ senderName, parameters: wmo ? { WMOidentifier: [wmo] } : {} });
+
+    it('matches on the issuing office in the WMO heading', () => {
+        expect(alertIsFromOffice(alert('WWUS81 KOKX 181200', 'NWS Upton NY'), 'OKX')).toBe(true);
+        expect(alertIsFromOffice(alert('WWUS81 KBOX 181200', 'NWS Boston/Norton MA'), 'OKX')).toBe(false);
+        // Alaska zone-coded alerts (AWIPS NPWALU) still name PAFC as issuer.
+        expect(alertIsFromOffice(alert('WWAK72 PAFC 181740', 'NWS Anchorage AK'), 'AFC')).toBe(true);
+        expect(alertIsFromOffice(alert('WHGM70 PGUM 181200', 'NWS Tiyan GU'), 'GUM')).toBe(true);
+    });
+
+    it('falls back to the sender fragment when there is no heading', () => {
+        expect(alertIsFromOffice(alert(null, 'NWS New York NY'), 'OKX')).toBe(true);
+        expect(alertIsFromOffice(alert(null, 'NWS Boston/Norton MA'), 'OKX')).toBe(false);
     });
 });
 

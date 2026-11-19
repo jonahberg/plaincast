@@ -1,6 +1,6 @@
 // ─── Plaincast App (ES Module) ───────────────────────────────────────
 import { GLOSSARY, GLOSSARY_COMPILED } from './glossary.js';
-import { OFFICE_TIMEZONES, OFFICE_COORDS, OFFICE_STATES, OFFICE_SENDER, OFFICE_NAMES, SECTION_NAMES } from './offices.js';
+import { OFFICE_TIMEZONES, OFFICE_COORDS, OFFICE_STATES, OFFICE_SENDER, OFFICE_NAMES, SECTION_NAMES, alertOfficeCode } from './offices.js';
 import { FULL_ABBREVIATIONS } from './abbreviations.js';
 import { computeDiff, renderDiffHTML } from './diff.js';
 import { confidenceScore, confidenceWord, buildTimelineEntries } from './timeline.js';
@@ -55,8 +55,10 @@ async function fetchAlerts(office) {
         const alertMap = {};
         for (const f of (data.features || [])) {
             const p = f.properties;
-            // Match alerts from this office
-            if (senderMatch && !(p.senderName || '').includes(senderMatch)) continue;
+            // Match alerts from this office: the WMO heading's issuing office
+            // (KOKX → OKX), else the sender-name fragment.
+            const issuer = alertOfficeCode(p);
+            if (issuer ? issuer !== office : (senderMatch && !(p.senderName || '').includes(senderMatch))) continue;
             const event = p.event;
             const alertData = {
                 id: p.id || f.id || '',
