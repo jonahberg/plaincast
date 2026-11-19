@@ -55,6 +55,7 @@ const { default: homeHandler } = await import('../api/home.js');
 const { renderOfficePage } = await import('../scripts/build-offices.mjs');
 const { PROD_SCRIPT } = await import('../scripts/app-shell.mjs');
 const shared = await import('../api/_shared-cache.js');
+const { readRenderableEdition } = await import('../api/_store.js');
 const { __setSharedCacheBackendForTests, translationKey, changelogKey, editionKey, pollStateKey, sectionKey, modelCallsKey } = shared;
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -259,10 +260,23 @@ describe('engine switches off: office page and homepage are origin/main, byte fo
             // NWS's: if any switch-off path read it, the body would change.
             const at = new Date().toISOString();
             const other = CURR.replace('Low clouds and fog', 'STORED EDITION TEXT');
-            backend.seed(pollStateKey(), { v: 1, at, fullAt: at, offices: { LOX: { id: CURR_ID, issuanceTime: CURR_TIME, prevId: PREV_ID, stored: CURR_ID } } });
-            backend.seed(editionKey('LOX'), { v: 1, office: 'LOX', current: { id: CURR_ID, issuanceTime: CURR_TIME, productText: other, storedAt: at, prevId: PREV_ID }, previous: null });
+            backend.seed(pollStateKey(), {
+                v: 1, at, fullAt: at,
+                offices: { LOX: { id: CURR_ID, issuanceTime: CURR_TIME, prevId: PREV_ID, stored: CURR_ID, storedPrev: PREV_ID, purge: { id: CURR_ID, n: 2 } } },
+            });
+            backend.seed(editionKey('LOX'), {
+                v: 1, office: 'LOX',
+                current: { id: CURR_ID, issuanceTime: CURR_TIME, productText: other, storedAt: at, prevId: PREV_ID },
+                previous: { id: PREV_ID, issuanceTime: PREV_TIME, productText: PREV },
+            });
             backend.seed(sectionKey('LOX', 'a'.repeat(64)), { office: 'LOX', key: 'Synopsis', hash: 'a'.repeat(64), text: 'x' });
             backend.seed(modelCallsKey('2026-07-03'), { day: '2026-07-03', calls: 1 });
+            // The seed is genuinely renderable: with PLAINCAST_STORE_RENDER=1
+            // the page WOULD come from it (and carry the stored text).
+            const renderable = await readRenderableEdition('LOX');
+            expect(renderable?.current.productText).toBe(other);
+            expect(renderable?.previous?.id).toBe(PREV_ID);
+            backend.reads.length = 0;
             const got = await render(c, backend);
             const golden = JSON.parse(readFileSync(join(GOLDEN_DIR, `${c.name}.json`), 'utf8'));
             expect({ ...got, body: countFree(got.body) }).toEqual({ ...golden, body: countFree(golden.body) });
@@ -271,4 +285,20 @@ describe('engine switches off: office page and homepage are origin/main, byte fo
             expect(fetches.calls).toEqual([]);
         });
     }
+
+    it('control: the same seed with PLAINCAST_STORE_RENDER=1 does change the page', async () => {
+        const at = new Date().toISOString();
+        backend.seed(pollStateKey(), {
+            v: 1, at, fullAt: at,
+            offices: { LOX: { id: CURR_ID, issuanceTime: CURR_TIME, prevId: PREV_ID, stored: CURR_ID, storedPrev: PREV_ID, purge: { id: CURR_ID, n: 2 } } },
+        });
+        backend.seed(editionKey('LOX'), {
+            v: 1, office: 'LOX',
+            current: { id: CURR_ID, issuanceTime: CURR_TIME, productText: CURR.replace('Low clouds and fog', 'STORED EDITION TEXT'), storedAt: at, prevId: PREV_ID },
+            previous: { id: PREV_ID, issuanceTime: PREV_TIME, productText: PREV },
+        });
+        process.env.PLAINCAST_STORE_RENDER = '1';
+        const got = await render(CASES[0], backend);
+        expect(got.body).toContain('STORED EDITION TEXT');
+    });
 });

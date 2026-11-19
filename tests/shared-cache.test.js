@@ -132,7 +132,7 @@ describe('api/_shared-cache.js sharedGet / sharedSet', () => {
 // ── The engine's families and I/O (api/_store.js, api/cron-refresh.js) ──
 import {
     editionKey, pollStateKey, leaseKey, modelCallsKey, sectionKey,
-    storeRead, storeWrite, purgeTag, __setPurgeBackendForTests,
+    storeRead, storeWrite, purgeTag, __setPurgeBackendForTests, sharedSetReported,
     STORE_READ_TIMEOUT_MS,
 } from '../api/_shared-cache.js';
 
@@ -236,5 +236,22 @@ describe('api/_shared-cache.js purgeTag', () => {
         __setPurgeBackendForTests({ invalidateByTag: async () => { throw new Error('purge 500'); }, dangerouslyDeleteByTag: () => { throw new Error('sync'); } });
         expect(await purgeTag('office-LOX')).toEqual({ ok: false, reason: 'purge 500' });
         expect(await purgeTag('office-LOX', { hard: true })).toEqual({ ok: false, reason: 'sync' });
+    });
+});
+
+describe('api/_shared-cache.js sharedSetReported', () => {
+    it('tags like sharedSet and reports whether the write landed', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        expect(await sharedSetReported('ti:v2:LOX:x', { a: 1 }, { ttl: 60 })).toBe(true);
+        expect(backend.writes).toEqual([{ key: 'ti:v2:LOX:x', options: { tags: ['ti'], ttl: 60 } }]);
+        __setSharedCacheBackendForTests({ get: async () => null, set: async () => { throw new Error('down'); } });
+        expect(await sharedSetReported('ti:v2:LOX:x', { a: 1 })).toBe(false);
+        __setSharedCacheBackendForTests({ get: async () => null, set: () => new Promise(() => {}) });
+        expect(await sharedSetReported('ti:v2:LOX:x', { a: 1 }, { timeoutMs: 20 })).toBe(false);
+        delete process.env.VERCEL;
+        __setSharedCacheBackendForTests(null);
+        expect(await sharedSetReported('ti:v2:LOX:x', { a: 1 })).toBe(false);
+        expect(await sharedSetReported(null, { a: 1 })).toBe(false);
     });
 });

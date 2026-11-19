@@ -110,7 +110,7 @@ describe('cron-refresh: polling and the edition store', () => {
     let fetches;
     const run = (env = {}, extra = {}) => runPoller({
         now: () => clock,
-        env,
+        env: { PLAINCAST_POLLER: '1', ...env },
         deps: { ...nws.deps, purgeTag: purge.fn, ...extra },
     });
     const later = (ms = 5 * MIN) => { clock += ms; };
@@ -217,6 +217,22 @@ describe('cron-refresh: polling and the edition store', () => {
         purge.fail(false);
         later(); await run({ PLAINCAST_STORE_RENDER: '1' });
         expect((await readRenderableEdition('LOX', { now: clock }))?.current.id).toBe('lox-1');
+    });
+
+    it('a same-time twin (correction) hard-purges the office and keeps it off the store', async () => {
+        const { readRenderableEdition } = await import('../api/_store.js');
+        nws.add('LOX', 'lox-1', '2026-11-18T11:50:00+00:00');
+        await run({ PLAINCAST_STORE_RENDER: '1' });
+        later(); await run({ PLAINCAST_STORE_RENDER: '1' });
+        expect((await readRenderableEdition('LOX', { now: clock }))?.current.id).toBe('lox-1');
+        purge.calls.length = 0;
+        nws.add('LOX', 'lox-1-cor', '2026-11-18T11:50:00+00:00', { synopsis: 'CORRECTED: high pressure keeps the region dry and mild through the weekend.' });
+        later();
+        const s = await run({ PLAINCAST_STORE_RENDER: '1' });
+        expect(s.newEditions).toEqual(['LOX']);
+        expect(purge.calls).toEqual([{ tags: ['office-LOX'], hard: true }]);
+        expect(backend.peek(pollStateKey()).offices.LOX).toMatchObject({ id: 'lox-1-cor', tie: true });
+        expect(await readRenderableEdition('LOX', { now: clock })).toBe(null);
     });
 
     it('a failed purge is retried from state next run; switch off → no purge at all', async () => {
@@ -330,7 +346,7 @@ describe('cron-refresh: pre-translation', () => {
     let purge;
     let clock;
     let fetches;
-    const run = (env = SWITCH_ENV) => runPoller({ now: () => clock, env, deps: { ...nws.deps, purgeTag: purge.fn } });
+    const run = (env = SWITCH_ENV) => runPoller({ now: () => clock, env: { PLAINCAST_POLLER: '1', ...env }, deps: { ...nws.deps, purgeTag: purge.fn } });
     const later = (ms = 5 * MIN) => { clock += ms; };
     const day = utcDay(T0);
 
@@ -387,11 +403,12 @@ describe('cron-refresh: pre-translation', () => {
     });
 
     it('section reuse hit → no model call for that section', async () => {
-        nws.add('LOX', 'lox-1', '2026-11-18T05:00:00+00:00');
+        // Same local (LA) date: the fixture's sections carry no stamp.
+        nws.add('LOX', 'lox-1', '2026-11-18T16:00:00+00:00');
         await run();
         expect(modelCalls.length).toBe(3);
         // Reissue with only the Short Term rewritten.
-        nws.add('LOX', 'lox-2', '2026-11-18T12:10:00+00:00', { short: 'Rewritten: clouds thicken tonight with drizzle possible along the coast by morning.' });
+        nws.add('LOX', 'lox-2', '2026-11-18T20:10:00+00:00', { short: 'Rewritten: clouds thicken tonight with drizzle possible along the coast by morning.' });
         clock = Date.parse('2026-11-18T12:20:00Z');
         modelCalls = [];
         const s = await run();
@@ -478,7 +495,7 @@ describe('cron-refresh: pre-translation', () => {
 });
 
 describe('cron-refresh handler: auth', () => {
-    const saved = { secret: process.env.CRON_SECRET, env: process.env.VERCEL_ENV };
+    const saved = { secret: process.env.CRON_SECRET, env: process.env.VERCEL_ENV, poller: process.env.PLAINCAST_POLLER };
     let fetches;
     let backend;
     beforeEach(() => {
@@ -487,10 +504,12 @@ describe('cron-refresh handler: auth', () => {
         backend = memoryBackend();
         __setSharedCacheBackendForTests(backend);
         fetches = recordFetches();
+        process.env.PLAINCAST_POLLER = '1';
     });
     afterEach(() => {
         fetches.restore();
         __setSharedCacheBackendForTests(null);
+        if (saved.poller === undefined) delete process.env.PLAINCAST_POLLER; else process.env.PLAINCAST_POLLER = saved.poller;
         if (saved.secret === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = saved.secret;
         if (saved.env === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = saved.env;
     });
@@ -558,6 +577,18 @@ describe('cron-refresh handler: auth', () => {
         }
     });
 
+    it('every switch off (PLAINCAST_POLLER included): authenticates, then does nothing at all', async () => {
+        for (const k of ['PLAINCAST_POLLER', 'PLAINCAST_STORE_RENDER', 'PLAINCAST_PRETRANSLATE', 'PLAINCAST_AI_FOR_AGENTS']) delete process.env[k];
+        process.env.VERCEL_ENV = 'production';
+        process.env.CRON_SECRET = 's3cret-value';
+        const denied = await call({ authorization: 'Bearer nope' });
+        expect(denied.statusCode).toBe(401);
+        const r = await call({ authorization: 'Bearer s3cret-value' });
+        expect(r.statusCode).toBe(200);
+        expect(r.body).toEqual({ ok: true, skipped: 'disabled' });
+        noWork();
+    });
+
     it('cronAuthorization compares in constant time on equal-length buffers', () => {
         const req = (a) => ({ headers: a === undefined ? {} : { authorization: a } });
         expect(cronAuthorization(req('Bearer abc'), { CRON_SECRET: 'abc' })).toBe('ok');
@@ -578,5 +609,171 @@ describe('cron-refresh handler: auth', () => {
         r = await call({}, { query: { force: '1' } });
         expect(r.statusCode).toBe(400);
         expect(r.body.code).toBe('unknown_param');
+    });
+});
+
+// A store with real latency: a read answers with the value as it was when
+// the call was made, 10 ms later; a write lands 10 ms after it is made. The
+// zero-latency memory backend cannot show two runs racing.
+function latencyBackend(ms = 10) {
+    const inner = memoryBackend();
+    const sleep = (t) => new Promise(r => setTimeout(r, t));
+    return {
+        inner,
+        async get(k) { const v = await inner.get(k); await sleep(ms); return v; },
+        async set(k, v, o) { await sleep(ms); return inner.set(k, v, o); },
+    };
+}
+
+describe('cron-refresh: the master switch, races and caps', () => {
+    let fetches;
+    let nws;
+    beforeEach(() => {
+        nws = fakeNws();
+        modelCalls = [];
+        mockGenerateText = async () => ({ text: 'plain english', finishReason: 'stop' });
+        fetches = recordFetches();
+    });
+    afterEach(() => {
+        fetches.restore();
+        __setSharedCacheBackendForTests(null);
+    });
+
+    it('PLAINCAST_POLLER and every feature off → { ok, skipped: "disabled" }, no store or NWS call', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        let deps = 0;
+        const counted = Object.fromEntries(Object.entries(nws.deps).map(([k, f]) => [k, (...a) => { deps++; return f(...a); }]));
+        for (const env of [{}, { PLAINCAST_POLLER: '0' }, { PLAINCAST_STORE_RENDER: 'true' }]) {
+            expect(await runPoller({ env, deps: { ...counted, purgeTag: async () => { deps++; return { ok: true }; } } }))
+                .toEqual({ ok: true, skipped: 'disabled' });
+        }
+        expect(deps).toBe(0);
+        expect(backend.reads).toEqual([]);
+        expect(backend.writes).toEqual([]);
+        // Any one switch runs it.
+        for (const k of ['PLAINCAST_POLLER', 'PLAINCAST_STORE_RENDER', 'PLAINCAST_PRETRANSLATE', 'PLAINCAST_AI_FOR_AGENTS']) {
+            __setSharedCacheBackendForTests(memoryBackend());
+            const s = await runPoller({ env: { [k]: '1' }, deps: { ...nws.deps, purgeTag: async () => ({ ok: true }) } });
+            expect(s.skipped).toBe(null);
+        }
+    });
+
+    it('two runs starting within one store round trip: one stops before its first save, the lease survives', async () => {
+        const b = latencyBackend();
+        __setSharedCacheBackendForTests(b);
+        nws.add('LOX', 'lox-1', new Date(Date.now() - 60 * MIN).toISOString());
+        const env = { PLAINCAST_POLLER: '1' };
+        const deps = { ...nws.deps, purgeTag: async () => ({ ok: true }) };
+        const a = runPoller({ env, deps });
+        await new Promise(r => setTimeout(r, 15));
+        const c = runPoller({ env, deps });
+        const [ra, rc] = await Promise.all([a, c]);
+        const outcomes = [ra.skipped, rc.skipped].sort();
+        expect(outcomes).toEqual(['lease-lost', null].sort());
+        const winner = ra.skipped === null ? ra : rc;
+        // The winner's lease was released by the winner, not clobbered by the loser.
+        expect(b.inner.peek(leaseKey())).toMatchObject({ runId: winner.runId, until: 0 });
+        expect(b.inner.peek(pollStateKey()).offices.LOX.stored).toBe('lox-1');
+    });
+
+    it('racing pre-translation runs: the daily counter equals the model calls made', async () => {
+        const b = latencyBackend();
+        __setSharedCacheBackendForTests(b);
+        const now = Date.now();
+        for (const c of ['LOX', 'OKX', 'SEW']) nws.add(c, `${c.toLowerCase()}-1`, new Date(now - 60 * MIN).toISOString());
+        // Store the editions first (no translation), then race two runs.
+        await runPoller({ env: { PLAINCAST_POLLER: '1' }, deps: { ...nws.deps, purgeTag: async () => ({ ok: true }) } });
+        b.inner.store.delete(leaseKey());
+        modelCalls = [];
+        const env = { PLAINCAST_PRETRANSLATE: '1' };
+        const deps = { ...nws.deps, purgeTag: async () => ({ ok: true }) };
+        const a = runPoller({ env, deps });
+        await new Promise(r => setTimeout(r, 15));
+        const c = runPoller({ env, deps });
+        const [ra, rc] = await Promise.all([a, c]);
+        expect([ra.skipped, rc.skipped]).toContain('lease-lost');
+        const counter = b.inner.peek(modelCallsKey(utcDay(Date.now())));
+        expect(modelCalls.length).toBe(9); // 3 offices x 3 sections, once
+        expect(counter.calls).toBe(modelCalls.length);
+    });
+
+    it('a counter written by someone else meanwhile is kept, not overwritten', async () => {
+        const inner = memoryBackend();
+        const day = utcDay(Date.now());
+        let bumped = false;
+        __setSharedCacheBackendForTests({
+            get: (k) => inner.get(k),
+            async set(k, v, o) {
+                await inner.set(k, v, o);
+                // Another writer lands +100 right after our first reservation.
+                if (k === modelCallsKey(day) && !bumped) { bumped = true; inner.seed(k, { day, calls: v.calls + 100 }); }
+            },
+        });
+        for (const c of ['LOX', 'OKX']) nws.add(c, `${c.toLowerCase()}-1`, new Date(Date.now() - 60 * MIN).toISOString());
+        await runPoller({ env: { PLAINCAST_POLLER: '1' }, deps: { ...nws.deps, purgeTag: async () => ({ ok: true }) } });
+        inner.store.delete(leaseKey());
+        modelCalls = [];
+        await runPoller({ env: { PLAINCAST_PRETRANSLATE: '1' }, deps: { ...nws.deps, purgeTag: async () => ({ ok: true }) } });
+        expect(modelCalls.length).toBe(6);
+        expect(inner.peek(modelCallsKey(day)).calls).toBe(100 + 6);
+    });
+
+    it('poller model calls are made with maxRetries 0 (one reserved call = one request)', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        nws.add('LOX', 'lox-1', '2026-11-18T05:00:00+00:00');
+        nws.add('LOX', 'lox-0', '2026-11-17T23:00:00+00:00', { short: 'An older short term discussion that differs from the current one in its wording.' });
+        let clock = T0;
+        const run = () => runPoller({ now: () => clock, env: { PLAINCAST_PRETRANSLATE: '1' }, deps: { ...nws.deps, purgeTag: async () => ({ ok: true }) } });
+        await run();
+        clock += 5 * MIN; await run(); // predecessor stored → changelog call
+        expect(modelCalls.length).toBeGreaterThan(3);
+        expect(modelCalls.some(c => c.maxOutputTokens === 240)).toBe(true); // the changelog call
+        for (const c of modelCalls) expect(c.maxRetries).toBe(0);
+    });
+
+    it('the per-run budget counts changelog calls too', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        nws.add('LOX', 'lox-1', '2026-11-18T05:00:00+00:00');
+        nws.add('LOX', 'lox-0', '2026-11-17T23:00:00+00:00', { short: 'An older short term discussion that differs from the current one in its wording.' });
+        let clock = T0;
+        const env = { PLAINCAST_POLLER: '1' };
+        const deps = { ...nws.deps, purgeTag: async () => ({ ok: true }) };
+        await runPoller({ now: () => clock, env, deps });
+        clock += 5 * MIN; await runPoller({ now: () => clock, env, deps }); // both editions stored
+        clock += 5 * MIN;
+        const s = await runPoller({ now: () => clock, env: { PLAINCAST_PRETRANSLATE: '1', PLAINCAST_PRETRANSLATE_PER_RUN: '1' }, deps });
+        expect(s.translated).toBe(1);
+        expect(s.changelogs).toBe(0);
+        expect(s.capsHit).toContain('per-run');
+        expect(modelCalls.every(c => c.maxOutputTokens !== 240)).toBe(true);
+        clock += 5 * MIN;
+        const s2 = await runPoller({ now: () => clock, env: { PLAINCAST_PRETRANSLATE: '1', PLAINCAST_PRETRANSLATE_PER_RUN: '1' }, deps });
+        expect(s2.changelogs).toBe(1);
+    });
+
+    it('a lost translation write is not "done": the next run stores it from the section entries, no new calls', async () => {
+        const inner = memoryBackend();
+        let failTi = true;
+        __setSharedCacheBackendForTests({
+            get: (k) => inner.get(k),
+            async set(k, v, o) { if (failTi && k.startsWith('ti:')) throw new Error('write lost'); return inner.set(k, v, o); },
+        });
+        nws.add('LOX', 'lox-1', '2026-11-18T05:00:00+00:00');
+        let clock = T0;
+        const run = () => runPoller({ now: () => clock, env: { PLAINCAST_PRETRANSLATE: '1' }, deps: { ...nws.deps, purgeTag: async () => ({ ok: true }) } });
+        const s = await run();
+        expect(s.translated).toBe(0);
+        expect(s.translateUnstored).toBe(1);
+        expect(inner.peek(pollStateKey()).offices.LOX.tr.done).toBeUndefined();
+        const calls = modelCalls.length;
+        failTi = false;
+        clock += 5 * MIN;
+        const s2 = await run();
+        expect(s2.translated).toBe(1);
+        expect(modelCalls.length).toBe(calls);
+        expect(inner.peek(translationKey('LOX', 'lox-1')).complete).toBe(true);
     });
 });

@@ -6,7 +6,7 @@ import { generateText } from 'ai';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { sendError } from './_errors.js';
-import { changelogKey, sharedGet, sharedSet, CHANGELOG_TTL } from './_shared-cache.js';
+import { changelogKey, sharedGet, sharedSetReported, CHANGELOG_TTL } from './_shared-cache.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 import { createColdBudget, overCapacityError, rejectUnknownParams, sendOverCapacity } from './_query-guard.js';
 
@@ -62,8 +62,9 @@ function setCache(id, payload) {
 // "nothing changed" verdict and the model's verdict (a sentence, or null for
 // a trivial change). Never a transient failure. The value carries the office
 // and id it answers for; a reader treats any other entry as a miss.
+// Resolves true when the write landed.
 function storeShared(office, currentId, payload) {
-    return sharedSet(changelogKey(office, currentId), { office, id: currentId, ...payload }, { ttl: CHANGELOG_TTL });
+    return sharedSetReported(changelogKey(office, currentId), { office, id: currentId, ...payload }, { ttl: CHANGELOG_TTL });
 }
 
 function sharedVerdict(entry, office, currentId) {
@@ -113,15 +114,18 @@ export function changedParagraphs(prevText, currText) {
 // { transient: true } for an empty model answer, which is never stored.
 // `charge()` is asked for the one model call and must return true, or this
 // throws over_capacity. A model error is thrown to the caller.
-export async function summarizeChange({ office, currentId, currText, prevText, since, updated, charge }) {
+// `stored` reports whether the shared write landed; `maxRetries` is passed
+// only by the poller (0: one reserved call is one request).
+export async function summarizeChange({ office, currentId, currText, prevText, since, updated, charge, maxRetries }) {
     const changes = changedParagraphs(prevText, currText).slice(0, 6);
     if (changes.length === 0) {
         const payload = { changelog: null, since, updated };
+        let stored = false;
         if (currentId) {
             setCache(currentId, payload);
-            await storeShared(office, currentId, payload);
+            stored = await storeShared(office, currentId, payload);
         }
-        return { payload };
+        return { payload, stored };
     }
 
     // Verdicts are stored in the shared cache, which survives deploys:
@@ -138,6 +142,7 @@ export async function summarizeChange({ office, currentId, currText, prevText, s
         prompt,
         maxOutputTokens: 240,
         abortSignal: AbortSignal.timeout(15000),
+        ...(maxRetries === undefined ? {} : { maxRetries }),
     });
 
     let changelog = (result.text || '').trim();
@@ -152,11 +157,12 @@ export async function summarizeChange({ office, currentId, currText, prevText, s
     }
 
     const payload = { changelog, since, updated, ...(trivial ? { trivial } : {}) };
+    let stored = false;
     if (currentId) {
         setCache(currentId, payload);
-        await storeShared(office, currentId, payload);
+        stored = await storeShared(office, currentId, payload);
     }
-    return { payload };
+    return { payload, stored };
 }
 
 // Whether summarizeChange would call the model for this pair (the poller

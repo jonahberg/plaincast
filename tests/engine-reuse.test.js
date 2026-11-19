@@ -34,7 +34,7 @@ mock.module('../api/_utils.js', () => ({
 
 const { default: handler, coldBudget } = await import('../api/translate-issuance.js');
 const { __setSharedCacheBackendForTests } = await import('../api/_shared-cache.js');
-const { sectionHash, findReusedSection } = await import('../api/_section-reuse.js');
+const { sectionHash, findReusedSection, hasStamp } = await import('../api/_section-reuse.js');
 const { fetchAFDsSince, fetchAFDWeek, fetchProductById, NWS_USER_AGENT } = await import('../api/_nws-feed.js');
 
 const saved = process.env.PLAINCAST_PRETRANSLATE;
@@ -72,6 +72,8 @@ describe('on-demand translation: section reuse only with PLAINCAST_PRETRANSLATE=
         const r = await translate('reuse-off-1');
         expect(r.body.complete).toBe(true);
         expect(modelCalls.length).toBe(2);
+        // The reader path keeps the AI SDK's default retries (only the poller sets 0).
+        for (const c of modelCalls) expect('maxRetries' in c).toBe(false);
         expect(backend.reads.some(k => k.startsWith('ts:'))).toBe(false);
         expect(backend.writes.some(w => w.key.startsWith('ts:'))).toBe(false);
     });
@@ -99,6 +101,27 @@ describe('on-demand translation: section reuse only with PLAINCAST_PRETRANSLATE=
         expect(await findReusedSection('LOX', '2026-03-24T18:25:00+00:00', section)).toBe(null);
         backend.seed(sectionKey('LOX', hash), { office: 'LOX', key: 'Synopsis', hash, text: 'right' });
         expect(await findReusedSection('LOX', '2026-03-24T18:25:00+00:00', section)).toBe('right');
+    });
+
+    it('the stamp decides: a carried-over stamped section is reused across days, a rewrite in the same words is not', () => {
+        const body = 'Gusty northwest winds tonight will ease tomorrow, with seas below advisory levels.';
+        const mon = '2026-11-16T22:20:00+00:00';
+        const wed = '2026-11-18T22:15:00+00:00';
+        expect(hasStamp(`16/220 PM.\n${body}`)).toBe(true);
+        expect(hasStamp(`Issued at 1228 AM CST Tue Nov 17 2026\n\n${body}`)).toBe(true);
+        expect(hasStamp(body)).toBe(false);
+        // Carried over unchanged (Monday's stamp still on it) into Wednesday's issuance: reused.
+        expect(sectionHash('LOX', 'Marine', wed, `16/220 PM.\n${body}`)).toBe(sectionHash('LOX', 'Marine', mon, `16/220 PM.\n${body}`));
+        // Rewritten on Wednesday with Monday's exact words: a new stamp, a new section.
+        expect(sectionHash('LOX', 'Marine', wed, `18/215 PM.\n${body}`)).not.toBe(sectionHash('LOX', 'Marine', mon, `16/220 PM.\n${body}`));
+    });
+
+    it('a section without a stamp is reused only on the same local date', () => {
+        const text = 'Rain arrives tomorrow with gusty south winds tonight, then a drying trend into the weekend as high pressure builds.';
+        expect(sectionHash('LOX', 'Short Term', '2026-11-18T16:00:00+00:00', text))
+            .toBe(sectionHash('LOX', 'Short Term', '2026-11-18T22:00:00+00:00', text));      // Wed 8 AM vs 2 PM PST
+        expect(sectionHash('LOX', 'Short Term', '2026-11-16T22:00:00+00:00', text))
+            .not.toBe(sectionHash('LOX', 'Short Term', '2026-11-18T22:00:00+00:00', text));  // Mon vs Wed
     });
 
     it('the hash follows the annotated prompt: a Zulu time that resolves differently is a different section', () => {

@@ -21,7 +21,7 @@
 // A page renders from the store only when ALL of these hold; otherwise it
 // takes the live path, unchanged:
 //   - PLAINCAST_STORE_RENDER=1 (read per request);
-//   - the heartbeat is at most HEARTBEAT_FRESH_MS old;
+//   - the heartbeat is at most HEARTBEAT_FRESH_MS (10 min) old;
 //   - the newest product the listing showed for the office IS the stored
 //     current edition (a new issuance the poller has seen but not yet
 //     fetched, for a 403, a cap or a timeout, makes the office live);
@@ -36,6 +36,11 @@ import { OFFICE_NAMES, officeCodeFromIssuing } from '../docs/js/offices.js';
 import { editionKey, pollStateKey, storeRead } from './_shared-cache.js';
 
 // ── Switches (environment, read per request; all default OFF) ─────────
+// Rollout order: POLLER (watch its summaries), then STORE_RENDER, then
+// PRETRANSLATE, then AI_FOR_AGENTS. Any of the last three also runs the
+// poller; without a running poller, store render finds no fresh heartbeat
+// and every page takes the live path.
+export const POLLER = 'PLAINCAST_POLLER';
 export const STORE_RENDER = 'PLAINCAST_STORE_RENDER';
 export const PRETRANSLATE = 'PLAINCAST_PRETRANSLATE';
 export const AI_FOR_AGENTS = 'PLAINCAST_AI_FOR_AGENTS';
@@ -70,7 +75,11 @@ export function officeTag(code) {
 }
 
 // ── Freshness ────────────────────────────────────────────────────────
-export const HEARTBEAT_FRESH_MS = 20 * 60 * 1000;
+// STALENESS INVARIANT: HEARTBEAT_FRESH_MS + the store page's s-maxage
+// (api/office-page.js STORE_CACHE) <= 15 minutes, the live path's bound. A
+// poll at 12:00 that misses a 12:02 issuance can still render the old
+// edition until 12:10, and that copy may be cached until 12:15.
+export const HEARTBEAT_FRESH_MS = 10 * 60 * 1000;
 
 export function heartbeatFresh(at, now = Date.now()) {
     const t = Date.parse(at);
@@ -158,47 +167,67 @@ export function groupByOffice(items) {
     return groups;
 }
 
-// Merge one listing into the state. Never moves an office backward: a
-// product issued earlier than the one already known is ignored, in either
-// mode (the 7-day list can lag the incremental listing by minutes). The
-// full list (`full`) also corrects the predecessor of the product already
-// known; an incremental listing (products since a time) only moves an
-// office forward. Returns the offices whose newest product changed. The
-// office's bookkeeping (stored, purge, ...) survives; the poller compares
-// it against the new id.
+// Merge one listing into the state. Returns the offices whose edition
+// changed (each one is fetched and its pages hard-purged by the poller).
+//
+//   - Never moves an office backward: a product issued earlier than the one
+//     already known is ignored, in either mode (the 7-day list can lag the
+//     incremental listing by minutes).
+//   - Twins: NWS can list two products with the same issuance time (a
+//     correction keeps the original's time). Which one its per-office list
+//     shows first is not ours to guess, so the office is marked `tie` and
+//     renders live until a newer issuance arrives; and a product id not seen
+//     before at that time counts as a NEW edition (the office's id moves to
+//     it), so the cached pages of the superseded text are purged. Detection
+//     does not depend on listing order: every product at the newest time is
+//     compared with every product already seen at that time (`tieIds`).
+//   - The full list (`full`) also corrects the predecessor of the product
+//     already known.
+// The office's bookkeeping (stored, purge, ...) survives; the poller
+// compares it against the new id.
 export function mergeListing(state, items, { full = false } = {}) {
     const changed = [];
     for (const [code, g] of groupByOffice(items)) {
-        const top = g[0];
-        const second = g[1] || null;
         const prior = state.offices[code] || {};
-        let next = null;
-        if (!prior.id) {
-            next = { id: top.id, issuanceTime: top.issuanceTime, prevId: second ? second.id : null };
-        } else if (top.id === prior.id) {
-            if (!full) continue;
-            // Same newest product: the full list knows its real predecessor.
-            next = { id: top.id, issuanceTime: prior.issuanceTime, prevId: second ? second.id : prior.prevId ?? null };
-        } else if (time(top.issuanceTime) > time(prior.issuanceTime)) {
-            // The predecessor is the next product down the listing, or (when
-            // an incremental window holds only the new one) the product we knew.
-            next = { id: top.id, issuanceTime: top.issuanceTime, prevId: second ? second.id : prior.id };
-        } else if (time(top.issuanceTime) === time(prior.issuanceTime)) {
-            // Two products, one issuance time: which one NWS lists first is
-            // not ours to guess. Live path until a newer one arrives.
-            state.offices[code] = { ...prior, tie: true };
-            continue;
+        const T = time(g[0].issuanceTime);
+        const priorT = prior.id ? time(prior.issuanceTime) : -Infinity;
+        if (prior.id && T < priorT) continue; // a lagging listing
+        const twinIds = g.filter(x => time(x.issuanceTime) === T).map(x => x.id).sort();
+        const older = g.find(x => time(x.issuanceTime) < T) || null;
+        const sameTime = Boolean(prior.id) && T === priorT;
+        const known = new Set(sameTime ? [prior.id, ...(Array.isArray(prior.tieIds) ? prior.tieIds : [])] : []);
+        const fresh = twinIds.filter(id => !known.has(id));
+        let id;
+        let prevId;
+        if (sameTime) {
+            if (fresh.length === 0 && !full) continue; // nothing new
+            id = fresh.length ? fresh[fresh.length - 1] : prior.id;
+            prevId = older ? older.id : (prior.prevId ?? null);
         } else {
-            continue; // older than what we know: a lagging listing
+            id = twinIds[twinIds.length - 1];
+            // The next product down the listing, or (when an incremental
+            // window holds only the new one) the product we knew.
+            prevId = older ? older.id : (prior.id ?? null);
         }
-        next.tie = Boolean(second && time(second.issuanceTime) === time(top.issuanceTime));
-        if (prior.id !== next.id || prior.prevId !== next.prevId || Boolean(prior.tie) !== next.tie) {
-            if (prior.id !== next.id) changed.push(code);
-            const keep = { ...prior };
-            delete keep.tie;
-            state.offices[code] = { ...keep, ...next };
-            if (!next.tie) delete state.offices[code].tie;
+        const seenAtT = [...new Set([...known, ...twinIds])].sort();
+        const tie = seenAtT.length > 1;
+        const next = {
+            id,
+            issuanceTime: sameTime ? prior.issuanceTime : g.find(x => x.id === id).issuanceTime,
+            prevId,
+        };
+        const sameTieIds = JSON.stringify(tie ? seenAtT : undefined) === JSON.stringify(prior.tieIds);
+        if (prior.id === next.id && prior.prevId === next.prevId && Boolean(prior.tie) === tie && sameTieIds) continue;
+        if (prior.id !== next.id) changed.push(code);
+        const merged = { ...prior, ...next };
+        if (tie) {
+            merged.tie = true;
+            merged.tieIds = seenAtT;
+        } else {
+            delete merged.tie;
+            delete merged.tieIds;
         }
+        state.offices[code] = merged;
     }
     return changed;
 }
