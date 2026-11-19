@@ -6,7 +6,12 @@
 // office page and the homepage must answer exactly what origin/main did.
 //
 // The goldens in tests/fixtures/engine-golden/ were rendered by origin/main
-// (25363cf) BEFORE the engine existed, from the fixed fixtures below. Bodies
+// (25363cf) BEFORE the engine existed, from the fixed fixtures below, and
+// regenerated once (2026-11-18) for intended switches-off changes only: the
+// issuance time as data (<time datetime> in the dateline, dateModified in
+// the WebPage JSON-LD, lifted into the head placeholder), the office count
+// (68 → 123), and the office page's closing note losing its /?office= link
+// (that URL now 308s back to the same page). Bodies
 // are stored relative to the page shell (see `normalize`) and compared with
 // the office count masked (`countFree`; it comes from OFFICE_NAMES), so a
 // later, legitimate change to the shell or the office list does not break them;
@@ -172,10 +177,10 @@ const officeShell = (query) => {
     return baked;
 };
 
-// The office count is printed in the homepage copy ("every one of the 68
-// forecast offices"); it comes from OFFICE_NAMES, which is growing. The
-// goldens were rendered with 68.
-const GOLDEN_OFFICES = 68;
+// The office count is printed in the homepage copy ("every one of the 123
+// forecast offices"); it comes from OFFICE_NAMES. The goldens were rendered
+// with 123; while that holds, bodies are compared byte for byte.
+const GOLDEN_OFFICES = 123;
 const countFree = (body) => (typeof body === 'string' ? body.replace(/\b\d+ forecast offices\b/g, '<<N>> forecast offices') : body);
 
 const CASES = [
