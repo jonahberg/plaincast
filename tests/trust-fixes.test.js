@@ -695,23 +695,24 @@ describe('buildSystemPrompt — the section\'s own written time as reference', (
         expect(prompt).toContain('AFD issuance time in the local office timezone: Wednesday, November 18, 2026 at 5:36 PM CST');
     });
 
-    it('LOX (real): the short stamp verbatim with its day-of-month/time reading; the Zulu stamp too', () => {
+    it('LOX (real): the short stamp decoded (never the raw token); the Zulu stamp too', () => {
         const syn = real('LOX', 'SYNOPSIS');
         expect(syn.text.startsWith('18/104 PM.')).toBe(true);
         expect(refBlock(buildSystemPrompt({ section: 'Synopsis', office: 'LOX', issuanceTime: syn.issuanceTime, text: syn.text })))
-            .toContain(`- This section was written: 18/104 PM (format day-of-month/time: Wednesday, November 18 at 1:04 PM local time; ${RELATIVE.slice(1)}\n`);
+            .toContain(`- This section was written: Wednesday, November 18 at 1:04 PM local time ${RELATIVE}\n`);
+        expect(buildSystemPrompt({ section: 'Synopsis', office: 'LOX', issuanceTime: syn.issuanceTime, text: syn.text })).not.toContain('18/104');
         const lt = real('LOX', 'LONG TERM');
         expect(refBlock(buildSystemPrompt({ section: 'Long Term', office: 'LOX', issuanceTime: lt.issuanceTime, text: lt.text })))
-            .toContain('- This section was written: 18/312 AM (format day-of-month/time: Wednesday, November 18 at 3:12 AM local time;');
+            .toContain('- This section was written: Wednesday, November 18 at 3:12 AM local time (');
         const av = real('LOX', 'AVIATION');
         expect(refBlock(buildSystemPrompt({ section: 'Aviation', office: 'LOX', issuanceTime: av.issuanceTime, text: av.text })))
-            .toContain(`- This section was written: 18/1736Z (format day-of-month/time in UTC: Wednesday, November 18 at 9:36 AM PST; ${RELATIVE.slice(1)}\n`);
+            .toContain(`- This section was written: Wednesday, November 18 at 9:36 AM PST ${RELATIVE}\n`);
     });
 
     it('the Nov 11 stamp that was misread as "November 22" is decoded for the model', () => {
         // LOX Long Term issued 2026-11-12T04:55Z (Wed Nov 11, 8:55 PM PST)
         const prompt = buildSystemPrompt({ section: 'Long Term', office: 'LOX', issuanceTime: LOX_ISSUED, text: LONG_TERM });
-        expect(prompt).toContain('- This section was written: 11/220 PM (format day-of-month/time: Wednesday, November 11 at 2:20 PM local time;');
+        expect(prompt).toContain('- This section was written: Wednesday, November 11 at 2:20 PM local time (');
     });
 
     it('cross-midnight: written 10:05 PM Tuesday inside a product issued 3 AM Wednesday', () => {
@@ -721,7 +722,7 @@ describe('buildSystemPrompt — the section\'s own written time as reference', (
         expect(refBlock(prompt)).toContain(`- This section was written: 1005 PM CST Tue Nov 17 2026 ${RELATIVE}\n`);
         // a short stamp on the previous day, across a month boundary
         const dec = buildSystemPrompt({ section: 'Short Term', office: 'LOX', issuanceTime: '2026-12-01T09:00:00Z', text: '30/1045 PM.\n\nRain tonight.' });
-        expect(dec).toContain('- This section was written: 30/1045 PM (format day-of-month/time: Monday, November 30 at 10:45 PM local time;');
+        expect(dec).toContain('- This section was written: Monday, November 30 at 10:45 PM local time (');
     });
 
     it('omits the line when the section has no stamp, or when no text is given', () => {

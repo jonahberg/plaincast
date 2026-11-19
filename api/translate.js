@@ -514,22 +514,22 @@ export function sectionWrittenTime(text, office, issuanceTime) {
     if (issued) return `This section was written: ${issued[2].replace(/[ \t]+/g, ' ')} (${WRITTEN_RELATIVE})`;
     if (stamp) {
         // "18/104 PM" = the 18th at 1:04 PM local. The latest stamp if several.
+        // Only the decoded reading goes to the model, never the raw token:
+        // on Nov 11 2026 the model read "11/220 PM" as "November 22".
         const [, dd, hm, ampm] = [...stamp[0].matchAll(STAMP_PARTS_RE)].pop();
         const dom = Number(dd), h = Number(hm.slice(0, -2)), min = hm.slice(-2);
-        const verbatim = `${dd}/${hm} ${ampm.toUpperCase()}`;
         // The issue date's month, or the month before for a day number ahead
         // of it ("30/1045 PM" in a December 1 product).
         const t = Date.UTC(y, m - 1 - (dom > d + 1 ? 1 : 0), dom);
         if (dom < 1 || h < 1 || h > 12 || Number(min) > 59 || new Date(t).getUTCDate() !== dom) {
-            return `This section was written: ${verbatim} (format day-of-month/time; ${WRITTEN_RELATIVE})`;
+            return null; // undecodable stamp: say nothing rather than hand the model a token it can misread
         }
         const day = `${WEEKDAYS[new Date(t).getUTCDay()]}, ${LONG_MONTHS[new Date(t).getUTCMonth()]} ${dom}`;
-        return `This section was written: ${verbatim} (format day-of-month/time: ${day} at ${h}:${min} ${ampm.toUpperCase()} local time; ${WRITTEN_RELATIVE})`;
+        return `This section was written: ${day} at ${h}:${min} ${ampm.toUpperCase()} local time (${WRITTEN_RELATIVE})`;
     }
     const z = ZULU_HEADER_STAMP_RE.exec(text);
     if (z) {
         const [, dd, hh, mm] = z;
-        const verbatim = `${dd}/${hh}${mm}Z`;
         const dom = Number(dd);
         let t = null;
         // The nearest UTC date with that day of month, as annotateZuluTimes reads a DD/ prefix.
@@ -538,12 +538,12 @@ export function sectionWrittenTime(text, office, issuanceTime) {
             if (new Date(u).getUTCDate() === dom) { t = u; break; }
         }
         if (t === null || Number(hh) > 23 || Number(mm) > 59) {
-            return `This section was written: ${verbatim} (format day-of-month/time in UTC; ${WRITTEN_RELATIVE})`;
+            return null;
         }
         const local = new Intl.DateTimeFormat('en-US', {
             timeZone, weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
         }).format(new Date(t)).replace(/[  ]/g, ' ');
-        return `This section was written: ${verbatim} (format day-of-month/time in UTC: ${local}; ${WRITTEN_RELATIVE})`;
+        return `This section was written: ${local} (${WRITTEN_RELATIVE})`;
     }
     return null;
 }
