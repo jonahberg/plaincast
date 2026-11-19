@@ -8,7 +8,7 @@ import {
 } from '@/lib/nws';
 import { fetchEditionSnapshot, primeIssuanceTranslations } from '@/lib/ai';
 import { bootFor, readBoot } from '@/lib/boot';
-import { ALERTS_KEY, alertStatusSummary, withAlertsSection } from '@/lib/alert-status';
+import { ALERTS_KEY, alertStatusSummary, alertStatusVariants, withAlertsSection } from '@/lib/alert-status';
 import { loadLastEdition, saveLastEdition } from '@/lib/offline';
 import { currentRoute, officeUrl } from '@/lib/route';
 import { headFor, officeFeedHref } from '@/lib/seo';
@@ -565,7 +565,7 @@ export default function App() {
     // The intro's alert status line (PageIntro's second meta row).
     const parsedAlertsListed = ready && state.sections.some(s => s.key === ALERTS_KEY && hasRealAlerts(s.text));
     const alertRow = useMemo(() => {
-        if (alerts.length) return { kind: 'live', summary: alertStatusSummary(alerts), severe };
+        if (alerts.length) return { kind: 'live', summary: alertStatusSummary(alerts), variants: alertStatusVariants(alerts), severe };
         if (alertsStatus === 'pending') return { kind: 'pending' };
         // The forecaster's coded watch/warning list, with no live match.
         if (parsedAlertsListed) return { kind: 'listed' };
@@ -579,9 +579,9 @@ export default function App() {
     );
     const takeawayFromMessages = ready && state.sections.some(s => s.key === 'Messages');
 
-    const issueLine = ready && state.issuedAt
-        ? `Issued ${formatIssueTime(state.issuedAt, tz)} (${timeAgo(state.issuedAt)})`
-        : '';
+    const issued = ready && state.issuedAt
+        ? { at: formatIssueTime(state.issuedAt, tz), ago: timeAgo(state.issuedAt) }
+        : null;
 
     const jumpTo = useCallback((key) => {
         setActiveKey(key);
@@ -808,7 +808,7 @@ export default function App() {
                                 takeawayHTML={takeawayHTML}
                                 takeawayFromMessages={takeawayFromMessages}
                                 forecaster={state.forecaster}
-                                issueLine={issueLine}
+                                issued={issued}
                                 fullText={state.fullText}
                                 conditions={conditions}
                                 conditionsExpected={!state.archived && !state.offline}

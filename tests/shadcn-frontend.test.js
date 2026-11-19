@@ -11,6 +11,7 @@ import { extractTakeaway, parseSections, splitTakeawayItems } from '../shadcn/sr
 import { alertGroupKey, groupAlerts } from '../shadcn/src/lib/nws.js';
 import { editionName, readingOrNull } from '../shadcn/src/lib/format.js';
 import { OFFICES_WITHOUT_NORMAL } from '../shadcn/src/lib/almanac.js';
+import { alertStatusVariants } from '../shadcn/src/lib/alert-status.js';
 import { changelogTitle, officeCanonical, officeFeedHref, officeTitle } from '../shadcn/src/lib/seo.js';
 import { officeTitle as ssrOfficeTitle } from '../scripts/build-offices.mjs';
 import { track } from '../shadcn/src/lib/track.js';
@@ -145,6 +146,24 @@ describe('/api/conditions readings', () => {
         expect(almanac).not.toContain("'—'");
         expect(almanac).toContain("else if (!conditions) out.push({ label, value: '\\u00a0' });");
         expect(almanac).toContain("if (!OFFICES_WITHOUT_NORMAL.has(office)) live('Normal high', normal);");
+    });
+});
+
+describe('alert status line variants', () => {
+    const a = (event, extra = {}) => ({ id: `${event}-${Math.random()}`, event, ends: '2026-11-19T00:00:00Z', severity: 'Moderate', ...extra });
+
+    it('condenses by whole names, longest first, each with an accurate "+N"', () => {
+        const alerts = [a('Flood Watch'), a('Wind Advisory'), a('High Surf Advisory'), a('Coastal Flood Advisory')];
+        expect(alertStatusVariants(alerts)).toEqual([
+            '4 active alerts: Flood Watch, Wind Advisory +2',
+            '4 active alerts: Flood Watch +3',
+            '4 active alerts',
+        ]);
+    });
+
+    it('has no duplicate variants when there is only one event', () => {
+        expect(alertStatusVariants([a('Frost Advisory')])).toEqual(['1 active alert: Frost Advisory', '1 active alert']);
+        expect(alertStatusVariants([])).toEqual([]);
     });
 });
 
