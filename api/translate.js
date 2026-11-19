@@ -341,9 +341,13 @@ const ZULU_RE = /(?<![\w.])(?:(\d{1,2})\/)?(\d{4}|\d{1,2})(?:[-\u2013](\d{4}|\d{
 const ZULU_LOOKBACK_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// 24Z / 2400Z is the END of its UTC day ("18-24Z", JAX Aviation, Nov 18
+// 2026): the clock of 00Z, flagged `eod` so a day it names (a DD/ prefix, a
+// weekday, the start of its range) is the day it ends.
 function parseZuluClock(tok) {
     const h = Number(tok.length === 4 ? tok.slice(0, 2) : tok);
     const m = tok.length === 4 ? Number(tok.slice(2)) : 0;
+    if (h === 24 && m === 0) return { h: 0, m: 0, eod: true };
     return h > 23 || m > 59 ? null : { h, m };
 }
 
@@ -375,23 +379,50 @@ function localParts(date, timeZone) {
 //                 with the weekday of its instant when that local date differs
 //                 from the issuance's: the rule that put "Thu" on LOX's 1717Z.
 // Defaults by mode. Office mode (no explicit timeZone: /api/translate and
-// translate-issuance, which pass no options) pins FULL weekday names only
-// ("18Z sat imagery" is satellite, not Saturday), never pins a weekday
-// followed by a part of day ("06Z Friday night" is Friday night local, i.e.
-// Saturday 06Z: the text names the day, the annotation gives the clock), and
-// never infers. Explicit-zone mode (the National Desk) keeps its earlier
-// rules: pins only when asked, inferred weekdays, because its prompt
+// translate-issuance, which pass no options) pins a full weekday name in any
+// case, and a CAPITALISED abbreviation (Mon, Tue, Tues, Wed, Thu, Thur, Thurs,
+// Fri, Sat, Sun, or the same in capitals): SGX Aviation, Nov 18 2026, reached
+// the model as "after 00Z (4 PM PST) Fri" and the AI wrote "after 4 PM
+// Friday"; 00Z Friday is 4 PM PST Thursday. It does not pin a lowercase one
+// ("18Z sat imagery" is satellite), a Sat or Sun followed by a satellite or
+// data word ("18Z Sat imagery shows"), a weekday followed by a part of day
+// ("06Z Friday night" is Friday night local, i.e. Saturday 06Z: the text
+// names the day, the annotation gives the clock), and it never infers. A
+// capitalised Sun before other words pins ("12Z Sun model run" is Sunday's
+// run; its local label is right whichever week it was). An unpinned weekday
+// keeps its place after the annotation ("18Z (12 PM CST) sat imagery").
+// Explicit-zone mode (the National Desk) keeps its earlier rules: any weekday
+// form pins when asked, inferred weekdays, because its prompt
 // (api/national-lede.js) still says "no weekday means the issuance's day".
 const ZULU_WEEKDAY = 'Sun(?:day)?|Mon(?:day)?|Tue(?:s(?:day)?)?|Wed(?:nesday)?|Thu(?:r(?:s(?:day)?)?)?|Fri(?:day)?|Sat(?:urday)?';
-const ZULU_FULL_WEEKDAY = 'Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday';
 // The trailing lookaheads keep an already-annotated "12Z Friday (...)" whole.
 const zuluWeekdayRe = (alt) => new RegExp(
     `(?<![\\w.])(?:(\\d{1,2})\\/)?(\\d{4}|\\d{1,2})(?:[-\\u2013](\\d{4}|\\d{1,2}))?Z\\b`
     + `(?:[ \\t]+(${alt})\\b(?!\\s*\\())?(?!\\s*\\()(?![ \\t]+(?:${alt})\\b\\s*\\()`, 'gi');
 const ZULU_WEEKDAY_RE = zuluWeekdayRe(ZULU_WEEKDAY);
-const ZULU_FULL_WEEKDAY_RE = zuluWeekdayRe(ZULU_FULL_WEEKDAY);
+// Office mode: the same token, but a weekday is taken unless the ANNOTATOR's
+// own output follows it ("(4 PM PST Thu)", "(1-4 AM CDT)"), so a
+// forecaster's parenthesis after the weekday ("06Z Sat (30% chance)") does
+// not leave the token unannotated with a bare UTC weekday after it. With no
+// weekday, any parenthesis still means the token is already explained.
+const ZULU_ANNOTATION = '\\(\\d{1,2}(?::\\d{2})?(?:[ \\t]*[AP]M)?(?:-\\d{1,2}(?::\\d{2})?)?[ \\t]*[AP]M\\b';
+const ZULU_OFFICE_RE = new RegExp(
+    `(?<![\\w.])(?:(\\d{1,2})\\/)?(\\d{4}|\\d{1,2})(?:[-\\u2013](\\d{4}|\\d{1,2}))?Z\\b`
+    + `(?:[ \\t]+(${ZULU_WEEKDAY})\\b(?!\\s*${ZULU_ANNOTATION})|(?!\\s*\\())`
+    + `(?![ \\t]+(?:${ZULU_WEEKDAY})\\b\\s*${ZULU_ANNOTATION})`, 'gi');
 const WEEKDAY_PREFIX = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PART_OF_DAY_AFTER_RE = /^[ \t]+(?:morning|afternoon|evening|night|overnight)\b/i;
+// Office mode: which weekday words after a token pin it (see above).
+const FULL_WEEKDAY_RE = /^(?:Sun|Mon|Tues|Wednes|Thurs|Fri|Satur)day$/i;
+const CAPITALISED_ABBREV_RE = /^(?:Sun|Mon|Tues?|Wed|Thu(?:rs?)?|Fri|Sat|SUN|MON|TUES?|WED|THU(?:RS?)?|FRI|SAT)$/;
+// Satellite and display nouns, and what imagery does ("shows"). Not weather
+// words: "after 00Z Sun winds become westerly" is Sunday.
+const SAT_SUN_DATA_AFTER_RE = /^[ \t]+(?:imagery|images?|loops?|pics?|pictures?|photos?|data|derived|retrievals?|estimates?|animations?|presentation|channels?|scans?|shows?|showed|showing|depicts?|depicted|reveals?|revealed|indicates?|indicated|suggests?|suggested)\b/i;
+function officePin(wdName, after) {
+    if (FULL_WEEKDAY_RE.test(wdName)) return true;
+    if (!CAPITALISED_ABBREV_RE.test(wdName)) return false;
+    return !(/^s(?:at|un)$/i.test(wdName) && SAT_SUN_DATA_AFTER_RE.test(after));
+}
 
 export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOverride, weekdayPins, inferWeekday } = {}) {
     const timeZone = zoneOverride || OFFICE_TIMEZONES[office];
@@ -413,27 +444,36 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
         return [-1, 0, 1].map(off => Date.UTC(y, mo, d0 + off, h, m))
             .reduce((best, t) => (Math.abs(t - b) < Math.abs(best - b) ? t : best));
     };
-    const onDayOfMonth = ({ h, m }, dom) => {
-        // The nearest UTC date with that day-of-month (a DD/ prefix names it).
+    const onDayOfMonth = ({ h, m, eod }, dom) => {
+        // The nearest UTC date with that day-of-month (a DD/ prefix names it);
+        // 24Z is the end of that date.
         for (const off of [0, 1, -1, 2, -2, 3, -3, 4, 5, 6, 7, 8, 9, 10]) {
-            const t = Date.UTC(y, mo, d0 + off, h, m);
-            if (new Date(t).getUTCDate() === dom) return t;
+            const day = Date.UTC(y, mo, d0 + off);
+            if (new Date(day).getUTCDate() === dom) return Date.UTC(y, mo, d0 + off, h, m) + (eod ? DAY_MS : 0);
         }
         return null;
     };
     // The first UTC instant at that clock time on the named UTC weekday, from
-    // the same 1 h lookback as an unpinned token.
-    const onWeekday = ({ h, m }, wd) => {
+    // the same 1 h lookback as an unpinned token (24Z: the end of that day).
+    const onWeekday = ({ h, m, eod }, wd) => {
+        const dayOf = (t) => new Date(t - (eod ? DAY_MS : 0)).getUTCDay();
         let t = firstAtOrAfter({ h, m }, base.getTime() - ZULU_LOOKBACK_MS);
-        for (let i = 0; i < 7 && new Date(t).getUTCDay() !== wd; i++) t += DAY_MS;
+        for (let i = 0; i < 7 && dayOf(t) !== wd; i++) t += DAY_MS;
         return t;
+    };
+    // A range's end: the first occurrence at or after its start, or for 24Z
+    // the end of the start's UTC day ("18-24Z", "00-24Z").
+    const rangeEnd = (c2, start) => {
+        if (!c2.eod) return firstAtOrAfter(c2, start);
+        const s = new Date(start);
+        return Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate() + 1);
     };
     // withDay: the day is known, so print the weekday where the local date
     // is not the issuance's.
     const label = (p, withDay) => `${p.clock} ${p.ampm} ${p.tz}`
         + (withDay && p.dateKey !== issueDateKey ? ` ${p.weekday}` : '');
 
-    const re = !pins ? ZULU_RE : (officeMode ? ZULU_FULL_WEEKDAY_RE : ZULU_WEEKDAY_RE);
+    const re = !pins ? ZULU_RE : (officeMode ? ZULU_OFFICE_RE : ZULU_WEEKDAY_RE);
     return text.replace(re, (tok, dd, t1, t2, ...rest) => {
         // ZULU_WEEKDAY_RE has one more capture group (the weekday) than ZULU_RE.
         const [wdName, offset, whole] = pins ? rest : [undefined, ...rest];
@@ -443,10 +483,12 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
         const dom = dd === undefined ? null : Number(dd);
         if (dom !== null && (dom < 1 || dom > 31)) return tok;
         const after = whole.slice(offset + tok.length);
-        // Office mode: "06Z Friday night" is not a pin; the annotation goes
-        // before the weekday ("06Z (12 AM CST) Friday night").
-        const partOfDay = officeMode && wdName !== undefined && PART_OF_DAY_AFTER_RE.test(after);
-        const wd = wdName === undefined || partOfDay ? -1 : WEEKDAY_PREFIX.indexOf(wdName.slice(0, 3).toLowerCase());
+        // Office mode: a weekday that does not pin ("06Z Friday night", "18Z
+        // sat imagery") stays after the annotation ("06Z (12 AM CST) Friday
+        // night").
+        const unpinned = officeMode && wdName !== undefined
+            && (PART_OF_DAY_AFTER_RE.test(after) || !officePin(wdName, after));
+        const wd = wdName === undefined || unpinned ? -1 : WEEKDAY_PREFIX.indexOf(wdName.slice(0, 3).toLowerCase());
         const pinned = wd !== -1 && dom === null;
         const tafLabel = /^\s*TAFS?\b/i.test(after);
         // The text fixes the day (DD/, a pinned weekday, a TAF cycle label),
@@ -460,7 +502,7 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
         if (!c2) {
             local = pinned ? `${p1.clock} ${p1.ampm} ${p1.tz} ${p1.weekday}` : label(p1, knownDay);
         } else {
-            const p2 = localParts(new Date(firstAtOrAfter(c2, start)), timeZone);
+            const p2 = localParts(new Date(rangeEnd(c2, start)), timeZone);
             if (p1.tz === p2.tz && p1.dateKey === p2.dateKey) {
                 const span = p1.ampm === p2.ampm
                     ? `${p1.clock}-${p2.clock} ${p1.ampm}`
@@ -470,7 +512,7 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
                 local = `${label(p1, knownDay)}-${label(p2, knownDay)}`;
             }
         }
-        if (!partOfDay) return `${tok} (${local})`;
+        if (!unpinned) return `${tok} (${local})`;
         const zulu = tok.slice(0, tok.length - wdName.length).replace(/[ \t]+$/, '');
         return `${zulu} (${local})${tok.slice(zulu.length)}`;
     });
