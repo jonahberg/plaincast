@@ -398,6 +398,20 @@ describe('PLAINCAST_AI_FOR_AGENTS=1', () => {
     });
 });
 
+describe('later switches with the poller not running', () => {
+    it('store render + AI for agents, no poll state at all: the live path, with AI from an on-demand translation', async () => {
+        setSwitches(['PLAINCAST_STORE_RENDER', 'PLAINCAST_AI_FOR_AGENTS']);
+        backend.seed(translationKey('LOX', CURR_ID), completeTi()); // written by a reader's /api/translate-issuance
+        const res = await office();
+        expect(nwsCalls[0]).toBe('list:LOX');
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toContain('ssr-ai-label');
+        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+        const md = await office('text/markdown');
+        expect(md.body).toContain(PREAMBLE_AI);
+    });
+});
+
 describe('aiForSections: the join is exact or nothing', () => {
     it('joins through the display key (NEAR TERM → "Short Term")', () => {
         const text = CURR.replace('.SHORT TERM (Today through Saturday)...', '.NEAR TERM (Today through Saturday)...');
