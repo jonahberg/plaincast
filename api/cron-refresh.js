@@ -42,7 +42,7 @@ import {
     purgeTag as purgeTagDefault, storeRead, storeWrite,
 } from './_shared-cache.js';
 import {
-    AI_FOR_AGENTS, EDITION_VERSION, PRETRANSLATE, STORE_RENDER,
+    AI_FOR_AGENTS, EDITION_VERSION, POLLER, PRETRANSLATE, STORE_RENDER,
     allOffices, emptyState, mergeListing, officeTag, validEdition, validState,
 } from './_store.js';
 import { fetchAFDsSince, fetchAFDWeek, fetchProductById } from './_nws-feed.js';
@@ -88,6 +88,17 @@ const DEFAULT_DEPS = {
     changelog: () => import('./changelog.js'),
     reuse: () => import('./_section-reuse.js'),
 };
+
+// Thrown when a later run has taken the lease: this run stops before its
+// next state save or model-call reservation.
+class LeaseLost extends Error {
+    constructor() { super('lease lost'); this.name = 'LeaseLost'; }
+}
+
+// The poller runs only when it, or a feature that needs it, is switched on.
+export function pollerEnabled(env) {
+    return [POLLER, STORE_RENDER, PRETRANSLATE, AI_FOR_AGENTS].some(k => env[k] === '1');
+}
 
 // A product from NWS, checked against what the listing said it was.
 export function productForOffice(prod, office, id) {
@@ -145,6 +156,9 @@ async function acquireLease(runId, now) {
 }
 
 export async function runPoller({ now = () => Date.now(), env = process.env, deps: overrides = {} } = {}) {
+    // Master switch: with PLAINCAST_POLLER and every feature off, nothing at
+    // all (no store, no NWS), so merging the engine changes nothing.
+    if (!pollerEnabled(env)) return { ok: true, skipped: 'disabled' };
     const deps = { ...DEFAULT_DEPS, ...overrides };
     const started = now();
     const elapsed = () => now() - started;
@@ -155,7 +169,7 @@ export async function runPoller({ now = () => Date.now(), env = process.env, dep
         ok: true,
         runId,
         startedAt: new Date(started).toISOString(),
-        switches: { storeRender, pretranslate, aiForAgents: env[AI_FOR_AGENTS] === '1' },
+        switches: { poller: env[POLLER] === '1', storeRender, pretranslate, aiForAgents: env[AI_FOR_AGENTS] === '1' },
         skipped: null,
         poll: null,
         heartbeat: null,
@@ -187,11 +201,25 @@ export async function runPoller({ now = () => Date.now(), env = process.env, dep
         return finish();
     }
 
+    // Two runs that start within one store round trip can both pass
+    // acquireLease (last writer wins, but each may re-read before the other's
+    // write lands). The loser finds out here: the lease is re-read before
+    // every state save and every model-call reservation, and a run that no
+    // longer holds it stops (summary.skipped = 'lease-lost').
+    const holdsLease = async () => {
+        const r = await storeRead(leaseKey(), IO);
+        return r.ok && r.value?.runId === runId;
+    };
+    let leaseLost = false;
+
     try {
         const sr = await storeRead(pollStateKey(), IO);
         if (!sr.ok) { summary.skipped = 'store-unavailable'; return finish(); }
         const state = validState(sr.value) || emptyState();
-        const saveState = () => storeWrite(pollStateKey(), state, { ttl: STATE_TTL, ...IO });
+        const saveState = async () => {
+            if (!(await holdsLease())) throw new LeaseLost();
+            return storeWrite(pollStateKey(), state, { ttl: STATE_TTL, ...IO });
+        };
         const offices = allOffices();
 
         // 2. Poll.
@@ -213,6 +241,7 @@ export async function runPoller({ now = () => Date.now(), env = process.env, dep
             }
             summary.heartbeat = at;
         } catch (err) {
+            if (err instanceof LeaseLost) throw err;
             summary.poll = { ok: false, mode: fullDue ? 'full' : 'since', since, error: String(err?.message || err).slice(0, 200) };
             console.warn('cron-refresh: poll failed:', summary.poll.error);
         }
@@ -329,7 +358,7 @@ export async function runPoller({ now = () => Date.now(), env = process.env, dep
 
         // 5. Pre-translate.
         if (pretranslate) {
-            await pretranslatePhase({ state, editions, offices, deps, env, now, elapsed, summary, cap });
+            await pretranslatePhase({ state, editions, offices, deps, env, now, elapsed, summary, cap, holdsLease });
             await saveState();
         }
 
@@ -354,16 +383,25 @@ export async function runPoller({ now = () => Date.now(), env = process.env, dep
         }
         return finish();
     } catch (err) {
+        if (err instanceof LeaseLost) {
+            leaseLost = true;
+            summary.skipped = 'lease-lost';
+            return finish();
+        }
         summary.ok = false;
         summary.error = String(err?.message || err).slice(0, 200);
         console.warn('cron-refresh: run failed:', summary.error);
         return finish();
     } finally {
-        await storeWrite(leaseKey(), { ...lease.lease, until: 0 }, { ttl: LEASE_TTL, ...IO });
+        // Release only a lease that is still ours: releasing another run's
+        // would let a third start alongside it.
+        if (!leaseLost && (await holdsLease())) {
+            await storeWrite(leaseKey(), { ...lease.lease, until: 0 }, { ttl: LEASE_TTL, ...IO });
+        }
     }
 }
 
-async function pretranslatePhase({ state, editions, offices, deps, env, now, elapsed, summary, cap }) {
+async function pretranslatePhase({ state, editions, offices, deps, env, now, elapsed, summary, cap, holdsLease }) {
     const perRun = intEnv(env, 'PLAINCAST_PRETRANSLATE_PER_RUN', PER_RUN_DEFAULT);
     const dailyMax = intEnv(env, 'PLAINCAST_PRETRANSLATE_DAILY_MAX', DAILY_MAX_DEFAULT);
     const exhausted = (rec, id) => rec?.id === id && (rec.done || rec.n >= MAX_ATTEMPTS);
@@ -392,14 +430,24 @@ async function pretranslatePhase({ state, editions, offices, deps, env, now, ela
     let used = cr.value && cr.value.day === day && Number.isFinite(cr.value.calls) ? cr.value.calls : 0;
     summary.dailyCalls = { day, used, max: dailyMax };
     let chain = Promise.resolve();
-    // Reserve n calls BEFORE making them; serialised, so two workers can
-    // never both spend the last of the budget, and the stored count only
-    // ever grows. Resolves 'ok', 'cap' or 'unavailable'.
+    // Reserve n calls BEFORE making them; serialised, so this run's two
+    // workers can never both spend the last of the budget. Each reservation
+    // first re-checks the lease, then re-reads the counter and writes the
+    // larger of the stored and the known count plus n, so another writer's
+    // count is kept rather than overwritten. Resolves 'ok', 'cap',
+    // 'unavailable' or 'lease-lost'.
     const reserve = (n) => {
         const step = chain.then(async () => {
-            if (used + n > dailyMax) return 'cap';
-            if (!(await storeWrite(modelCallsKey(day), { day, calls: used + n }, { ttl: COUNTER_TTL, ...IO }))) return 'unavailable';
-            used += n;
+            if (!(await holdsLease())) return 'lease-lost';
+            const cur = await storeRead(modelCallsKey(day), IO);
+            if (!cur.ok) return 'unavailable';
+            const stored = cur.value && cur.value.day === day && Number.isFinite(cur.value.calls) ? cur.value.calls : 0;
+            const base = Math.max(stored, used);
+            used = base;
+            summary.dailyCalls.used = used;
+            if (base + n > dailyMax) return 'cap';
+            if (!(await storeWrite(modelCallsKey(day), { day, calls: base + n }, { ttl: COUNTER_TTL, ...IO }))) return 'unavailable';
+            used = base + n;
             summary.modelCalls += n;
             summary.dailyCalls.used = used;
             return 'ok';
@@ -407,8 +455,11 @@ async function pretranslatePhase({ state, editions, offices, deps, env, now, ela
         chain = step.catch(() => {});
         return step;
     };
+    const why = (r) => (r === 'cap' ? 'daily' : r === 'lease-lost' ? 'lease-lost' : 'counter-unavailable');
 
-    let issuancesThisRun = 0;
+    // The per-run budget counts model-call tasks: one per issuance translated
+    // (its sections run in parallel) and one per changelog sentence.
+    let unitsThisRun = 0;
     let stop = null;
     const halt = (why) => { if (!stop) stop = why; cap(why); };
 
@@ -444,10 +495,10 @@ async function pretranslatePhase({ state, editions, offices, deps, env, now, ela
                     sections = await reuse.withReusedSections(code, issuanceTime, sections, IO);
                     const needed = sections.filter(s => !s.reused).length;
                     if (needed > 0) {
-                        if (issuancesThisRun >= perRun) { halt('per-run'); return false; }
-                        issuancesThisRun++;
+                        if (unitsThisRun >= perRun) { halt('per-run'); return false; }
+                        unitsThisRun++;
                         const r = await reserve(needed);
-                        if (r !== 'ok') { issuancesThisRun--; halt(r === 'cap' ? 'daily' : 'counter-unavailable'); return false; }
+                        if (r !== 'ok') { unitsThisRun--; halt(why(r)); return false; }
                     }
                     summary.sectionsReused += sections.length - needed;
                     o.tr = { id, n: (o.tr?.id === id ? o.tr.n : 0) + 1 };
@@ -455,11 +506,18 @@ async function pretranslatePhase({ state, editions, offices, deps, env, now, ela
                         const payload = await core.translateEdition({
                             office: code, id, issuanceTime, productText, sections,
                             onTranslated: (s, text) => reuse.storeReusedSection(code, issuanceTime, s, text),
+                            maxRetries: 0, // one reserved call = one request
                         });
                         if (payload.complete) {
-                            await core.persistTranslation(code, id, payload);
-                            o.tr.done = true;
-                            summary.translated++;
+                            // Done only once the shared write landed. A lost
+                            // write is retried next run, from the stored
+                            // section translations (no new model calls).
+                            if (await core.persistTranslation(code, id, payload, IO)) {
+                                o.tr.done = true;
+                                summary.translated++;
+                            } else {
+                                summary.translateUnstored = (summary.translateUnstored || 0) + 1;
+                            }
                         } else {
                             summary.translatePartial++;
                         }
@@ -481,8 +539,10 @@ async function pretranslatePhase({ state, editions, offices, deps, env, now, ela
                     o.cl = { id, n: o.cl?.id === id ? o.cl.n : 0, done: true };
                 } else if (c.ok) {
                     if (cl.needsModelCall(prev.productText, productText)) {
+                        if (unitsThisRun >= perRun) { halt('per-run'); return false; }
+                        unitsThisRun++;
                         const r = await reserve(1);
-                        if (r !== 'ok') { halt(r === 'cap' ? 'daily' : 'counter-unavailable'); return false; }
+                        if (r !== 'ok') { unitsThisRun--; halt(why(r)); return false; }
                     }
                     o.cl = { id, n: (o.cl?.id === id ? o.cl.n : 0) + 1 };
                     try {
@@ -490,8 +550,9 @@ async function pretranslatePhase({ state, editions, offices, deps, env, now, ela
                             office: code, currentId: id, currText: productText, prevText: prev.productText,
                             since: prev.issuanceTime || null, updated: issuanceTime || null,
                             charge: () => true,
+                            maxRetries: 0,
                         });
-                        if (v?.payload) { o.cl.done = true; summary.changelogs++; }
+                        if (v?.payload && v.stored) { o.cl.done = true; summary.changelogs++; }
                     } catch { /* attempt counted; on-demand still works */ }
                 }
             }

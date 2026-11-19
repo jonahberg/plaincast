@@ -36,6 +36,11 @@ import { OFFICE_NAMES, officeCodeFromIssuing } from '../docs/js/offices.js';
 import { editionKey, pollStateKey, storeRead } from './_shared-cache.js';
 
 // ── Switches (environment, read per request; all default OFF) ─────────
+// Rollout order: POLLER (watch its summaries), then STORE_RENDER, then
+// PRETRANSLATE, then AI_FOR_AGENTS. Any of the last three also runs the
+// poller; without a running poller, store render finds no fresh heartbeat
+// and every page takes the live path.
+export const POLLER = 'PLAINCAST_POLLER';
 export const STORE_RENDER = 'PLAINCAST_STORE_RENDER';
 export const PRETRANSLATE = 'PLAINCAST_PRETRANSLATE';
 export const AI_FOR_AGENTS = 'PLAINCAST_AI_FOR_AGENTS';
