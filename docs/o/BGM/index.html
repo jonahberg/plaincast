@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- The exact strings below (title, description, canonical, alternate,
+         og:*, twitter:*, the sr-only H1, the #loading div, and the office
+         index links) are TEMPLATE MARKERS: scripts/build-offices.mjs
+         string-replaces them to bake api/_home-shell.html and every
+         docs/o/<CODE>/ page, and api/home.js + api/office-page.js inject the
+         server-rendered digest at the #loading marker. Change them only
+         together with scripts/build-offices.mjs, then regenerate
+         (bun scripts/build-offices.mjs). The structured data below is the
+         HOMEPAGE's: the office pages drop every block and carry their own
+         WebPage (scripts/build-offices.mjs officeJsonLd). The OFFICE_COUNT
+         placeholders in it are filled from the office roster by
+         scripts/app-shell.mjs, so the number cannot go stale. -->
+    <title>Binghamton NWS Forecast in Plain English · Plaincast</title>
+    <meta name="description" content="The latest National Weather Service Area Forecast Discussion for Binghamton (BGM), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="author" content="Jonah Berg">
+    <link rel="canonical" href="https://plaincast.live/o/BGM/">
+    <!-- The same resource, in Markdown, under content negotiation
+         (api/_negotiate.js). Advertised per RFC 8288 for agents that look for
+         rel="alternate" instead of sending Accept. -->
+    <link rel="alternate" type="text/markdown" href="https://plaincast.live/o/BGM/">
+    <link rel="icon" href="/favicon.ico" sizes="32x32">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="alternate" type="application/rss+xml" title="Plaincast RSS" href="/api/feed?office=BGM">
+    <!-- The reading face (Source Serif 4, self-hosted: CSP font-src 'self').
+         Preloaded so the h1, lede and prose usually paint in it directly;
+         src/index.css carries the @font-face and a metric-matched Georgia
+         fallback for when it does not. The italic is not preloaded. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/source-serif-4-latin.woff2">
+    <!-- api.weather.gov gates all forecast content; warm the connection early -->
+    <link rel="preconnect" href="https://api.weather.gov" crossorigin>
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:url" content="https://plaincast.live/o/BGM/">
+    <meta property="og:title" content="Binghamton NWS Forecast in Plain English · Plaincast">
+    <meta property="og:description" content="The latest National Weather Service Area Forecast Discussion for Binghamton (BGM), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.">
+    <meta property="og:site_name" content="Plaincast">
+    <meta property="og:image" content="https://plaincast.live/api/og?office=BGM">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Latest NWS forecast for Binghamton, decoded into plain English">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Binghamton NWS Forecast in Plain English · Plaincast">
+    <meta name="twitter:description" content="The latest National Weather Service Area Forecast Discussion for Binghamton (BGM), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.">
+    <meta name="twitter:image" content="https://plaincast.live/api/og?office=BGM">
+    <meta name="twitter:image:alt" content="Latest NWS forecast for Binghamton, decoded into plain English">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "@id": "https://plaincast.live/o/BGM/",
+        "url": "https://plaincast.live/o/BGM/",
+        "name": "Binghamton NWS Forecast in Plain English · Plaincast",
+        "description": "The latest National Weather Service Area Forecast Discussion for Binghamton (BGM), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.",
+        "inLanguage": "en-US",
+        "isPartOf": {
+            "@type": "WebSite",
+            "name": "Plaincast",
+            "url": "https://plaincast.live"
+        },
+        "about": {
+            "@type": "Place",
+            "name": "Binghamton",
+            "description": "Forecast area of the National Weather Service Binghamton office (BGM)"
+        },
+        "breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": 1,
+                    "name": "Plaincast",
+                    "item": "https://plaincast.live/"
+                },
+                {
+                    "@type": "ListItem",
+                    "position": 2,
+                    "name": "Binghamton (BGM)",
+                    "item": "https://plaincast.live/o/BGM/"
+                }
+            ]
+        },
+        "significantLink": "https://plaincast.live/o/BGM/?view=changelog"
+    }
+    </script>
+
+    <!-- Pre-paint theme (blocking, external file: the CSP has no
+         script-src 'unsafe-inline'): must run before first paint. -->
+    <script src="/theme-init.js"></script>
+    <!-- Vercel Web Analytics + Speed Insights (same-origin /_vercel/*, so
+         script-src 'self' covers them). Web Analytics also defines window.va,
+         which the app's failure telemetry (src/lib/track.js) reports through. -->
+    <script defer src="/_vercel/insights/script.js"></script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/app.css">
+    <link rel="modulepreload" crossorigin href="/assets/vendor.js">
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Server-rendered / no-JS content. api/home.js and api/office-page.js
+         replace the #loading div below with the decoded forecast digest;
+         the React app removes this whole region the moment it mounts
+         (src/App.jsx), so for browsers it is pure progressive enhancement. -->
+    <div id="ssr-root">
+        <main class="mx-auto w-full max-w-reading px-4 py-10 sm:px-6">
+            <h1 class="sr-only">Binghamton (BGM) — the National Weather Service forecast in plain English · Plaincast</h1>
+            <p class="font-serif text-[2rem] leading-[1.1] font-semibold tracking-[-0.02em] sm:text-[2.5rem]">Plaincast</p>
+            <p class="mt-4 max-w-[34em] font-serif text-[1.1875rem] leading-[1.45] text-pretty sm:text-[1.375rem]">What the forecast actually says — NWS Area Forecast Discussions, decoded into plain English.</p>
+
+            <div id="sections-ssr">
+                <div class="loading" id="loading">Setting the type…</div>
+            </div>
+
+            <nav class="mt-12 border-t pt-8" aria-label="All Plaincast forecast offices">
+                <h2 class="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">The forecast, office by office</h2>
+                <p class="mt-3 text-sm"><a href="/national/">The National Desk — where the weather is today →</a></p>
+                <ul class="office-index-list mt-4 list-none columns-2 gap-6 text-sm leading-6 sm:columns-3">
+                <li><a href="/o/ALY/">Albany (ALY)</a></li>
+                <li><a href="/o/BGM/" aria-current="page">Binghamton (BGM)</a></li>
+                <li><a href="/o/RNK/">Blacksburg (RNK)</a></li>
+                <li><a href="/o/BOX/">Boston (BOX)</a></li>
+                <li><a href="/o/BUF/">Buffalo (BUF)</a></li>
+                <li><a href="/o/BTV/">Burlington (BTV)</a></li>
+                <li><a href="/o/CAR/">Caribou (CAR)</a></li>
+                <li><a href="/o/CHS/">Charleston SC (CHS)</a></li>
+                <li><a href="/o/RLX/">Charleston WV (RLX)</a></li>
+                <li><a href="/o/CAE/">Columbia (CAE)</a></li>
+                <li><a href="/o/GSP/">Greenville-Spartanburg (GSP)</a></li>
+                <li><a href="/o/OKX/">New York (OKX)</a></li>
+                <li><a href="/o/MHX/">Newport/Morehead City (MHX)</a></li>
+                <li><a href="/o/PHI/">Philadelphia (PHI)</a></li>
+                <li><a href="/o/PBZ/">Pittsburgh (PBZ)</a></li>
+                <li><a href="/o/GYX/">Portland ME (GYX)</a></li>
+                <li><a href="/o/RAH/">Raleigh (RAH)</a></li>
+                <li><a href="/o/CTP/">State College (CTP)</a></li>
+                <li><a href="/o/AKQ/">Wakefield (AKQ)</a></li>
+                <li><a href="/o/LWX/">Washington DC (LWX)</a></li>
+                <li><a href="/o/ILM/">Wilmington NC (ILM)</a></li>
+                <li><a href="/o/FFC/">Atlanta (FFC)</a></li>
+                <li><a href="/o/BMX/">Birmingham (BMX)</a></li>
+                <li><a href="/o/HUN/">Huntsville (HUN)</a></li>
+                <li><a href="/o/JAN/">Jackson MS (JAN)</a></li>
+                <li><a href="/o/JAX/">Jacksonville (JAX)</a></li>
+                <li><a href="/o/KEY/">Key West (KEY)</a></li>
+                <li><a href="/o/MLB/">Melbourne (MLB)</a></li>
+                <li><a href="/o/MEG/">Memphis (MEG)</a></li>
+                <li><a href="/o/MFL/">Miami (MFL)</a></li>
+                <li><a href="/o/MOB/">Mobile/Pensacola (MOB)</a></li>
+                <li><a href="/o/MRX/">Morristown (MRX)</a></li>
+                <li><a href="/o/OHX/">Nashville (OHX)</a></li>
+                <li><a href="/o/TAE/">Tallahassee (TAE)</a></li>
+                <li><a href="/o/TBW/">Tampa Bay (TBW)</a></li>
+                <li><a href="/o/ILX/">Central Illinois (ILX)</a></li>
+                <li><a href="/o/LOT/">Chicago (LOT)</a></li>
+                <li><a href="/o/ILN/">Cincinnati (ILN)</a></li>
+                <li><a href="/o/CLE/">Cleveland (CLE)</a></li>
+                <li><a href="/o/DMX/">Des Moines (DMX)</a></li>
+                <li><a href="/o/DTX/">Detroit (DTX)</a></li>
+                <li><a href="/o/APX/">Gaylord (APX)</a></li>
+                <li><a href="/o/GRR/">Grand Rapids (GRR)</a></li>
+                <li><a href="/o/GRB/">Green Bay (GRB)</a></li>
+                <li><a href="/o/IND/">Indianapolis (IND)</a></li>
+                <li><a href="/o/JKL/">Jackson KY (JKL)</a></li>
+                <li><a href="/o/EAX/">Kansas City (EAX)</a></li>
+                <li><a href="/o/ARX/">La Crosse (ARX)</a></li>
+                <li><a href="/o/LMK/">Louisville (LMK)</a></li>
+                <li><a href="/o/MQT/">Marquette (MQT)</a></li>
+                <li><a href="/o/MKX/">Milwaukee (MKX)</a></li>
+                <li><a href="/o/IWX/">Northern Indiana (IWX)</a></li>
+                <li><a href="/o/PAH/">Paducah (PAH)</a></li>
+                <li><a href="/o/DVN/">Quad Cities (DVN)</a></li>
+                <li><a href="/o/SGF/">Springfield (SGF)</a></li>
+                <li><a href="/o/LSX/">St. Louis (LSX)</a></li>
+                <li><a href="/o/ABR/">Aberdeen (ABR)</a></li>
+                <li><a href="/o/BIS/">Bismarck (BIS)</a></li>
+                <li><a href="/o/DLH/">Duluth (DLH)</a></li>
+                <li><a href="/o/FGF/">Grand Forks (FGF)</a></li>
+                <li><a href="/o/GID/">Hastings (GID)</a></li>
+                <li><a href="/o/MPX/">Minneapolis (MPX)</a></li>
+                <li><a href="/o/LBF/">North Platte (LBF)</a></li>
+                <li><a href="/o/OAX/">Omaha (OAX)</a></li>
+                <li><a href="/o/UNR/">Rapid City (UNR)</a></li>
+                <li><a href="/o/FSD/">Sioux Falls (FSD)</a></li>
+                <li><a href="/o/AMA/">Amarillo (AMA)</a></li>
+                <li><a href="/o/BRO/">Brownsville (BRO)</a></li>
+                <li><a href="/o/CRP/">Corpus Christi (CRP)</a></li>
+                <li><a href="/o/FWD/">Dallas/Fort Worth (FWD)</a></li>
+                <li><a href="/o/DDC/">Dodge City (DDC)</a></li>
+                <li><a href="/o/GLD/">Goodland (GLD)</a></li>
+                <li><a href="/o/HGX/">Houston (HGX)</a></li>
+                <li><a href="/o/LCH/">Lake Charles (LCH)</a></li>
+                <li><a href="/o/LZK/">Little Rock (LZK)</a></li>
+                <li><a href="/o/LUB/">Lubbock (LUB)</a></li>
+                <li><a href="/o/MAF/">Midland/Odessa (MAF)</a></li>
+                <li><a href="/o/LIX/">New Orleans (LIX)</a></li>
+                <li><a href="/o/OUN/">Oklahoma City (OUN)</a></li>
+                <li><a href="/o/SJT/">San Angelo (SJT)</a></li>
+                <li><a href="/o/EWX/">San Antonio (EWX)</a></li>
+                <li><a href="/o/SHV/">Shreveport (SHV)</a></li>
+                <li><a href="/o/TOP/">Topeka (TOP)</a></li>
+                <li><a href="/o/TSA/">Tulsa (TSA)</a></li>
+                <li><a href="/o/ICT/">Wichita (ICT)</a></li>
+                <li><a href="/o/BYZ/">Billings (BYZ)</a></li>
+                <li><a href="/o/BOI/">Boise (BOI)</a></li>
+                <li><a href="/o/CYS/">Cheyenne (CYS)</a></li>
+                <li><a href="/o/BOU/">Denver (BOU)</a></li>
+                <li><a href="/o/LKN/">Elko (LKN)</a></li>
+                <li><a href="/o/GGW/">Glasgow (GGW)</a></li>
+                <li><a href="/o/GJT/">Grand Junction (GJT)</a></li>
+                <li><a href="/o/TFX/">Great Falls (TFX)</a></li>
+                <li><a href="/o/MSO/">Missoula (MSO)</a></li>
+                <li><a href="/o/PIH/">Pocatello (PIH)</a></li>
+                <li><a href="/o/PUB/">Pueblo (PUB)</a></li>
+                <li><a href="/o/REV/">Reno (REV)</a></li>
+                <li><a href="/o/RIW/">Riverton (RIW)</a></li>
+                <li><a href="/o/SLC/">Salt Lake City (SLC)</a></li>
+                <li><a href="/o/ABQ/">Albuquerque (ABQ)</a></li>
+                <li><a href="/o/EPZ/">El Paso (EPZ)</a></li>
+                <li><a href="/o/FGZ/">Flagstaff (FGZ)</a></li>
+                <li><a href="/o/VEF/">Las Vegas (VEF)</a></li>
+                <li><a href="/o/PSR/">Phoenix (PSR)</a></li>
+                <li><a href="/o/TWC/">Tucson (TWC)</a></li>
+                <li><a href="/o/HNX/">Central California (HNX)</a></li>
+                <li><a href="/o/EKA/">Eureka (EKA)</a></li>
+                <li><a href="/o/LOX/">Los Angeles (LOX)</a></li>
+                <li><a href="/o/MFR/">Medford (MFR)</a></li>
+                <li><a href="/o/PDT/">Pendleton (PDT)</a></li>
+                <li><a href="/o/PQR/">Portland (PQR)</a></li>
+                <li><a href="/o/STO/">Sacramento (STO)</a></li>
+                <li><a href="/o/SGX/">San Diego (SGX)</a></li>
+                <li><a href="/o/MTR/">San Francisco (MTR)</a></li>
+                <li><a href="/o/SEW/">Seattle (SEW)</a></li>
+                <li><a href="/o/OTX/">Spokane (OTX)</a></li>
+                <li><a href="/o/AFC/">Anchorage (AFC)</a></li>
+                <li><a href="/o/AFG/">Fairbanks (AFG)</a></li>
+                <li><a href="/o/GUM/">Guam (GUM)</a></li>
+                <li><a href="/o/HFO/">Honolulu (HFO)</a></li>
+                <li><a href="/o/AJK/">Juneau (AJK)</a></li>
+                <li><a href="/o/PPG/">Pago Pago (PPG)</a></li>
+                <li><a href="/o/SJU/">San Juan (SJU)</a></li>
+                </ul>
+            </nav>
+
+            <p class="mt-10 text-xs text-muted-foreground">
+                Data from the <a href="https://www.weather.gov">National Weather Service</a>.
+                Translated by <a href="https://www.anthropic.com/claude/haiku">Claude</a>.
+                <a href="/about">About</a> ·
+                <a href="/developers">For developers &amp; agents</a> ·
+                <a href="/api/feed?office=BGM">Subscribe: RSS feed for this office</a> ·
+                <a href="https://github.com/jonahberg/plaincast">Source on GitHub</a>
+            </p>
+        </main>
+    </div>
+
+    <script type="module" crossorigin src="/assets/app.js"></script>
+</body>
+</html>

@@ -10,7 +10,11 @@
          docs/o/<CODE>/ page, and api/home.js + api/office-page.js inject the
          server-rendered digest at the #loading marker. Change them only
          together with scripts/build-offices.mjs, then regenerate
-         (bun scripts/build-offices.mjs). -->
+         (bun scripts/build-offices.mjs). The structured data below is the
+         HOMEPAGE's: the office pages drop every block and carry their own
+         WebPage (scripts/build-offices.mjs officeJsonLd). The OFFICE_COUNT
+         placeholders in it are filled from the office roster by
+         scripts/app-shell.mjs, so the number cannot go stale. -->
     <title>Spokane NWS Forecast in Plain English · Plaincast</title>
     <meta name="description" content="The latest National Weather Service Area Forecast Discussion for Spokane (OTX), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.">
     <meta name="theme-color" content="#ffffff">
@@ -57,112 +61,6 @@
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "Plaincast",
-        "url": "https://plaincast.live",
-        "description": "NWS Area Forecast Discussions decoded into plain English with side-by-side translation, 230+ term jargon glossary, forecaster confidence indicators, edition history and per-edition diffs.",
-        "applicationCategory": "WeatherApplication",
-        "operatingSystem": "Any",
-        "browserRequirements": "Requires JavaScript",
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "author": { "@type": "Person", "name": "Jonah Berg", "url": "https://jonahberg.com" },
-        "sourceOrganization": { "@type": "GovernmentOrganization", "name": "National Weather Service", "url": "https://www.weather.gov" },
-        "featureList": [
-            "AI-powered plain English summaries via Claude",
-            "Side-by-side translation with annotated original",
-            "230+ term meteorological jargon glossary",
-            "Forecaster confidence indicator",
-            "Edition history with per-section diffs",
-            "Active weather alerts with plain-English leads",
-            "68 NWS forecast offices"
-        ],
-        "sameAs": ["https://github.com/jonahberg/plaincast"]
-    }
-    </script>
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        "mainEntity": [
-            {
-                "@type": "Question",
-                "name": "What is an Area Forecast Discussion (AFD)?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "An Area Forecast Discussion is a detailed narrative forecast written 3-4 times daily by National Weather Service meteorologists. Unlike weather apps that show icons and numbers, AFDs explain the reasoning behind the forecast - why models disagree, what forecasters are watching, and where uncertainty exists."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "How does Plaincast translate NWS forecasts?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "Plaincast uses Anthropic's Claude AI to summarize each forecast section into natural, readable prose. It also annotates the original text with a 230+ term jargon glossary, converts Zulu (UTC) times to local time zones, and highlights key information for quick scanning."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "Which NWS offices does Plaincast support?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "Plaincast supports 68 NWS forecast offices across all US regions including Los Angeles (LOX), New York (OKX), Chicago (LOT), Houston (HGX), Phoenix (PSR), San Francisco (MTR), Miami (MFL), Seattle (SEW), Denver (BOU), and many more."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "Is Plaincast free?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "Yes, Plaincast is completely free and open source. It uses the NWS public API for forecast data and Anthropic's Claude for AI summaries. No account or API key required."
-                }
-            }
-        ]
-    }
-    </script>
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org",
-        "@type": "HowTo",
-        "name": "How to Read an NWS Area Forecast Discussion",
-        "description": "Learn how to read and understand the detailed weather forecasts written by National Weather Service meteorologists using Plaincast's AI translation.",
-        "step": [
-            {
-                "@type": "HowToStep",
-                "name": "Select your NWS office",
-                "text": "Choose your local NWS forecast office from the picker. Plaincast supports 68 offices across the United States, or can find your nearest one from your location."
-            },
-            {
-                "@type": "HowToStep",
-                "name": "Read the AI summary",
-                "text": "Each forecast section opens on a plain English summary translated by Claude AI. Key details like temperatures, wind speeds, and dates are highlighted in bold."
-            },
-            {
-                "@type": "HowToStep",
-                "name": "Check the original with annotations",
-                "text": "Switch to the Original tab to see the forecaster's own text with 230+ meteorological jargon terms highlighted. Hover or tap any highlighted term to see its definition."
-            },
-            {
-                "@type": "HowToStep",
-                "name": "Review the takeaway, confidence, and what changed",
-                "text": "The key takeaway at the top summarizes the most important point, the confidence indicator reads the forecaster's own certainty language, and the What Changed tab shows what this edition revised."
-            }
-        ]
-    }
-    </script>
-
-    <!-- Pre-paint theme (blocking, external file: the CSP has no
-         script-src 'unsafe-inline'): must run before first paint. -->
-    <script src="/theme-init.js"></script>
-    <!-- Vercel Web Analytics + Speed Insights (same-origin /_vercel/*, so
-         script-src 'self' covers them). Web Analytics also defines window.va,
-         which the app's failure telemetry (src/lib/track.js) reports through. -->
-    <script defer src="/_vercel/insights/script.js"></script>
-    <script defer src="/_vercel/speed-insights/script.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/app.css">
-    <link rel="modulepreload" crossorigin href="/assets/vendor.js">
-<script type="application/ld+json">
-    {
-        "@context": "https://schema.org",
         "@type": "WebPage",
         "@id": "https://plaincast.live/o/OTX/",
         "url": "https://plaincast.live/o/OTX/",
@@ -199,6 +97,17 @@
         "significantLink": "https://plaincast.live/o/OTX/?view=changelog"
     }
     </script>
+
+    <!-- Pre-paint theme (blocking, external file: the CSP has no
+         script-src 'unsafe-inline'): must run before first paint. -->
+    <script src="/theme-init.js"></script>
+    <!-- Vercel Web Analytics + Speed Insights (same-origin /_vercel/*, so
+         script-src 'self' covers them). Web Analytics also defines window.va,
+         which the app's failure telemetry (src/lib/track.js) reports through. -->
+    <script defer src="/_vercel/insights/script.js"></script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/app.css">
+    <link rel="modulepreload" crossorigin href="/assets/vendor.js">
 </head>
 <body>
     <div id="root"></div>
@@ -221,74 +130,129 @@
                 <h2 class="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">The forecast, office by office</h2>
                 <p class="mt-3 text-sm"><a href="/national/">The National Desk — where the weather is today →</a></p>
                 <ul class="office-index-list mt-4 list-none columns-2 gap-6 text-sm leading-6 sm:columns-3">
-                <li><a href="/o/OKX/">New York (OKX)</a></li>
+                <li><a href="/o/ALY/">Albany (ALY)</a></li>
+                <li><a href="/o/BGM/">Binghamton (BGM)</a></li>
+                <li><a href="/o/RNK/">Blacksburg (RNK)</a></li>
                 <li><a href="/o/BOX/">Boston (BOX)</a></li>
-                <li><a href="/o/PHI/">Philadelphia (PHI)</a></li>
-                <li><a href="/o/LWX/">Washington DC (LWX)</a></li>
-                <li><a href="/o/PBZ/">Pittsburgh (PBZ)</a></li>
                 <li><a href="/o/BUF/">Buffalo (BUF)</a></li>
-                <li><a href="/o/RAH/">Raleigh (RAH)</a></li>
+                <li><a href="/o/BTV/">Burlington (BTV)</a></li>
+                <li><a href="/o/CAR/">Caribou (CAR)</a></li>
                 <li><a href="/o/CHS/">Charleston SC (CHS)</a></li>
+                <li><a href="/o/RLX/">Charleston WV (RLX)</a></li>
+                <li><a href="/o/CAE/">Columbia (CAE)</a></li>
+                <li><a href="/o/GSP/">Greenville-Spartanburg (GSP)</a></li>
+                <li><a href="/o/OKX/">New York (OKX)</a></li>
+                <li><a href="/o/MHX/">Newport/Morehead City (MHX)</a></li>
+                <li><a href="/o/PHI/">Philadelphia (PHI)</a></li>
+                <li><a href="/o/PBZ/">Pittsburgh (PBZ)</a></li>
+                <li><a href="/o/GYX/">Portland ME (GYX)</a></li>
+                <li><a href="/o/RAH/">Raleigh (RAH)</a></li>
+                <li><a href="/o/CTP/">State College (CTP)</a></li>
+                <li><a href="/o/AKQ/">Wakefield (AKQ)</a></li>
+                <li><a href="/o/LWX/">Washington DC (LWX)</a></li>
+                <li><a href="/o/ILM/">Wilmington NC (ILM)</a></li>
                 <li><a href="/o/FFC/">Atlanta (FFC)</a></li>
-                <li><a href="/o/MFL/">Miami (MFL)</a></li>
-                <li><a href="/o/JAX/">Jacksonville (JAX)</a></li>
-                <li><a href="/o/TBW/">Tampa Bay (TBW)</a></li>
                 <li><a href="/o/BMX/">Birmingham (BMX)</a></li>
-                <li><a href="/o/OHX/">Nashville (OHX)</a></li>
-                <li><a href="/o/MRX/">Morristown (MRX)</a></li>
+                <li><a href="/o/HUN/">Huntsville (HUN)</a></li>
                 <li><a href="/o/JAN/">Jackson MS (JAN)</a></li>
+                <li><a href="/o/JAX/">Jacksonville (JAX)</a></li>
+                <li><a href="/o/KEY/">Key West (KEY)</a></li>
+                <li><a href="/o/MLB/">Melbourne (MLB)</a></li>
+                <li><a href="/o/MEG/">Memphis (MEG)</a></li>
+                <li><a href="/o/MFL/">Miami (MFL)</a></li>
+                <li><a href="/o/MOB/">Mobile/Pensacola (MOB)</a></li>
+                <li><a href="/o/MRX/">Morristown (MRX)</a></li>
+                <li><a href="/o/OHX/">Nashville (OHX)</a></li>
+                <li><a href="/o/TAE/">Tallahassee (TAE)</a></li>
+                <li><a href="/o/TBW/">Tampa Bay (TBW)</a></li>
+                <li><a href="/o/ILX/">Central Illinois (ILX)</a></li>
                 <li><a href="/o/LOT/">Chicago (LOT)</a></li>
-                <li><a href="/o/DTX/">Detroit (DTX)</a></li>
-                <li><a href="/o/IND/">Indianapolis (IND)</a></li>
-                <li><a href="/o/CLE/">Cleveland (CLE)</a></li>
                 <li><a href="/o/ILN/">Cincinnati (ILN)</a></li>
-                <li><a href="/o/MKX/">Milwaukee (MKX)</a></li>
-                <li><a href="/o/GRR/">Grand Rapids (GRR)</a></li>
-                <li><a href="/o/LSX/">St. Louis (LSX)</a></li>
-                <li><a href="/o/EAX/">Kansas City (EAX)</a></li>
+                <li><a href="/o/CLE/">Cleveland (CLE)</a></li>
                 <li><a href="/o/DMX/">Des Moines (DMX)</a></li>
-                <li><a href="/o/MPX/">Minneapolis (MPX)</a></li>
-                <li><a href="/o/DLH/">Duluth (DLH)</a></li>
-                <li><a href="/o/FSD/">Sioux Falls (FSD)</a></li>
+                <li><a href="/o/DTX/">Detroit (DTX)</a></li>
+                <li><a href="/o/APX/">Gaylord (APX)</a></li>
+                <li><a href="/o/GRR/">Grand Rapids (GRR)</a></li>
+                <li><a href="/o/GRB/">Green Bay (GRB)</a></li>
+                <li><a href="/o/IND/">Indianapolis (IND)</a></li>
+                <li><a href="/o/JKL/">Jackson KY (JKL)</a></li>
+                <li><a href="/o/EAX/">Kansas City (EAX)</a></li>
+                <li><a href="/o/ARX/">La Crosse (ARX)</a></li>
+                <li><a href="/o/LMK/">Louisville (LMK)</a></li>
+                <li><a href="/o/MQT/">Marquette (MQT)</a></li>
+                <li><a href="/o/MKX/">Milwaukee (MKX)</a></li>
+                <li><a href="/o/IWX/">Northern Indiana (IWX)</a></li>
+                <li><a href="/o/PAH/">Paducah (PAH)</a></li>
+                <li><a href="/o/DVN/">Quad Cities (DVN)</a></li>
+                <li><a href="/o/SGF/">Springfield (SGF)</a></li>
+                <li><a href="/o/LSX/">St. Louis (LSX)</a></li>
+                <li><a href="/o/ABR/">Aberdeen (ABR)</a></li>
                 <li><a href="/o/BIS/">Bismarck (BIS)</a></li>
-                <li><a href="/o/OAX/">Omaha (OAX)</a></li>
+                <li><a href="/o/DLH/">Duluth (DLH)</a></li>
                 <li><a href="/o/FGF/">Grand Forks (FGF)</a></li>
+                <li><a href="/o/GID/">Hastings (GID)</a></li>
+                <li><a href="/o/MPX/">Minneapolis (MPX)</a></li>
+                <li><a href="/o/LBF/">North Platte (LBF)</a></li>
+                <li><a href="/o/OAX/">Omaha (OAX)</a></li>
+                <li><a href="/o/UNR/">Rapid City (UNR)</a></li>
+                <li><a href="/o/FSD/">Sioux Falls (FSD)</a></li>
+                <li><a href="/o/AMA/">Amarillo (AMA)</a></li>
+                <li><a href="/o/BRO/">Brownsville (BRO)</a></li>
+                <li><a href="/o/CRP/">Corpus Christi (CRP)</a></li>
                 <li><a href="/o/FWD/">Dallas/Fort Worth (FWD)</a></li>
+                <li><a href="/o/DDC/">Dodge City (DDC)</a></li>
+                <li><a href="/o/GLD/">Goodland (GLD)</a></li>
                 <li><a href="/o/HGX/">Houston (HGX)</a></li>
-                <li><a href="/o/EWX/">San Antonio (EWX)</a></li>
-                <li><a href="/o/OUN/">Oklahoma City (OUN)</a></li>
-                <li><a href="/o/TSA/">Tulsa (TSA)</a></li>
-                <li><a href="/o/LZK/">Little Rock (LZK)</a></li>
-                <li><a href="/o/LIX/">New Orleans (LIX)</a></li>
-                <li><a href="/o/SHV/">Shreveport (SHV)</a></li>
                 <li><a href="/o/LCH/">Lake Charles (LCH)</a></li>
-                <li><a href="/o/BOU/">Denver (BOU)</a></li>
-                <li><a href="/o/PUB/">Pueblo (PUB)</a></li>
-                <li><a href="/o/GJT/">Grand Junction (GJT)</a></li>
-                <li><a href="/o/SLC/">Salt Lake City (SLC)</a></li>
-                <li><a href="/o/BOI/">Boise (BOI)</a></li>
+                <li><a href="/o/LZK/">Little Rock (LZK)</a></li>
+                <li><a href="/o/LUB/">Lubbock (LUB)</a></li>
+                <li><a href="/o/MAF/">Midland/Odessa (MAF)</a></li>
+                <li><a href="/o/LIX/">New Orleans (LIX)</a></li>
+                <li><a href="/o/OUN/">Oklahoma City (OUN)</a></li>
+                <li><a href="/o/SJT/">San Angelo (SJT)</a></li>
+                <li><a href="/o/EWX/">San Antonio (EWX)</a></li>
+                <li><a href="/o/SHV/">Shreveport (SHV)</a></li>
+                <li><a href="/o/TOP/">Topeka (TOP)</a></li>
+                <li><a href="/o/TSA/">Tulsa (TSA)</a></li>
+                <li><a href="/o/ICT/">Wichita (ICT)</a></li>
                 <li><a href="/o/BYZ/">Billings (BYZ)</a></li>
+                <li><a href="/o/BOI/">Boise (BOI)</a></li>
+                <li><a href="/o/CYS/">Cheyenne (CYS)</a></li>
+                <li><a href="/o/BOU/">Denver (BOU)</a></li>
+                <li><a href="/o/LKN/">Elko (LKN)</a></li>
+                <li><a href="/o/GGW/">Glasgow (GGW)</a></li>
+                <li><a href="/o/GJT/">Grand Junction (GJT)</a></li>
+                <li><a href="/o/TFX/">Great Falls (TFX)</a></li>
                 <li><a href="/o/MSO/">Missoula (MSO)</a></li>
+                <li><a href="/o/PIH/">Pocatello (PIH)</a></li>
+                <li><a href="/o/PUB/">Pueblo (PUB)</a></li>
+                <li><a href="/o/REV/">Reno (REV)</a></li>
                 <li><a href="/o/RIW/">Riverton (RIW)</a></li>
-                <li><a href="/o/PSR/">Phoenix (PSR)</a></li>
-                <li><a href="/o/VEF/">Las Vegas (VEF)</a></li>
-                <li><a href="/o/TWC/">Tucson (TWC)</a></li>
-                <li><a href="/o/FGZ/">Flagstaff (FGZ)</a></li>
+                <li><a href="/o/SLC/">Salt Lake City (SLC)</a></li>
                 <li><a href="/o/ABQ/">Albuquerque (ABQ)</a></li>
                 <li><a href="/o/EPZ/">El Paso (EPZ)</a></li>
-                <li><a href="/o/LOX/">Los Angeles (LOX)</a></li>
-                <li><a href="/o/SGX/">San Diego (SGX)</a></li>
-                <li><a href="/o/MTR/">San Francisco (MTR)</a></li>
-                <li><a href="/o/STO/">Sacramento (STO)</a></li>
+                <li><a href="/o/FGZ/">Flagstaff (FGZ)</a></li>
+                <li><a href="/o/VEF/">Las Vegas (VEF)</a></li>
+                <li><a href="/o/PSR/">Phoenix (PSR)</a></li>
+                <li><a href="/o/TWC/">Tucson (TWC)</a></li>
                 <li><a href="/o/HNX/">Central California (HNX)</a></li>
                 <li><a href="/o/EKA/">Eureka (EKA)</a></li>
-                <li><a href="/o/SEW/">Seattle (SEW)</a></li>
-                <li><a href="/o/PQR/">Portland (PQR)</a></li>
+                <li><a href="/o/LOX/">Los Angeles (LOX)</a></li>
                 <li><a href="/o/MFR/">Medford (MFR)</a></li>
+                <li><a href="/o/PDT/">Pendleton (PDT)</a></li>
+                <li><a href="/o/PQR/">Portland (PQR)</a></li>
+                <li><a href="/o/STO/">Sacramento (STO)</a></li>
+                <li><a href="/o/SGX/">San Diego (SGX)</a></li>
+                <li><a href="/o/MTR/">San Francisco (MTR)</a></li>
+                <li><a href="/o/SEW/">Seattle (SEW)</a></li>
                 <li><a href="/o/OTX/" aria-current="page">Spokane (OTX)</a></li>
                 <li><a href="/o/AFC/">Anchorage (AFC)</a></li>
                 <li><a href="/o/AFG/">Fairbanks (AFG)</a></li>
+                <li><a href="/o/GUM/">Guam (GUM)</a></li>
                 <li><a href="/o/HFO/">Honolulu (HFO)</a></li>
+                <li><a href="/o/AJK/">Juneau (AJK)</a></li>
+                <li><a href="/o/PPG/">Pago Pago (PPG)</a></li>
+                <li><a href="/o/SJU/">San Juan (SJU)</a></li>
                 </ul>
             </nav>
 

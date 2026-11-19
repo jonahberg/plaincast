@@ -7,6 +7,7 @@ import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractLede, sectionHealth, stripWmoHeader } from './_afd-sections.js';
 import { changedParagraphs } from './changelog.js';
 import { sendError } from './_errors.js';
+import { formatInZone } from '../shadcn/src/lib/format.js';
 
 const VALID_OFFICES = new Set(Object.keys(OFFICE_NAMES));
 
@@ -30,11 +31,12 @@ function escapeXml(str) {
 // stay distinguishable in feed readers. Date and time are formatted separately
 // (a single toLocaleString varies across ICU versions: "Jul 3, 3:50 PM" vs
 // "Jul 3 at 3:50 PM"), and the narrow no-break space some ICUs put before
-// AM/PM is normalized to a plain space for deterministic feed output.
-function formatIssuedLocal(issued, office) {
+// AM/PM is normalized to a plain space for deterministic feed output. The
+// zone name comes from formatInZone (ChST and SST, not "GMT+10"/"GMT-11").
+export function formatIssuedLocal(issued, office) {
     const timeZone = OFFICE_TIMEZONES[office] || 'UTC';
     const date = issued.toLocaleDateString('en-US', { timeZone, weekday: 'short', month: 'short', day: 'numeric' });
-    const time = issued.toLocaleTimeString('en-US', { timeZone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+    const time = formatInZone(issued, { timeZone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
     return `${date}, ${time}`.replace(/[\u202f\u00a0]/g, ' ');
 }
 
@@ -47,8 +49,11 @@ function isMastNoise(p) {
 }
 
 // ".SHORT TERM (Today through Saturday)..." → just the body text after it.
-function stripSectionHeader(p) {
-    return p.replace(/^\.[A-Z][A-Z0-9 /()'&.-]*?\.\.\.\s*/, '').trim();
+// SLC writes the section's time into the header: ".KEY MESSAGES, Issued 1120
+// AM MST Wed Nov 18 2026..." (the parsers accept that form too). Lowercase is
+// allowed after the first letter: the qualifier is often mixed case.
+export function stripSectionHeader(p) {
+    return p.replace(/^\.[A-Z][A-Za-z0-9 /()'&.-]*?(?:,\s*(?:Issued|Updated)\b[^.]*)?\.\.\.\s*/, '').trim();
 }
 
 // Plain-English "what changed" summary from the paragraph-level diff against
@@ -77,7 +82,8 @@ export default async function handler(req, res) {
 
         const cityName = OFFICE_NAMES[office] || office;
         const feedTitle = `Plaincast — ${cityName} (${office}) Forecast`;
-        const feedLink = `https://plaincast.live/?office=${office}`;
+        // The office's canonical page (the legacy /?office= form 308s there).
+        const feedLink = `https://plaincast.live/o/${office}/`;
 
         // Phase 1: fetch the products in parallel (a cold cache was ~11
         // sequential round-trips ≈ 4s+ TTFB), kept positional so each issuance

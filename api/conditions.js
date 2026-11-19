@@ -1,47 +1,101 @@
 // Vercel serverless function: current weather conditions + seasonal context
-import { OFFICE_NAMES } from '../docs/js/offices.js';
+import { OFFICE_NAMES, OFFICE_STATIONS, OFFICE_TIMEZONES } from '../docs/js/offices.js';
+import { CLIMATE_NORMALS } from './_climate-normals.js';
 import { sendError } from './_errors.js';
 
-// NWS observation station closest to each office (approximate)
-const OFFICE_STATIONS = {
-    'OKX': 'KJFK', 'BOX': 'KBOS', 'PHI': 'KPHL', 'LWX': 'KDCA', 'PBZ': 'KPIT', 'BUF': 'KBUF',
-    'RAH': 'KRDU', 'CHS': 'KCHS', 'FFC': 'KATL', 'MFL': 'KMIA', 'JAX': 'KJAX', 'TBW': 'KTPA',
-    'BMX': 'KBHM', 'OHX': 'KBNA', 'MRX': 'KTYS', 'JAN': 'KJAN', 'LOT': 'KORD', 'DTX': 'KDTW',
-    'IND': 'KIND', 'CLE': 'KCLE', 'ILN': 'KCVG', 'MKX': 'KMKE', 'GRR': 'KGRR', 'LSX': 'KSTL',
-    'EAX': 'KMCI', 'DMX': 'KDSM', 'MPX': 'KMSP', 'DLH': 'KDLH', 'FSD': 'KFSD', 'BIS': 'KBIS',
-    'OAX': 'KOMA', 'FGF': 'KFAR', 'FWD': 'KDFW', 'HGX': 'KIAH', 'EWX': 'KSAT', 'OUN': 'KOKC',
-    'TSA': 'KTUL', 'LZK': 'KLIT', 'LIX': 'KMSY', 'SHV': 'KSHV', 'LCH': 'KLCH', 'BOU': 'KDEN',
-    'PUB': 'KPUB', 'GJT': 'KGJT', 'SLC': 'KSLC', 'BOI': 'KBOI', 'BYZ': 'KBIL', 'MSO': 'KMSO',
-    'RIW': 'KRIW', 'PSR': 'KPHX', 'VEF': 'KLAS', 'TWC': 'KTUS', 'FGZ': 'KFLG', 'ABQ': 'KABQ',
-    'EPZ': 'KELP', 'LOX': 'KLAX', 'SGX': 'KSAN', 'MTR': 'KSFO', 'STO': 'KSMF', 'HNX': 'KFAT',
-    'EKA': 'KACV', 'SEW': 'KSEA', 'PQR': 'KPDX', 'MFR': 'KMFR', 'OTX': 'KGEG',
-    'AFC': 'PANC', 'AFG': 'PAFA', 'HFO': 'PHNL',
-};
+const NWS = 'https://api.weather.gov';
+// NOAA Aviation Weather Center data API: every METAR, decoded.
+export const AWC_METAR = 'https://aviationweather.gov/api/data/metar';
+const HEADERS = { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' };
+const NULL_PAYLOAD = Object.freeze({ temp: null, normal: null, delta: null });
+// No reading (none came, a failed read, an impossible value): "Now" and the
+// delta go, the climate normal stays. It never depended on the station, so a
+// brief outage must not drop "Normal high" too (Nov 18 2026).
+const noReading = (normal) => (normal === null ? NULL_PAYLOAD : { temp: null, normal, delta: null });
 
-// Monthly average high temps (F) for each office -- approximate climate normals
-// Source: NOAA 1991-2020 normals (rounded)
-const CLIMATE_NORMALS = {
-    'LOX': [68,68,68,71,72,77,83,85,83,78,72,67],
-    'OKX': [39,42,50,61,72,80,85,84,76,65,54,43],
-    'BOX': [36,39,46,57,67,77,82,81,73,62,51,40],
-    'PHI': [40,44,53,64,74,83,87,85,78,66,55,44],
-    'LWX': [43,47,56,67,76,85,89,87,80,69,57,46],
-    'MFL': [76,78,80,83,87,90,91,91,90,86,82,78],
-    'LOT': [32,36,47,59,70,80,84,82,75,63,49,36],
-    'HGX': [63,66,73,79,86,92,94,95,90,83,73,65],
-    'PSR': [67,71,77,85,95,104,106,104,100,89,76,66],
-    'SEW': [47,50,54,58,65,70,76,76,70,60,51,45],
-    'BOU': [45,47,55,61,70,82,88,86,78,65,52,44],
-    'SLC': [37,43,54,62,72,84,93,91,80,65,49,37],
-    'MTR': [57,60,63,66,69,73,74,75,76,72,63,57],
-    'SGX': [66,66,66,68,69,72,76,78,77,74,69,65],
-    'FFC': [52,57,65,73,80,87,90,89,83,73,63,54],
-    'FWD': [57,61,69,77,84,93,97,97,89,79,67,58],
-    'MPX': [24,29,41,57,69,79,83,81,72,58,41,27],
-    'CLE': [34,37,47,59,69,79,83,81,74,62,50,38],
-    'HFO': [80,80,81,82,84,86,87,88,88,86,84,81],
-    'AFC': [22,27,34,44,55,62,65,63,55,40,28,23],
-};
+// How far back a fallback reading may come from and still be called "Now".
+export const FALLBACK_MAX_AGE_MS = 2 * 3600 * 1000;
+const FALLBACK_LIMIT = 6; // hourly METARs plus the odd SPECI ≈ the last 2-3 h
+
+// A temperature (°C) from a raw METAR, or null. The remark T-group carries
+// tenths ("T02780178" → 27.8); the body group is whole degrees ("28/18",
+// "M03/M07" → -3). Only the body before RMK is searched, and the group must
+// stand alone, so visibility ("1/2SM") and runway ("R04/2000FT") groups
+// cannot match.
+export function metarTempC(raw) {
+    const text = String(raw || '');
+    const t = text.match(/\sT([01])(\d{3})(?:[01]\d{3})?(?=\s|$)/);
+    if (t) return (t[1] === '1' ? -1 : 1) * Number(t[2]) / 10;
+    const body = text.split(/\sRMK\s/)[0];
+    const g = body.match(/\s(M?)(\d{2})\/(?:M?\d{2})?(?=\s|$)/);
+    return g ? (g[1] ? -1 : 1) * Number(g[2]) : null;
+}
+
+// The temperature (°C) one observation supports, or null.
+//
+// api.weather.gov nulls any value MADIS has not quality-checked yet
+// (qualityControl "Z") even though the station reported it. On Nov 18 2026
+// 10 of PHNL's 12 latest observations had temperature.value null with QC "Z"
+// while each rawMessage carried the reading ("... 28/18 A3008 RMK ...
+// T02780178"), and KJFK's 21:51Z observation did the same — which is why
+// /api/conditions answered temp: null for Honolulu and New York. A value QC
+// actually REJECTED (X, B) or questioned (Q) is not resurrected from the raw
+// message.
+export function observationTempC(props) {
+    const value = props?.temperature?.value;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const qc = props?.temperature?.qualityControl;
+    if (qc && qc !== 'Z') return null;
+    return metarTempC(props?.rawMessage);
+}
+
+// Calendar month (0-11) in the office's own zone: the normals are monthly,
+// and Guam is a day ahead of the server at the month's edges.
+export function monthIn(timeZone, now = new Date()) {
+    try {
+        const m = new Intl.DateTimeFormat('en-US', { timeZone, month: 'numeric' }).format(now);
+        return Number(m) - 1;
+    } catch {
+        return now.getUTCMonth();
+    }
+}
+
+async function getJson(url) {
+    const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
+    return res.ok ? res.json() : null;
+}
+
+// Latest observation first; when it yields no temperature, the newest of the
+// recent observations that does, if it is under FALLBACK_MAX_AGE_MS old; and
+// last, the same station's latest METAR from NOAA's Aviation Weather Center.
+// api.weather.gov carries no observations at all for some stations that do
+// report: NSTU (Pago Pago, the PPG office's station) answered 404 on
+// /observations/latest and an empty /observations list on 2026-11-18, while
+// AWC had its hourly METARs.
+async function readStation(station, now) {
+    const latest = await getJson(`${NWS}/stations/${station}/observations/latest`);
+    const props = latest?.properties;
+    if (props) {
+        const tempC = observationTempC(props);
+        if (tempC !== null) return { tempC, props };
+    }
+    const recent = await getJson(`${NWS}/stations/${station}/observations?limit=${FALLBACK_LIMIT}`);
+    const candidates = (recent?.features || [])
+        .map(f => f?.properties)
+        .filter(p => p && now - Date.parse(p.timestamp) <= FALLBACK_MAX_AGE_MS)
+        .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+    for (const p of candidates) {
+        const tempC = observationTempC(p);
+        if (tempC !== null) return { tempC, props: p };
+    }
+    const awc = await getJson(`${AWC_METAR}?ids=${station}&format=json`);
+    const metar = Array.isArray(awc) ? awc.find(m => m?.icaoId === station) : null;
+    if (metar && now - Number(metar.obsTime) * 1000 <= FALLBACK_MAX_AGE_MS) {
+        const tempC = typeof metar.temp === 'number' && Number.isFinite(metar.temp) ? metar.temp : metarTempC(metar.rawOb);
+        if (tempC !== null) return { tempC, props: { textDescription: null } };
+    }
+    return null;
+}
 
 export default async function handler(req, res) {
     const office = String(req.query.office ?? '').toUpperCase(); // String(): a repeated ?office= arrives as an array
@@ -49,39 +103,32 @@ export default async function handler(req, res) {
         return sendError(res, 400, 'invalid_office', 'Invalid office');
     }
 
+    // The normal first: the office's table and the month in the office's own
+    // zone (Guam is a day ahead of the server at a month's edge).
+    const now = Date.now();
+    const normals = CLIMATE_NORMALS[office];
+    const normal = normals ? normals[monthIn(OFFICE_TIMEZONES[office], new Date(now))] ?? null : null;
+
     const station = OFFICE_STATIONS[office];
     if (!station) {
-        return res.status(200).json({ temp: null, normal: null, delta: null });
+        return res.status(200).json(noReading(normal));
     }
 
     try {
-        const obsRes = await fetch(`https://api.weather.gov/stations/${station}/observations/latest`, {
-            headers: { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' },
-            signal: AbortSignal.timeout(10000)
-        });
-        if (!obsRes.ok) {
-            return res.status(200).json({ temp: null, normal: null, delta: null });
+        const reading = await readStation(station, now);
+        if (!reading) {
+            return res.status(200).json(noReading(normal));
         }
-        const obsData = await obsRes.json();
-        const tempC = obsData.properties?.temperature?.value;
         // Sky phrase (e.g. "Mostly Cloudy", "Light Rain") drives the atmosphere's
         // condition tint on the client. Optional — null when the station omits it.
-        const condition = obsData.properties?.textDescription || null;
-
-        if (tempC === null || tempC === undefined) {
-            return res.status(200).json({ temp: null, normal: null, delta: null });
-        }
-
-        const tempF = Math.round(tempC * 9/5 + 32);
+        const condition = reading.props.textDescription || null;
+        const tempF = Math.round(reading.tempC * 9 / 5 + 32);
 
         // Sanity check
         if (tempF < -60 || tempF > 140) {
-            return res.status(200).json({ temp: null, normal: null, delta: null });
+            return res.status(200).json(noReading(normal));
         }
 
-        const month = new Date().getMonth(); // 0-indexed
-        const normals = CLIMATE_NORMALS[office];
-        const normal = normals ? normals[month] : null;
         const delta = normal !== null ? tempF - normal : null;
 
         res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=1200');
@@ -96,6 +143,6 @@ export default async function handler(req, res) {
         });
     } catch (err) {
         console.error('Conditions error:', err);
-        return res.status(200).json({ temp: null, normal: null, delta: null });
+        return res.status(200).json(noReading(normal));
     }
 }

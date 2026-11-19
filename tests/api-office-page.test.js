@@ -72,7 +72,8 @@ National Weather Service Los Angeles/Oxnard CA
 
 .SYNOPSIS...03/440 AM.
 Low clouds and fog will continue each night and morning with a chc of
-drizzle near the csts through the weekend across the region.
+drizzle near the csts through the weekend across the region. Afternoon sunshine
+returns inland.
 
 &&
 
@@ -86,6 +87,7 @@ normal in the vlys by Saturday afternoon and evening.
 .LONG TERM (Sunday through Wednesday)...
 Models are in good agreement that troughing returns early next week
 bringing a cooling trend and increasing onshore flow across the area.
+Highs fall a few degrees each day.
 
 &&
 
@@ -154,9 +156,25 @@ describe('GET /api/office-page (SSR /o/<CODE>/ pages)', () => {
         // still the baked per-office document (canonical + JS bootstrap intact)
         expect(res.body).toContain('<link rel="canonical" href="https://plaincast.live/o/LOX/">');
         expect(res.body).toContain('src="/assets/app.js"');
-        // links back into the interactive experience
+        // links back into the interactive experience — but never through the
+        // legacy /?office= form, which now 308s back to this very page
         expect(res.body).toContain('/o/LOX/?view=changelog');
-        expect(res.body).toContain('/?office=LOX');
+        expect(res.body).not.toContain('href="/?office=');
+    });
+
+    it('carries the issuance time as data: <time datetime> in the dateline, dateModified in its only JSON-LD block', async () => {
+        setScenario();
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        expect(res.body).toMatch(/· issued <time datetime="2026-07-03T11:40:00\+00:00">[^<]+<\/time>\./);
+        const blocks = [...res.body.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => JSON.parse(m[1]));
+        expect(blocks.length).toBe(1);
+        expect(blocks[0]['@type']).toBe('WebPage');
+        expect(blocks[0]['@id']).toBe('https://plaincast.live/o/LOX/');
+        expect(blocks[0].dateModified).toBe('2026-07-03T11:40:00+00:00');
+        // dateModified is the only change to the baked <head>.
+        const head = (html) => html.slice(0, html.indexOf('</head>'));
+        expect(head(res.body).replace('\n        "dateModified": "2026-07-03T11:40:00+00:00",', '')).toBe(head(BAKED_LOX));
     });
 
     it('adds a deterministic changelog line when the previous issuance differs (no AI)', async () => {
@@ -266,11 +284,31 @@ describe('office-page helpers', () => {
         expect(() => buildSsrHtml('LOX', 'Los Angeles', 'VFR.', '2026-07-03T11:40:00+00:00', '')).toThrow();
     });
 
+    it('buildSsrHtml labels Guam and American Samoa times as NWS does (ChST, SST)', () => {
+        const text = '.SYNOPSIS...\nTrade winds continue with isolated showers through the weekend across the islands.\n\n$$';
+        // \s: some ICU builds put a narrow no-break space before AM/PM.
+        expect(buildSsrHtml('GUM', 'Guam', text, '2026-11-18T19:51:00+00:00', '')).toMatch(/5:51\sAM ChST/);
+        expect(buildSsrHtml('PPG', 'Pago Pago', text, '2026-11-18T01:28:00+00:00', '')).toMatch(/2:28\sPM SST/);
+        expect(buildSsrHtml('LOX', 'Los Angeles', text, '2026-11-18T21:42:00+00:00', '')).toMatch(/1:42\sPM PST/);
+    });
+
     it('buildSsrHtml escapes NWS-derived text', () => {
         const text = '.SYNOPSIS...\nA <script>alert(1)</script> test paragraph that is long enough to keep here.\n\n$$';
         const html = buildSsrHtml('LOX', 'Los Angeles', text, '2026-07-03T11:40:00+00:00', '');
         expect(html).not.toContain('<script>alert');
         expect(html).toContain('&lt;script&gt;');
+    });
+
+    // The shell-missing branch used to 307 to /?office=<CODE>, which
+    // vercel.json now 308s back to /o/<CODE>/: a loop. It serves this instead.
+    it('minimalOfficeHtml: a real document, self-canonical, H1 inside <main>, Markdown escaped', async () => {
+        const { minimalOfficeHtml } = await import('../api/office-page.js');
+        const html = minimalOfficeHtml('LOX', 'Los Angeles', '# Los Angeles (LOX)\n\n<b>x</b> & more');
+        expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
+        expect(html).toContain('<link rel="canonical" href="https://plaincast.live/o/LOX/">');
+        expect(html).toMatch(/<main>\s*<h1>Los Angeles \(LOX\)/);
+        expect(html).toContain('&lt;b&gt;x&lt;/b&gt; &amp; more');
+        expect(html).not.toContain('?office=');
     });
 
     it('validEdition accepts UUID-ish ids and rejects everything else', () => {

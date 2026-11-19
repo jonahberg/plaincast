@@ -15,6 +15,7 @@ import {
 } from '../shadcn/src/lib/ai.js';
 import { ALERTS_KEY, alertStatusSummary, withAlertsSection } from '../shadcn/src/lib/alert-status.js';
 import { serializeBoot } from '../api/_boot.js';
+import { OFFICE_NAMES } from '../docs/js/offices.js';
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
@@ -302,6 +303,19 @@ describe('touch hit areas (pointer: coarse)', () => {
         expect(header).toContain('pointer-coarse:min-h-11');
     });
 
+    it('select rows (office and edition pickers) are 44px on touch', () => {
+        const select = read('shadcn/src/components/ui/select.jsx');
+        const item = select.slice(select.indexOf('function SelectItem('), select.indexOf('function SelectSeparator('));
+        expect(item).toContain('pointer-coarse:min-h-11');
+    });
+
+    it('phones reach the National Desk from the header (an icon link where md+ has the text nav)', () => {
+        const header = read('shadcn/src/components/Header.jsx');
+        expect(header).toContain('className="md:hidden pointer-coarse:size-11"');
+        expect(header).toMatch(/<a href="\/national\/" aria-label="The National Desk[^"]*">\s*<Newspaper \/>/);
+        expect(header).toContain('<nav aria-label="Site" className="hidden shrink-0 items-center gap-1 md:flex">');
+    });
+
     it('section nav, tabs, edition picker, alert status and intro links have targets', () => {
         expect(read('shadcn/src/components/SectionNav.jsx')).toContain('pointer-coarse:py-3');
         const section = read('shadcn/src/components/ForecastSection.jsx');
@@ -318,7 +332,7 @@ describe('footer office index on phones', () => {
         expect(footer).toContain('<Accordion type="single" collapsible className="mt-2 border-t sm:hidden">');
         expect(footer).toContain('<AccordionTrigger className="min-h-11 ');
         expect(footer).toContain('<ul className="grid grid-cols-2 ');
-        expect(footer).toContain('className="flex min-h-11 items-center"');
+        expect(footer).toContain('className="flex min-h-11 items-center py-1"');
     });
 
     it('keeps the multi-column grid from sm up', () => {
@@ -326,10 +340,15 @@ describe('footer office index on phones', () => {
     });
 
     it('leaves the server-rendered office index alone (crawlers read it)', () => {
-        for (const p of ['shadcn/index.html', 'api/_home-shell.html', 'docs/o/LOT/index.html']) {
+        const LIST = '<ul class="office-index-list mt-4 list-none columns-2 gap-6 text-sm leading-6 sm:columns-3">';
+        // The source keeps the list's markup; its items are regenerated from
+        // OFFICE_NAMES by scripts/app-shell.mjs, so the SERVED shells carry
+        // every office.
+        expect(read('shadcn/index.html')).toContain(LIST);
+        for (const p of ['api/_home-shell.html', 'docs/o/LOT/index.html']) {
             const html = read(p);
-            expect(html).toContain('<ul class="office-index-list mt-4 list-none columns-2 gap-6 text-sm leading-6 sm:columns-3">');
-            expect(html.match(/<li><a href="\/o\/[A-Z]{3}\/"/g).length).toBe(68);
+            expect(html).toContain(LIST);
+            expect(html.match(/<li><a href="\/o\/[A-Z]{3}\/"/g).length).toBe(Object.keys(OFFICE_NAMES).length);
         }
     });
 });

@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "headers": {
+    "cache-control": "public, s-maxage=900, stale-while-revalidate=3600",
+    "content-type": "text/markdown; charset=utf-8",
+    "vary": "Accept, Accept-Encoding"
+  },
+  "body": "# Los Angeles (LOX) — the NWS forecast in plain English\n\n> Area Forecast Discussion · National Weather Service Los Angeles (LOX) · issued Friday, July 3 at 4:40 AM PDT.\n\nThis is the National Weather Service's own discussion with its shorthand expanded — no AI summary, no editing. Discussions are reissued 3 to 4 times a day.\n\nRevised in 1 passage since the 10:38 PM discussion. [See every revision](https://plaincast.live/o/LOX/?view=changelog).\n\n## Synopsis\n\nLow clouds and fog will continue each night and morning with a chance of drizzle near the coasts through the weekend across the region.\n\n## Short Term\n\nMarine layer around 1500 feet deep this morning. A wknd warming trend is expected as high pressure builds over the region with temperatures above normal in the valleys by Saturday afternoon and evening.\n\n## Long Term\n\nModels are in good agreement that troughing returns early next week bringing a cooling trend and increasing onshore flow across the area.\n\n---\n\nFull edition, with the AI plain-English summary beside the annotated original: [https://plaincast.live/o/LOX/](https://plaincast.live/o/LOX/)\n\nSource: [National Weather Service](https://www.weather.gov) Los Angeles (LOX). Every office: [/sitemap.xml](https://plaincast.live/sitemap.xml). RSS: `https://plaincast.live/api/feed?office=LOX`.\n\n_Canonical: https://plaincast.live/o/LOX/_\n\n[Home](https://plaincast.live/) · [The National Desk](https://plaincast.live/national/) · [About](https://plaincast.live/about) · [Contact](https://plaincast.live/contact) · [Privacy](https://plaincast.live/privacy) · [llms.txt](https://plaincast.live/llms.txt)\n"
+}

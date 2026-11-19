@@ -37,7 +37,7 @@
 // status 200, short CDN window. Everything else is SOFT: national totals and
 // the Day 2/Day 3 outlooks each degrade to their own cell's absence, never
 // to a worse page. The shell is a complete page on its own — masthead,
-// colophon, and a typeset index of all 68 local editions — so the worst case
+// colophon, and a typeset index of every local edition — so the worst case
 // is a good page, never an error.
 
 import { readFileSync } from 'node:fs';
@@ -330,8 +330,10 @@ ${cells.join('\n')}
 // The Wire: two lines per forecast office under an active severe warning,
 // worst first (groupDispatches already sorted). Line 1 names the office and
 // its worst event; line 2 says where and until when. Offices Plaincast covers
-// link to their desk; the rest are named but unlinked — there is nowhere to
-// send the reader, and a dead /o/<CODE>/ link would 404.
+// (every NWS forecast office) link to their desk. Anything else — an alert
+// from a national centre, or a code no office claims — is named by its own
+// senderName when it has one, else its bare code, and never linked: there is
+// nowhere to send the reader, and a dead /o/<CODE>/ link would 404.
 //
 // The expiry is office-LOCAL, so it needs the office's zone. An uncovered
 // office has no entry in OFFICE_TIMEZONES, and formatExpiry would silently
@@ -344,7 +346,7 @@ export function buildWireHtml(rows) {
     const items = shown.map(r => {
         const name = r.city
             ? `<a href="/o/${escHtml(r.code)}/">${escHtml(r.city)} (${escHtml(r.code)})</a>`
-            : escHtml(r.code);
+            : escHtml(r.sender || r.code);
         const count = r.count > 1 ? ` ×${escHtml(r.count)}` : '';
         const tz = OFFICE_TIMEZONES[r.code];
         const detail = [digestArea(r.areaDesc), tz ? formatExpiry(r.expires, tz) : null]
@@ -459,7 +461,7 @@ export function buildDeskMarkdown({
         for (const r of shown) {
             const name = r.city
                 ? `[${r.city} (${r.code})](https://plaincast.live/o/${r.code}/)`
-                : r.code;
+                : (r.sender || r.code);
             const count = r.count > 1 ? ` ×${r.count}` : '';
             const tz = OFFICE_TIMEZONES[r.code];
             const detail = [digestArea(r.areaDesc), tz ? formatExpiry(r.expires, tz) : null]

@@ -9,12 +9,14 @@
 //
 // The header regexes mirror the proven client-side parseSections logic
 // (docs/js/app.js / tests/helpers.js), hardened in June 2026 for
-// slash-delimited headers like ".AVIATION /14Z TAFS/...". Kept self-contained
-// here so serverless functions do not depend on frontend modules — the one
-// exception is the shared abbreviation table (docs/js/abbreviations.js, pure
-// data, already a server dependency via api/feed.js).
+// slash-delimited headers like ".AVIATION /14Z TAFS/..." and in November 2026
+// for SLC's ".KEY MESSAGES, Issued 1120 AM MST Wed Nov 18 2026...". The lede
+// (extractLede) uses the page's own takeaway rule, imported from the client's
+// pure AFD module (shadcn/src/lib/afd.js: no browser code; api/translate.js
+// imports its parser the same way), so a shared link and the page agree.
 
 import { BASIC_ABBREVIATIONS } from '../docs/js/abbreviations.js';
+import { parseSections, synopsisTakeaway, takeawaySection } from '../shadcn/src/lib/afd.js';
 
 // ─── regexTranslate ─────────────────────────────────────────────────
 // Deterministic, no-AI plain-English pass: expands NWS abbreviations and
@@ -39,10 +41,10 @@ export function regexTranslate(text) {
 // ".KEY MESSAGE 1..." inline-numbered pseudo-headers (real OKX, inside
 // DISCUSSION) from being mistaken for real section headers now that digits are
 // allowed in the capture class.
-const OFFICE_HEADER_RE = /^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i;
+const OFFICE_HEADER_RE = /^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/|,\s*(?:Issued|Updated)\b[^.]*))?\s*\.{2,3}/i;
 // Plain headers, e.g. ".SYNOPSIS...", ".SHORT TERM /THROUGH TONIGHT/...",
 // ".NEAR TERM (rest of tonight)...", ".WHAT HAS CHANGED..."
-const PLAIN_HEADER_RE = /^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i;
+const PLAIN_HEADER_RE = /^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/|,\s*(?:Issued|Updated)\b[^.]*))?\s*\.{2,3}/i;
 
 // Canonicalize keys mangled by the office-prefix branch.
 const KEY_ALIASES = {
@@ -132,20 +134,22 @@ export function extractSections(productText) {
 }
 
 // ─── extractLede ────────────────────────────────────────────────────
-// Best "takeaway" text for feeds/OG cards. Preference order:
-// SYNOPSIS → KEY MESSAGES (bullets joined into prose) → WHAT HAS CHANGED
-// → UPDATE → DISCUSSION → SHORT TERM / NEAR TERM → first substantial
-// paragraph after header strip. Never returns WMO header junk.
-// Capped at ~500 chars on a sentence boundary.
-const LEDE_ORDER = ['SYNOPSIS', 'KEY MESSAGES', 'WHAT HAS CHANGED', 'UPDATE', 'DISCUSSION', 'SHORT TERM', 'NEAR TERM'];
+// The "takeaway" text for feeds and OG cards, by the page's rule
+// (shadcn/src/lib/afd.js takeawaySection + synopsisTakeaway, over the
+// client's own parse): Key Messages (bullets joined into prose), else at most
+// two sentences of the synopsis, the discussion or the first section, led by
+// a hazard sentence when the opening one names none. When that yields nothing
+// usable, the first substantial paragraph after the header strip. Never
+// returns WMO header junk. Capped at ~500 chars on a sentence boundary.
 const LEDE_MAX = 500;
 
 function sectionProse(text) {
-    // Strip bullet markers ("1) ", "- ", "* ") at line starts so Key
-    // Message lists join into readable prose.
+    // Strip bullet markers ("1) ", "- ", "* ", and both: "- 1. " at CAE,
+    // "- 1) " at LWX) at line starts so Key Message lists join into readable
+    // prose.
     let t = text
         .split('\n')
-        .map(line => line.replace(/^\s*(?:\d+[\).]\s+|[-*]\s+)/, ''))
+        .map(line => line.replace(/^\s*(?:(?:\d+[\).]|[-*•])\s+)+/, ''))
         .join('\n');
     // Strip leading issuance timestamps / boilerplate:
     //   "03/428 PM."  (classic LOX-style header remnant)
@@ -184,21 +188,25 @@ function isMastOrJunk(paragraph) {
 }
 
 export function extractLede(productText) {
-    const sections = extractSections(productText);
-    const byKey = new Map();
-    for (const s of sections) {
-        if (!byKey.has(s.key)) byKey.set(s.key, s.text);
-    }
-    for (const key of LEDE_ORDER) {
-        const raw = byKey.get(key);
-        if (!raw) continue;
-        const prose = sectionProse(raw);
+    if (typeof productText !== 'string' || !productText) return '';
+    const source = takeawaySection(parseSections(productText.replace(/\r\n/g, '\n')).sections);
+    if (source) {
+        // synopsisTakeaway flattens lines, so a list inside a synopsis (AJK:
+        // "Key Messages:\n\n- Quieter weather...") keeps its markers inline;
+        // a card drops them where they start a sentence.
+        const text = source.key === 'Messages'
+            ? source.text
+            : synopsisTakeaway(source.text).replace(/(^|[.:!?])\s*[-*•]\s+(?=\S)/g, '$1 ');
+        const prose = sectionProse(text);
         if (prose && !isMastOrJunk(prose)) return capAtSentenceBoundary(prose);
     }
-    // Fallback: first substantial paragraph after the header strip.
+    // Fallback: first substantial paragraph after the header strip, without
+    // a section header it opens with (".WHAT HAS CHANGED...").
     const stripped = stripWmoHeader(productText);
     for (const para of stripped.split(/\n\s*\n/)) {
-        const p = sectionProse(para);
+        const lead = para.replace(/^\s+/, '');
+        const header = lead.match(OFFICE_HEADER_RE) || lead.match(PLAIN_HEADER_RE);
+        const p = sectionProse(header ? lead.slice(header[0].length) : lead);
         if (p.length < 40) continue;
         if (isMastOrJunk(p)) continue;
         return capAtSentenceBoundary(p);

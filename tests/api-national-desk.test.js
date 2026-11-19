@@ -466,6 +466,15 @@ describe('buildWireHtml', () => {
         expect(html).toContain('wire-extreme');
     });
 
+    test('an uncovered issuer with a senderName is named by it, still unlinked', () => {
+        const html = buildWireHtml([row({ code: 'AT1', city: null, sender: 'NWS National Tsunami Warning Center' })]);
+        expect(html).toContain('<span class="wire-office">NWS National Tsunami Warning Center</span>');
+        expect(html).not.toContain('href="/o/AT1/"');
+        const md = buildDeskMarkdown({ census: [], fullCensus: [], totals: null, quiet: 0, risk: null, summary: null,
+            copy: [], rail: [], rows: [row({ code: 'AT1', city: null, sender: 'NWS National Tsunami Warning Center' })], issuanceTime: null, nextAt: null });
+        expect(md).toContain('- NWS National Tsunami Warning Center — Tornado Warning');
+    });
+
     test('second line: area digest · office-local expiry', () => {
         const html = buildWireHtml([row({
             code: 'PUB', city: 'Pueblo',
@@ -492,11 +501,11 @@ describe('buildWireHtml', () => {
         expect(timeOnly).not.toMatch(/wire-area">\s*·/);
     });
 
-    // An office Plaincast does not cover has no entry in OFFICE_TIMEZONES;
-    // formatExpiry would silently fall back to the SERVER's zone and print a
-    // Cheyenne expiry in whatever timezone Vercel happens to run in.
+    // A code no forecast office claims has no entry in OFFICE_TIMEZONES;
+    // formatExpiry would silently fall back to the SERVER's zone and print its
+    // expiry in whatever timezone Vercel happens to run in.
     test('no expiry line for an office with no known timezone', () => {
-        const html = buildWireHtml([row({ code: 'CYS', city: null, expires: '2026-08-16T01:30:00Z', areaDesc: 'Laramie, WY' })]);
+        const html = buildWireHtml([row({ code: 'ZZZ', city: null, expires: '2026-08-16T01:30:00Z', areaDesc: 'Laramie, WY' })]);
         expect(html).toContain('Laramie, WY');
         expect(html).not.toContain('until');
     });
@@ -609,10 +618,10 @@ describe('GET /api/national-desk (SSR /national/)', () => {
         expect((res.body.match(/Thunderstorms with damaging wind gusts/g) || []).length).toBe(1);
         // the rail: three days
         expect((res.body.match(/desk-rail-day/g) || []).length).toBe(3);
-        // the wire: covered offices link out, uncovered ones do not
+        // the wire: every office in the fixture is a covered desk and links
+        // out (CYS was a bare, unlinked code while the roster had 68)
         expect(res.body).toContain('href="/o/PUB/"');
-        expect(res.body).toContain('CYS');
-        expect(res.body).not.toContain('href="/o/CYS/"');
+        expect(res.body).toContain('<a href="/o/CYS/">Cheyenne (CYS)</a>');
         expect(res.body).toContain('class="wire-area"');
         // the clock (time-dependent — pin the shape, not a literal)
         expect(res.body).toMatch(/Next Day 1 outlook expected by <time datetime="[^"]+" data-local-time>\d{1,2}:\d{2} [AP]M E[SD]T<\/time>/);

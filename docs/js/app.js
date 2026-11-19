@@ -1,8 +1,9 @@
 // ─── Plaincast App (ES Module) ───────────────────────────────────────
 import { GLOSSARY, GLOSSARY_COMPILED } from './glossary.js';
-import { OFFICE_TIMEZONES, OFFICE_COORDS, OFFICE_STATES, OFFICE_SENDER, OFFICE_NAMES, SECTION_NAMES } from './offices.js';
+import { OFFICE_TIMEZONES, OFFICE_COORDS, OFFICE_STATES, OFFICE_SENDER, OFFICE_NAMES, SECTION_NAMES, alertOfficeCode } from './offices.js';
 import { FULL_ABBREVIATIONS } from './abbreviations.js';
 import { computeDiff, renderDiffHTML } from './diff.js';
+import { isUntranslatable } from './untranslatable.js';
 import { confidenceScore, confidenceWord, buildTimelineEntries } from './timeline.js';
 
 let currentOffice = 'LOX';
@@ -55,8 +56,10 @@ async function fetchAlerts(office) {
         const alertMap = {};
         for (const f of (data.features || [])) {
             const p = f.properties;
-            // Match alerts from this office
-            if (senderMatch && !(p.senderName || '').includes(senderMatch)) continue;
+            // Match alerts from this office: the WMO heading's issuing office
+            // (KOKX → OKX), else the sender-name fragment.
+            const issuer = alertOfficeCode(p);
+            if (issuer ? issuer !== office : (senderMatch && !(p.senderName || '').includes(senderMatch))) continue;
             const event = p.event;
             const alertData = {
                 id: p.id || f.id || '',
@@ -95,6 +98,36 @@ let currentAlerts = {};
 let severeAlertActive = false; // an active Severe/Extreme Warning for this office
 
 // ─── Section parsing ───────────────────────────────────────────────
+// Display keys for one product's section headers, in order, never two alike.
+// A key is the SECTION_NAMES name, else the header in sentence case. Where
+// sections would share one (JAX, OUN and HUN on Nov 18 2026: NEAR TERM and
+// SHORT TERM are both "Short Term", so the edition's translation set could
+// never be complete and one section's AI text was lost), the section the name
+// belongs to keeps it (SHORT TERM keeps "Short Term"; else the first) and each
+// other takes its own header in title case ("Near Term"), then an ordinal
+// ("Aviation (2)"). A product without a repeat keeps exactly the keys it had,
+// so stored translations keyed by them still match. The server imports the
+// shadcn copy (api/_translatable.js); forked verbatim into docs/js/app.js and
+// tests/helpers.js (parity-locked).
+function sectionDisplayKeys(rawKeys) {
+    const name = (raw) => SECTION_NAMES[raw] || raw.charAt(0) + raw.slice(1).toLowerCase();
+    const title = (raw) => raw.toLowerCase().replace(/(^|[\s\/(-])([a-z])/g, (m, before, c) => before + c.toUpperCase());
+    const keys = rawKeys.map(name);
+    const owner = new Map();
+    keys.forEach((key, i) => {
+        const prev = owner.get(key);
+        if (prev === undefined || (title(rawKeys[prev]) !== key && title(rawKeys[i]) === key)) owner.set(key, i);
+    });
+    const used = new Set(owner.keys());
+    return keys.map((key, i) => {
+        if (owner.get(key) === i) return key;
+        let own = title(rawKeys[i]);
+        for (let n = 2; used.has(own); n++) own = `${title(rawKeys[i])} (${n})`;
+        used.add(own);
+        return own;
+    });
+}
+
 function parseSections(text) {
     // Remove header lines (product header, timestamps at very top)
     const lines = text.split('\n');
@@ -110,15 +143,15 @@ function parseSections(text) {
         // sections instead of being merged into the previous one. The negative
         // lookahead keeps inline ".KEY MESSAGE 1..." pseudo-headers inside the body.
         // Try with office prefix first (3-letter like LOX, SGX)
-        const headerMatch = line.match(/^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i)
-            || line.match(/^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i);
+        const headerMatch = line.match(/^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/|,\s*(?:Issued|Updated)\b[^.]*))?\s*\.{2,3}/i)
+            || line.match(/^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/|,\s*(?:Issued|Updated)\b[^.]*))?\s*\.{2,3}/i);
         if (headerMatch) {
             if (currentKey) {
                 sections.push({ key: currentKey, text: currentLines.join('\n').trim() });
             }
-            const rawKey = headerMatch[1].trim();
-            // Map to canonical name
-            currentKey = SECTION_NAMES[rawKey] || rawKey.charAt(0) + rawKey.slice(1).toLowerCase();
+            // The raw header for now: display keys are given per product
+            // at the end (sectionDisplayKeys), so no two sections share one.
+            currentKey = headerMatch[1].trim();
             currentLines = [line.replace(headerMatch[0], '').trim()];
             continue;
         }
@@ -168,6 +201,9 @@ function parseSections(text) {
         }
     }
 
+    const keys = sectionDisplayKeys(sections.map(s => s.key));
+    sections.forEach((s, i) => { s.key = keys[i]; });
+
     return { sections, forecaster };
 }
 
@@ -209,6 +245,21 @@ function stripNWSArtifacts(text) {
     return t.trim();
 }
 
+// date.toLocaleString('en-US', options), except for the two US zones Intl
+// has no short name for ("GMT+10", "GMT-11"): NWS writes ChST and SST.
+// Code-identical to shadcn/src/lib/format.js (tests/shadcn-parity.test.js).
+function formatInZone(date, options) {
+    const ZONE_NAMES = { 'Pacific/Guam': 'ChST', 'Pacific/Saipan': 'ChST', 'Pacific/Pago_Pago': 'SST' };
+    const name = options && options.timeZoneName === 'short' ? ZONE_NAMES[options.timeZone] : null;
+    if (!name) return date.toLocaleString('en-US', options);
+    return new Intl.DateTimeFormat('en-US', options).formatToParts(date)
+        .map(p => (p.type === 'timeZoneName' ? name : p.value))
+        .join('')
+        // Newer ICU puts a narrow no-break space (U+202F) before AM/PM; the
+        // reading font has no glyph for it, so it falls back mid-line.
+        .replace(/\u202f/g, ' ');
+}
+
 // Zulu (UTC) times → office-local clock times, for the instant regex
 // translation shown before the AI arrives. Handles HHZ, HHMMZ, single-digit
 // HZ and ranges ("6-9Z", "05-09z", "20z-22z", "15-18Z" — both ends
@@ -233,7 +284,7 @@ function zuluToLocal(text, tz, issuedAt) {
     const fmt = (d) => {
         const m = d.getUTCMinutes();
         try {
-            return d.toLocaleString('en-US', { hour: 'numeric', minute: m > 0 ? '2-digit' : undefined, timeZone: tz, timeZoneName: 'short' })
+            return formatInZone(d, { hour: 'numeric', minute: m > 0 ? '2-digit' : undefined, timeZone: tz, timeZoneName: 'short' })
                 .replace(/[  ]/g, ' ');
         } catch (e) {
             const stdOffsets = { 'America/New_York': -5, 'America/Detroit': -5, 'America/Indiana/Indianapolis': -5, 'America/Chicago': -6, 'America/Denver': -7, 'America/Phoenix': -7, 'America/Los_Angeles': -8, 'America/Anchorage': -9, 'Pacific/Honolulu': -10 };
@@ -403,25 +454,57 @@ function annotateText(text) {
 }
 
 // ─── Key Takeaway extraction ────────────────────────────────────────
+// The synopsis fallback: at most two of the forecaster's own sentences,
+// verbatim and in order, led by the first hazard/impact sentence when the
+// opening one names none. Rule and rationale: shadcn/src/lib/afd.js
+// synopsisTakeaway (code-identical, tests/shadcn-parity.test.js).
+function synopsisTakeaway(text) {
+    const HAZARD = /\b(?:thunder\w*|t-?storms?|lightning|tornado\w*|waterspouts?|funnel clouds?|hail\w*|severe|storms?|flood\w*|inundation|(?:heavy|widespread|significant|excessive|torrential|soaking|prolonged) (?:\w+ )?(?:rain\w*|snow\w*|precipitation|showers|downpours)|inch(?:es)? of (?:new )?(?:rain|snow)|atmospheric rivers?|debris flows?|mud ?slides?|land ?slides?|rock ?slides?|burn scars?|avalanche\w*|blizzard\w*|whiteouts?|snow squalls?|(?:mountain|accumulating|lake[- ]effect|pass[- ]level|wet) snow\w*|snow(?:fall)? accumulations?|freeze|freezing (?:rain|drizzle|fog|spray|temperatures)|below freezing|sleet|ice|icy|gusty|gusts?|(?:strong|high|damaging) (?:\w+ )?winds?|damag\w*|(?:extreme|excessive|dangerous|record) heat|heat (?:advisory|warning|risk|index)|heat ?waves?|(?:very|dangerously|extremely) hot|(?:extreme|bitter(?:ly)?|dangerous(?:ly)?) cold|arctic (?:air|blast|outbreak)|wind chills?|frost|record(?:s|-breaking)?|(?:high|large|big|dangerous) (?:\w+ )?(?:surf|swells?|waves|breakers)|(?:hazardous|rough|high|steep|dangerous) seas|rip currents?|sneaker waves?|storm surge|king tides?|high tides?|gales?|hurricane\w*|tropical (?:storms?|depressions?|cyclones?)|typhoons?|dense fog|blowing (?:dust|snow)|dust storms?|haboobs?|smoke|air quality|fire\w*|red flag|warnings?|watch(?:es)?|advisor(?:y|ies)|hazard\w*|dangerous|life[- ]threatening|(?:significant|major|high) impacts?|high[- ]impact|impactful)\b/i;
+    const FADING = /\b(?:diminish\w*|decreas\w*|taper\w*|weaken\w*|subsid\w*|eas(?:e|es|ing)|expir\w*|cancel\w*|below (?:advisory|warning)|no longer|no|not|unlikely|(?:is|are|remains?|stays?) low)\b/i;
+    const LEANS_BACK = /^(?:this|these|that|those|it|its|they|their|additionally|otherwise|however|meanwhile|then|but|and|along with|in addition)\b|^(?:\S+\s+){0,3}of (?:these|those|this|that)\b|\b(?:also|as well)\b|\bthe (?:second|third|latter|former)\b/i;
+    let t = String(text || '')
+        .replace(/^\s*(?:\d{1,2}\/\d{3,4}\s*(?:AM|PM|Z)?\.?\s*)+/i, '')
+        .replace(/^\s*Issued at \d.+?\d{4}\s*/i, '');
+    t = t.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
+    const sentences = t.match(/\S[\s\S]*?[.!?]+(?=\s|$)/g);
+    if (!sentences) return t.substring(0, 200);
+    const names = s => HAZARD.test(s) && !FADING.test(s);
+    let lead = 0;
+    if (!/^key messages?\b/i.test(t) && !names(sentences[0])) {
+        const i = sentences.slice(0, 3).findIndex(names);
+        if (i > 0) {
+            lead = i;
+            if (lead === sentences.length - 1 || LEANS_BACK.test(sentences[lead])) lead--;
+            if (lead > 0 && LEANS_BACK.test(sentences[lead])) lead = 0;
+        }
+    }
+    return sentences.slice(lead, lead + 2).join(' ');
+}
+
+// The section the takeaway comes from: Key Messages, else the synopsis, the
+// discussion or the first section. One rule for the page (extractTakeaway)
+// and the server's lede for share cards and RSS (api/_afd-sections.js
+// extractLede, which imports the shadcn copy). Forked verbatim into
+// docs/js/app.js and tests/helpers.js (parity-locked).
+function takeawaySection(sections) {
+    return sections.find(s => s.key === 'Messages')
+        || sections.find(s => s.key === 'Synopsis')
+        || sections.find(s => s.key === 'Discussion')
+        || sections[0]
+        || null;
+}
+
 function extractTakeaway(sections) {
+    const source = takeawaySection(sections);
+    if (!source) return '';
     // Prefer KEY MESSAGES section (used by many NWS offices like LOT)
-    const messagesSection = sections.find(s => s.key === 'Messages');
-    if (messagesSection) {
-        const text = messagesSection.text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
+    if (source.key === 'Messages') {
+        const text = source.text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
         // KEY MESSAGES are already concise bullet points — use them directly
         return stripAIArtifacts(translateToPlainEnglish(text).replace(/<\/?p>/g, ''));
     }
     // Fall back to synopsis or discussion, or first section
-    const synSection = sections.find(s => s.key === 'Synopsis')
-        || sections.find(s => s.key === 'Discussion')
-        || sections[0];
-    if (!synSection) return '';
-    // Strip leading "Issued at..." timestamps that some offices embed in DISCUSSION
-    let text = synSection.text.replace(/^Issued at \d.+?\d{4}\s*/i, '');
-    text = text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
-    const sentences = text.match(/[^.!?]+[.!?]+/g);
-    if (!sentences) return text.substring(0, 200);
-    const takeaway = sentences.slice(0, 2).join(' ').trim();
+    const takeaway = synopsisTakeaway(source.text);
     // Quick cleanup
     return stripAIArtifacts(translateToPlainEnglish(takeaway).replace(/<\/?p>/g, ''));
 }
@@ -1097,6 +1180,7 @@ function reorderSections(sections, office, hasAlerts) {
         'Messages': 1.5,
         'What has changed': 1.8,
         'Update': 1.9,
+        'Near Term': 2,
         'Short Term': 2,
         'Discussion': 2,
         'Long Term': 3,
@@ -1152,13 +1236,18 @@ function render(sections, productContext = {}) {
     const NARRATIVE = ['Synopsis', 'Discussion', 'Short Term', 'Near Term', 'Long Term', 'Update'];
     const ledeKey = (sections.find(s => NARRATIVE.includes(s.key)) || {}).key;
 
-    // Render sections with regex translation first (instant), then upgrade with AI lazily
+    // Render sections with regex translation first (instant), then upgrade with AI lazily.
+    // Tables and sections under 25 words are never sent to the model
+    // (untranslatable.js, the rule the server shares): no request and no
+    // "Summarizing…", just the regex-expanded text.
     sectionsEl.innerHTML = sections.map(s => {
         let plainHtml;
         const hiddenAttr = isEmptyAlerts(s) ? ' style="display:none"' : '';
         const ledeCls = s.key === ledeKey ? ' lede-section' : '';
         if (s.key === 'Active Alerts') {
             plainHtml = formatAlerts(s.text, currentAlerts);
+        } else if (isUntranslatable(s.key, s.text)) {
+            plainHtml = translateToPlainEnglish(s.text, productContext.issuanceTime);
         } else {
             // Show regex translation immediately with AI loading indicator
             const regexHtml = translateToPlainEnglish(s.text, productContext.issuanceTime);
@@ -1194,7 +1283,7 @@ function render(sections, productContext = {}) {
         currentTranslationObserver = null;
     }
 
-    const toTranslate = sections.filter(s => s.key !== 'Active Alerts');
+    const toTranslate = sections.filter(s => s.key !== 'Active Alerts' && !isUntranslatable(s.key, s.text));
 
     async function upgradeSection(s) {
         const sectionId = safeId(s.key);
@@ -1549,7 +1638,7 @@ async function renderAFD(prodData, office) {
     if (folioOffice) folioOffice.textContent = `NWS ${office}`;
 
     // "Issued <time> · <ago>" lives in the lede meta line, beside confidence.
-    issuePrefix = `Issued ${issueTime.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' })}`;
+    issuePrefix = `Issued ${formatInZone(issueTime, { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' })}`;
     document.getElementById('issue-time').textContent = `${issuePrefix} · ${timeAgo(issueTime)}`;
 
     // Byline — the forecaster, in their own newsroom
@@ -2209,7 +2298,7 @@ function renderHistorySelector(items, currentId) {
         items.forEach((item, i) => {
             const opt = document.createElement('option');
             opt.value = item.id;
-            const label = item.time.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', weekday: 'short', month: 'short', day: 'numeric', timeZone: tz, timeZoneName: 'short' });
+            const label = formatInZone(item.time, { hour: 'numeric', minute: '2-digit', weekday: 'short', month: 'short', day: 'numeric', timeZone: tz, timeZoneName: 'short' });
             opt.textContent = i === 0 ? 'Latest edition' : `${label} (${timeAgo(item.time)})`;
             if (inWindow && item.id === currentId) opt.selected = true;
             sel.appendChild(opt);
@@ -2286,7 +2375,7 @@ async function fetchTimelineProducts(items) {
 function timelineDateline(time, tz) {
     return {
         date: time.toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: tz }),
-        clock: time.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' }),
+        clock: formatInZone(time, { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' }),
         edition: editionName(localHour(time, tz)),
     };
 }

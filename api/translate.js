@@ -6,11 +6,14 @@ import { generateText } from 'ai';
 import { OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { sendError } from './_errors.js';
-import { extractSections } from './_afd-sections.js';
+import { displaySections } from './_translatable.js';
+import { HEADER_STAMP_RE, ISSUED_LINE_RE, isUntranslatable, stripHeaderStamp } from '../docs/js/untranslatable.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 // The client parser, imported so verification matches what browsers send.
 // Pure module (relative imports only); shadcn/package.json is type:module.
 import { parseSections } from '../shadcn/src/lib/afd.js';
+// Zone names as NWS writes them (ChST, SST), the mapping the client uses.
+import { formatInZone, shortZoneName } from '../shadcn/src/lib/format.js';
 
 // Translation cache: keyed on sha256(whitespace-normalized text + canonical
 // section + office), 4-hour TTL
@@ -34,8 +37,11 @@ function cacheKey(text, sectionKey, office) {
 // caching. The prompt gets the canonical label too (promptSectionLabel), never
 // the raw one: the raw label isn't in the cache key, so letting it steer the
 // output would let one caller poison the entry every reader shares.
+// "Near Term" is a display name too: a NEAR TERM beside a SHORT TERM keeps its
+// own key (shadcn/src/lib/afd.js sectionDisplayKeys), and its label must not
+// fold back into "Short Term".
 const DISPLAY_SECTIONS = new Map(
-    Object.values(SECTION_NAMES).map(v => [v.toUpperCase(), v])
+    [...Object.values(SECTION_NAMES), 'Near Term'].map(v => [v.toUpperCase(), v])
 );
 export function canonicalSectionKey(label) {
     if (typeof label !== 'string' || !label.trim()) return 'OTHER';
@@ -174,6 +180,10 @@ function normalizeForMatch(s) {
 // signatures, which extractSections does not), then the server parser, so a
 // section either parser produces verifies. Measured against the live latest
 // AFD of all 68 offices: see tests/translate-section-parity.test.js.
+//
+// A section the shared rule never translates (docs/js/untranslatable.js:
+// tables and sections under 25 words) is not indexed, so a client that still
+// asks for one (an old build) gets the 403 and keeps the regex text.
 const UNTRANSLATED_SECTIONS = new Set(['Active Alerts']);
 
 export function buildSectionIndex(productText) {
@@ -182,6 +192,7 @@ export function buildSectionIndex(productText) {
     const add = (key, text) => {
         const sectionKey = canonicalSectionKey(key);
         if (UNTRANSLATED_SECTIONS.has(sectionKey)) return;
+        if (isUntranslatable(key, text)) return;
         const n = normalizeForMatch(text);
         if (n.length < 20 || index.has(n)) return;
         index.set(n, sectionKey);
@@ -194,7 +205,8 @@ export function buildSectionIndex(productText) {
     try {
         for (const s of parseSections(productText).sections) add(s.key, s.text);
     } catch { /* fall through to the server parser */ }
-    for (const s of extractSections(productText)) add(s.key, s.text);
+    // The server parser's sections under the same per-product display keys.
+    for (const s of displaySections(productText)) add(s.display, s.text);
     return index;
 }
 
@@ -265,7 +277,7 @@ function getLocalDateParts(issueDate, timeZone) {
 export function getTranslationCalendarContext(office, issuanceTime) {
     const timeZone = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
     const issueDate = getSafeIssueDate(issuanceTime);
-    const localIssueTime = new Intl.DateTimeFormat('en-US', {
+    const localIssueTime = formatInZone(issueDate, {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
@@ -274,7 +286,7 @@ export function getTranslationCalendarContext(office, issuanceTime) {
         minute: '2-digit',
         timeZone,
         timeZoneName: 'short',
-    }).format(issueDate);
+    });
 
     const { year, monthName, day } = getLocalDateParts(issueDate, timeZone);
     const monthIndex = new Date(`${monthName} 1, ${year}`).getMonth();
@@ -331,9 +343,13 @@ const ZULU_RE = /(?<![\w.])(?:(\d{1,2})\/)?(\d{4}|\d{1,2})(?:[-\u2013](\d{4}|\d{
 const ZULU_LOOKBACK_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// 24Z / 2400Z is the END of its UTC day ("18-24Z", JAX Aviation, Nov 18
+// 2026): the clock of 00Z, flagged `eod` so a day it names (a DD/ prefix, a
+// weekday, the start of its range) is the day it ends.
 function parseZuluClock(tok) {
     const h = Number(tok.length === 4 ? tok.slice(0, 2) : tok);
     const m = tok.length === 4 ? Number(tok.slice(2)) : 0;
+    if (h === 24 && m === 0) return { h: 0, m: 0, eod: true };
     return h > 23 || m > 59 ? null : { h, m };
 }
 
@@ -346,7 +362,7 @@ function localParts(date, timeZone) {
     return {
         clock: parts.minute === '00' ? parts.hour : `${parts.hour}:${parts.minute}`,
         ampm: (parts.dayPeriod || '').toUpperCase(),
-        tz: parts.timeZoneName,
+        tz: shortZoneName(date, timeZone),
         weekday: parts.weekday,
         dateKey: `${parts.year}-${parts.month}-${parts.day}`,
     };
@@ -365,23 +381,50 @@ function localParts(date, timeZone) {
 //                 with the weekday of its instant when that local date differs
 //                 from the issuance's: the rule that put "Thu" on LOX's 1717Z.
 // Defaults by mode. Office mode (no explicit timeZone: /api/translate and
-// translate-issuance, which pass no options) pins FULL weekday names only
-// ("18Z sat imagery" is satellite, not Saturday), never pins a weekday
-// followed by a part of day ("06Z Friday night" is Friday night local, i.e.
-// Saturday 06Z: the text names the day, the annotation gives the clock), and
-// never infers. Explicit-zone mode (the National Desk) keeps its earlier
-// rules: pins only when asked, inferred weekdays, because its prompt
+// translate-issuance, which pass no options) pins a full weekday name in any
+// case, and a CAPITALISED abbreviation (Mon, Tue, Tues, Wed, Thu, Thur, Thurs,
+// Fri, Sat, Sun, or the same in capitals): SGX Aviation, Nov 18 2026, reached
+// the model as "after 00Z (4 PM PST) Fri" and the AI wrote "after 4 PM
+// Friday"; 00Z Friday is 4 PM PST Thursday. It does not pin a lowercase one
+// ("18Z sat imagery" is satellite), a Sat or Sun followed by a satellite or
+// data word ("18Z Sat imagery shows"), a weekday followed by a part of day
+// ("06Z Friday night" is Friday night local, i.e. Saturday 06Z: the text
+// names the day, the annotation gives the clock), and it never infers. A
+// capitalised Sun before other words pins ("12Z Sun model run" is Sunday's
+// run; its local label is right whichever week it was). An unpinned weekday
+// keeps its place after the annotation ("18Z (12 PM CST) sat imagery").
+// Explicit-zone mode (the National Desk) keeps its earlier rules: any weekday
+// form pins when asked, inferred weekdays, because its prompt
 // (api/national-lede.js) still says "no weekday means the issuance's day".
 const ZULU_WEEKDAY = 'Sun(?:day)?|Mon(?:day)?|Tue(?:s(?:day)?)?|Wed(?:nesday)?|Thu(?:r(?:s(?:day)?)?)?|Fri(?:day)?|Sat(?:urday)?';
-const ZULU_FULL_WEEKDAY = 'Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday';
 // The trailing lookaheads keep an already-annotated "12Z Friday (...)" whole.
 const zuluWeekdayRe = (alt) => new RegExp(
     `(?<![\\w.])(?:(\\d{1,2})\\/)?(\\d{4}|\\d{1,2})(?:[-\\u2013](\\d{4}|\\d{1,2}))?Z\\b`
     + `(?:[ \\t]+(${alt})\\b(?!\\s*\\())?(?!\\s*\\()(?![ \\t]+(?:${alt})\\b\\s*\\()`, 'gi');
 const ZULU_WEEKDAY_RE = zuluWeekdayRe(ZULU_WEEKDAY);
-const ZULU_FULL_WEEKDAY_RE = zuluWeekdayRe(ZULU_FULL_WEEKDAY);
+// Office mode: the same token, but a weekday is taken unless the ANNOTATOR's
+// own output follows it ("(4 PM PST Thu)", "(1-4 AM CDT)"), so a
+// forecaster's parenthesis after the weekday ("06Z Sat (30% chance)") does
+// not leave the token unannotated with a bare UTC weekday after it. With no
+// weekday, any parenthesis still means the token is already explained.
+const ZULU_ANNOTATION = '\\(\\d{1,2}(?::\\d{2})?(?:[ \\t]*[AP]M)?(?:-\\d{1,2}(?::\\d{2})?)?[ \\t]*[AP]M\\b';
+const ZULU_OFFICE_RE = new RegExp(
+    `(?<![\\w.])(?:(\\d{1,2})\\/)?(\\d{4}|\\d{1,2})(?:[-\\u2013](\\d{4}|\\d{1,2}))?Z\\b`
+    + `(?:[ \\t]+(${ZULU_WEEKDAY})\\b(?!\\s*${ZULU_ANNOTATION})|(?!\\s*\\())`
+    + `(?![ \\t]+(?:${ZULU_WEEKDAY})\\b\\s*${ZULU_ANNOTATION})`, 'gi');
 const WEEKDAY_PREFIX = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PART_OF_DAY_AFTER_RE = /^[ \t]+(?:morning|afternoon|evening|night|overnight)\b/i;
+// Office mode: which weekday words after a token pin it (see above).
+const FULL_WEEKDAY_RE = /^(?:Sun|Mon|Tues|Wednes|Thurs|Fri|Satur)day$/i;
+const CAPITALISED_ABBREV_RE = /^(?:Sun|Mon|Tues?|Wed|Thu(?:rs?)?|Fri|Sat|SUN|MON|TUES?|WED|THU(?:RS?)?|FRI|SAT)$/;
+// Satellite and display nouns, and what imagery does ("shows"). Not weather
+// words: "after 00Z Sun winds become westerly" is Sunday.
+const SAT_SUN_DATA_AFTER_RE = /^[ \t]+(?:imagery|images?|loops?|pics?|pictures?|photos?|data|derived|retrievals?|estimates?|animations?|presentation|channels?|scans?|shows?|showed|showing|depicts?|depicted|reveals?|revealed|indicates?|indicated|suggests?|suggested)\b/i;
+function officePin(wdName, after) {
+    if (FULL_WEEKDAY_RE.test(wdName)) return true;
+    if (!CAPITALISED_ABBREV_RE.test(wdName)) return false;
+    return !(/^s(?:at|un)$/i.test(wdName) && SAT_SUN_DATA_AFTER_RE.test(after));
+}
 
 export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOverride, weekdayPins, inferWeekday } = {}) {
     const timeZone = zoneOverride || OFFICE_TIMEZONES[office];
@@ -403,27 +446,36 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
         return [-1, 0, 1].map(off => Date.UTC(y, mo, d0 + off, h, m))
             .reduce((best, t) => (Math.abs(t - b) < Math.abs(best - b) ? t : best));
     };
-    const onDayOfMonth = ({ h, m }, dom) => {
-        // The nearest UTC date with that day-of-month (a DD/ prefix names it).
+    const onDayOfMonth = ({ h, m, eod }, dom) => {
+        // The nearest UTC date with that day-of-month (a DD/ prefix names it);
+        // 24Z is the end of that date.
         for (const off of [0, 1, -1, 2, -2, 3, -3, 4, 5, 6, 7, 8, 9, 10]) {
-            const t = Date.UTC(y, mo, d0 + off, h, m);
-            if (new Date(t).getUTCDate() === dom) return t;
+            const day = Date.UTC(y, mo, d0 + off);
+            if (new Date(day).getUTCDate() === dom) return Date.UTC(y, mo, d0 + off, h, m) + (eod ? DAY_MS : 0);
         }
         return null;
     };
     // The first UTC instant at that clock time on the named UTC weekday, from
-    // the same 1 h lookback as an unpinned token.
-    const onWeekday = ({ h, m }, wd) => {
+    // the same 1 h lookback as an unpinned token (24Z: the end of that day).
+    const onWeekday = ({ h, m, eod }, wd) => {
+        const dayOf = (t) => new Date(t - (eod ? DAY_MS : 0)).getUTCDay();
         let t = firstAtOrAfter({ h, m }, base.getTime() - ZULU_LOOKBACK_MS);
-        for (let i = 0; i < 7 && new Date(t).getUTCDay() !== wd; i++) t += DAY_MS;
+        for (let i = 0; i < 7 && dayOf(t) !== wd; i++) t += DAY_MS;
         return t;
+    };
+    // A range's end: the first occurrence at or after its start, or for 24Z
+    // the end of the start's UTC day ("18-24Z", "00-24Z").
+    const rangeEnd = (c2, start) => {
+        if (!c2.eod) return firstAtOrAfter(c2, start);
+        const s = new Date(start);
+        return Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate() + 1);
     };
     // withDay: the day is known, so print the weekday where the local date
     // is not the issuance's.
     const label = (p, withDay) => `${p.clock} ${p.ampm} ${p.tz}`
         + (withDay && p.dateKey !== issueDateKey ? ` ${p.weekday}` : '');
 
-    const re = !pins ? ZULU_RE : (officeMode ? ZULU_FULL_WEEKDAY_RE : ZULU_WEEKDAY_RE);
+    const re = !pins ? ZULU_RE : (officeMode ? ZULU_OFFICE_RE : ZULU_WEEKDAY_RE);
     return text.replace(re, (tok, dd, t1, t2, ...rest) => {
         // ZULU_WEEKDAY_RE has one more capture group (the weekday) than ZULU_RE.
         const [wdName, offset, whole] = pins ? rest : [undefined, ...rest];
@@ -433,10 +485,12 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
         const dom = dd === undefined ? null : Number(dd);
         if (dom !== null && (dom < 1 || dom > 31)) return tok;
         const after = whole.slice(offset + tok.length);
-        // Office mode: "06Z Friday night" is not a pin; the annotation goes
-        // before the weekday ("06Z (12 AM CST) Friday night").
-        const partOfDay = officeMode && wdName !== undefined && PART_OF_DAY_AFTER_RE.test(after);
-        const wd = wdName === undefined || partOfDay ? -1 : WEEKDAY_PREFIX.indexOf(wdName.slice(0, 3).toLowerCase());
+        // Office mode: a weekday that does not pin ("06Z Friday night", "18Z
+        // sat imagery") stays after the annotation ("06Z (12 AM CST) Friday
+        // night").
+        const unpinned = officeMode && wdName !== undefined
+            && (PART_OF_DAY_AFTER_RE.test(after) || !officePin(wdName, after));
+        const wd = wdName === undefined || unpinned ? -1 : WEEKDAY_PREFIX.indexOf(wdName.slice(0, 3).toLowerCase());
         const pinned = wd !== -1 && dom === null;
         const tafLabel = /^\s*TAFS?\b/i.test(after);
         // The text fixes the day (DD/, a pinned weekday, a TAF cycle label),
@@ -450,7 +504,7 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
         if (!c2) {
             local = pinned ? `${p1.clock} ${p1.ampm} ${p1.tz} ${p1.weekday}` : label(p1, knownDay);
         } else {
-            const p2 = localParts(new Date(firstAtOrAfter(c2, start)), timeZone);
+            const p2 = localParts(new Date(rangeEnd(c2, start)), timeZone);
             if (p1.tz === p2.tz && p1.dateKey === p2.dateKey) {
                 const span = p1.ampm === p2.ampm
                     ? `${p1.clock}-${p2.clock} ${p1.ampm}`
@@ -460,39 +514,18 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
                 local = `${label(p1, knownDay)}-${label(p2, knownDay)}`;
             }
         }
-        if (!partOfDay) return `${tok} (${local})`;
+        if (!unpinned) return `${tok} (${local})`;
         const zulu = tok.slice(0, tok.length - wdName.length).replace(/[ \t]+$/, '');
         return `${zulu} (${local})${tok.slice(zulu.length)}`;
     });
 }
 
-// Forecaster header stamp at the top of a section: "11/220 PM." = day 11,
-// 2:20 PM (LOX writes one after every header; "03/428 PM.", "11/459 PM.").
-// The model read "11/22" out of it as a date (LOX Long Term, Nov 11 2026:
-// "Sunday, November 22"; that Sunday was Nov 15), so it leaves the PROMPT
-// only. The cache key and AFD verification keep the exact section text, which
-// is parity-locked to the client parser. Same shape as the lede stripper in
-// _afd-sections.js sectionProse, but AM/PM is required: a Zulu stamp
-// ("12/0454Z.") already gets a correct local time from annotateZuluTimes.
-// Anchored to the start of the text (no m flag): a mid-text "11/220" stays.
-const HEADER_STAMP_RE = /^\s*(?:\d{1,2}\/\d{3,4}\s*(?:AM|PM)\b\.?\s*)+/i;
-// Most offices open a section with "Issued at 528 PM CST Wed Nov 18 2026"
-// (MFL Key Messages: "Updated at 635 PM EST ..."), and the model restated it
-// (HGX Aviation, Nov 18 2026: "This aviation forecast, issued Wednesday
-// evening, November 18, 2026, at 5:28 PM Central time, warns..."). The page
-// already shows the issue time, so the line leaves the PROMPT too. Only that
-// exact header shape at the head of the section ("at" optional: MKX writes
-// "Issued 545 AM CDT Mon Sep 28 2026"), after any qualifier lines such as
-// "(00Z TAF Issuance)" or "(Rest of today through Thursday)", which are
-// content and stay (group 1).
-// Group 2 is the time itself ("528 PM CST Wed Nov 18 2026"), for sectionWrittenTime.
-const ISSUED_LINE_RE = /^(\s*(?:\([^()\n]*\)[ \t]*\r?\n\s*)*)(?:Issued|Updated)(?:[ \t]+at)?[ \t]+(\d{1,4}[ \t]*(?:AM|PM)[ \t]+[A-Z]{2,5}[ \t]+(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)[ \t]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[ \t]+\d{1,2}[ \t]+\d{4})[ \t]*(?:\r?\n\s*|$)/i;
-
-export function stripHeaderStamp(text) {
-    if (typeof text !== 'string') return text;
-    const out = text.replace(HEADER_STAMP_RE, '').replace(ISSUED_LINE_RE, '$1');
-    return out.trim() ? out : text;
-}
+// The section's leading stamp ("11/220 PM.") and "Issued at ..." line leave
+// the PROMPT only (the cache key and AFD verification keep the exact text).
+// The regexes and stripHeaderStamp live in docs/js/untranslatable.js, whose
+// short-section rule counts words without them; re-exported here for the
+// callers that always imported them from this module.
+export { stripHeaderStamp };
 
 // When the section itself was written, for the prompt's reference block
 // (Nov 18 2026). The stamps above leave the model input, but a section is
@@ -545,9 +578,9 @@ export function sectionWrittenTime(text, office, issuanceTime) {
         if (t === null || Number(hh) > 23 || Number(mm) > 59) {
             return null;
         }
-        const local = new Intl.DateTimeFormat('en-US', {
+        const local = formatInZone(new Date(t), {
             timeZone, weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-        }).format(new Date(t)).replace(/[  ]/g, ' ');
+        }).replace(/[  ]/g, ' ');
         return `This section was written: ${local} (${WRITTEN_RELATIVE})`;
     }
     return null;
@@ -999,6 +1032,12 @@ export default async function handler(req, res) {
         }
         if (text.length > DEGRADED_TEXT_MAX) {
             return sendError(res, 400, 'invalid_request', 'Text too long');
+        }
+        // No product to match against: the shared rule judges the client's
+        // own label and text (an old client asking for a table or a short
+        // note gets the same refusal as when NWS is up).
+        if (isUntranslatable(sectionLabel || '', text)) {
+            return sendError(res, 403, 'forbidden', 'This section is not translated');
         }
     }
 

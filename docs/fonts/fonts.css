@@ -5,8 +5,10 @@
 
    Subsets carry latin + typographic punctuation and preserve the real
    OpenType features styles.css relies on:
-     · Source Serif 4  — smcp, c2sc, onum, lnum, tnum, zero (true small
-       caps + oldstyle figures; no more browser-synthesized small caps)
+     · Source Serif 4  — roman: since Nov 2026 (scripts/subset-reading-font.py)
+       only the defaults + pnum/tnum the live site uses; its smcp, c2sc,
+       onum and zero are gone, so this legacy client now gets synthesized
+       small caps and lining figures. Italic: smcp-free, onum/tnum/zero kept.
      · JetBrains Mono  — zero (slashed zero), lining/tabular by default
      · Fraunces        — variable opsz / SOFT / WONK axes kept live
    Family names match styles.css exactly; it needs no changes.

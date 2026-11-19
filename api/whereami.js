@@ -26,7 +26,12 @@ export default async function handler(req, res) {
         });
         if (!r.ok) return res.status(204).end();
         const data = await r.json();
-        const office = data?.properties?.gridId;
+        // cwa is the forecast office whose area holds the point. gridId is
+        // only the forecast GRID's id, which is not always an office: in
+        // Alaska it can be a sub-grid (Anchorage → AER, the Aleutians → ALU,
+        // both under AFC), and American Samoa has no grid at all (gridId
+        // null, cwa PPG). Verified against /points on 2026-11-18.
+        const office = data?.properties?.cwa || data?.properties?.gridId;
         const city = OFFICE_NAMES[office];
         if (!city) return res.status(204).end();
         return res.status(200).json({ office, city });

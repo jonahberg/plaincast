@@ -25,10 +25,18 @@
 
 import { OFFICE_NAMES, OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { escHtml } from '../scripts/build-offices.mjs';
+// ChST / SST where Intl prints "GMT+10" / "GMT-11" (Guam, American Samoa).
+import { formatInZone } from '../shadcn/src/lib/format.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { regexTranslate } from './_afd-sections.js';
-import { loadTemplate, editionSections as fullEdition, wantsBoot } from './office-page.js';
-import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot } from './_boot.js';
+import {
+    loadTemplate, editionSections as fullEdition, wantsBoot,
+    aiForSections, aiSectionBody, issuedHtml, withAi, withDateModified, HOME_PAGE_ID,
+    STORE_CACHE, CACHE_TAG_HEADER,
+} from './office-page.js';
+import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot, SHORT_CACHE } from './_boot.js';
+import { AI_FOR_AGENTS, HOME_TAG, STORE_RENDER, officeTag, readRenderableEdition, switchOn } from './_store.js';
+import { tagResponse } from './_shared-cache.js';
 import { renderHomeMarkdown } from './_edition-markdown.js';
 import { sendNegotiated, HTML, MARKDOWN, send406, setVary, selectRepresentation, acceptHeader } from './_negotiate.js';
 import { sendError } from './_errors.js';
@@ -49,9 +57,12 @@ const MAX_SECTIONS = 2;
 
 const FULL_CACHE = 'public, s-maxage=900, stale-while-revalidate=3600';
 
-// `/?office=OKX` is the legacy form documented in llms.txt and still linked
-// from the SSR note. Honour it, but only for offices that exist — the value is
-// echoed into HTML, so it is validated against OFFICE_NAMES, never trusted.
+// `/?office=OKX` is the legacy deep link. vercel.json 308s it to /o/OKX/
+// before this function runs, for every office code in any letter case. What
+// still reaches here — an unknown or malformed code, or `vercel dev`, which
+// does not evaluate `has` — renders as before: a real office's edition,
+// validated against OFFICE_NAMES (the value is echoed into HTML, never
+// trusted), else the default.
 export function resolveOffice(raw) {
     const code = String(raw || '').toUpperCase();
     return OFFICE_NAMES[code] ? code : DEFAULT_OFFICE;
@@ -65,7 +76,7 @@ function formatIssued(iso, tz) {
     try {
         const d = new Date(iso);
         if (Number.isNaN(d.getTime())) return null;
-        return d.toLocaleString('en-US', {
+        return formatInZone(d, {
             weekday: 'long', month: 'long', day: 'numeric',
             hour: 'numeric', minute: '2-digit',
             timeZone: tz, timeZoneName: 'short',
@@ -83,36 +94,55 @@ export function editionSections(productText) {
 // The homepage's #sections content: a standfirst that says what this site is
 // (the part an agent most needs and JavaScript cannot be relied on to deliver),
 // then the decoded edition, then a pointer to the canonical office page.
-export function buildHomeSsr(code, city, sections, issued) {
+// `issuanceTime` (the NWS ISO instant) becomes <time datetime> in the
+// dateline. `ai` only with PLAINCAST_AI_FOR_AGENTS=1 (see api/office-page.js
+// buildSsrHtml): absent, the output is the switch-off page.
+export function buildHomeSsr(code, city, sections, issued, { ai = null, issuanceTime = null } = {}) {
     if (sections.length === 0) throw new Error('home: no renderable sections');
+    const offices = Object.keys(OFFICE_NAMES).length;
 
-    const standfirst =
-        `        <p class="ssr-standfirst">Plaincast decodes the National Weather Service's Area Forecast ` +
-        `Discussion — the real forecast, written 3 to 4 times a day by the meteorologist on shift — into ` +
-        `plain English. The discussion is where a forecaster explains their reasoning: which models ` +
-        `disagree, what they are watching, and how confident they are. Below is the current edition for ` +
-        `${escHtml(city)}, with its shorthand expanded. The full experience — an AI plain-English summary ` +
-        `beside the annotated original — loads with JavaScript, and every one of the ` +
-        `<a href="/national/">68 forecast offices</a> has its own edition.</p>\n`;
+    const standfirst = ai
+        ? `        <p class="ssr-standfirst">Plaincast decodes the National Weather Service's Area Forecast ` +
+          `Discussion — the real forecast, written 3 to 4 times a day by the meteorologist on shift — into ` +
+          `plain English. The discussion is where a forecaster explains their reasoning: which models ` +
+          `disagree, what they are watching, and how confident they are. Below is the current edition for ` +
+          `${escHtml(city)}: each section opens with a plain-English summary written by AI (Claude), followed ` +
+          `by the forecaster's own text with its shorthand expanded (a section only a sentence or two long has ` +
+          `no summary). Every one of the ` +
+          `<a href="/national/">${offices} forecast offices</a> has its own edition.</p>\n`
+        : `        <p class="ssr-standfirst">Plaincast decodes the National Weather Service's Area Forecast ` +
+          `Discussion — the real forecast, written 3 to 4 times a day by the meteorologist on shift — into ` +
+          `plain English. The discussion is where a forecaster explains their reasoning: which models ` +
+          `disagree, what they are watching, and how confident they are. Below is the current edition for ` +
+          `${escHtml(city)}, with its shorthand expanded. The full experience — an AI plain-English summary ` +
+          `beside the annotated original — loads with JavaScript, and every one of the ` +
+          `<a href="/national/">${offices} forecast offices</a> has its own edition.</p>\n`;
 
     const metaLine = issued
-        ? `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}) · issued ${escHtml(issued)}.</p>\n`
+        ? `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}) · issued ${issuedHtml(issued, issuanceTime)}.</p>\n`
         : `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}).</p>\n`;
 
     const articles = sections.map(s => {
-        const name = escHtml(SECTION_NAMES[s.key] || titleCase(s.key));
-        const body = s.paras.map(p => `            <p>${escHtml(regexTranslate(p))}</p>`).join('\n');
+        const name = escHtml(s.name || SECTION_NAMES[s.key] || titleCase(s.key));
+        const aiText = ai ? ai.get(s.key) : null;
+        const body = aiText
+            ? aiSectionBody(aiText, s.paras)
+            : s.paras.map(p => `            <p>${escHtml(regexTranslate(p))}</p>`).join('\n');
         return `        <article class="forecast-section ssr">\n` +
             `            <h2 class="section-title">${name}</h2>\n` +
             `${body}\n` +
             `        </article>`;
     });
 
-    const note =
-        `        <p class="ssr-note">This is the plain-text edition, decoded without AI so it loads anywhere. ` +
-        `Read the whole ${escHtml(city)} discussion at <a href="/o/${escHtml(code)}/">/o/${escHtml(code)}/</a>, ` +
-        `see <a href="/o/${escHtml(code)}/?view=changelog">what changed since the last one</a>, or open ` +
-        `<a href="/national/">The National Desk</a> for where the weather is today.</p>`;
+    const note = ai
+        ? `        <p class="ssr-note">Each summary above is written by AI (Claude) from the National Weather Service ` +
+          `text that follows it. Read the whole ${escHtml(city)} discussion at <a href="/o/${escHtml(code)}/">/o/${escHtml(code)}/</a>, ` +
+          `see <a href="/o/${escHtml(code)}/?view=changelog">what changed since the last one</a>, or open ` +
+          `<a href="/national/">The National Desk</a> for where the weather is today.</p>`
+        : `        <p class="ssr-note">This is the plain-text edition, decoded without AI so it loads anywhere. ` +
+          `Read the whole ${escHtml(city)} discussion at <a href="/o/${escHtml(code)}/">/o/${escHtml(code)}/</a>, ` +
+          `see <a href="/o/${escHtml(code)}/?view=changelog">what changed since the last one</a>, or open ` +
+          `<a href="/national/">The National Desk</a> for where the weather is today.</p>`;
 
     return `\n${standfirst}${metaLine}${articles.join('\n')}\n${note}\n    `;
 }
@@ -161,47 +191,78 @@ export default async function handler(req, res) {
         baked = loadTemplate();
     } catch (err) {
         // Shell missing from the bundle. Deliberately NOT a redirect to
-        // /o/<CODE>/: api/office-page.js redirects back here on the same
-        // failure, and a preview deploy on 2026-08-21 turned exactly that pair
-        // into an infinite 307 loop when .vercelignore stripped the template
-        // out of both bundles. Serve the words instead — a plain page is a
+        // /o/<CODE>/: api/office-page.js loads the same shell, and a preview
+        // deploy on 2026-08-21 turned exactly that pair (it then redirected
+        // back here) into an infinite 307 loop when .vercelignore stripped
+        // the template out of both bundles. Neither handler redirects on this
+        // failure now; both serve the words instead — a plain page is a
         // worse homepage, a loop is no homepage at all.
         console.error('home: shell unavailable:', err);
     }
 
-    try {
-        const items = await fetchAFDList(code, { signal: AbortSignal.timeout(8000) });
-        const prodUrl = productUrlFromItem(items[0]);
-        if (!prodUrl) throw new Error('no AFD product listed');
-        // Boot extras run in parallel with the product fetch (see office-page.js).
-        const latestId = items[0]?.id || null;
-        const extrasPending = baked && wantsBoot(chosen, req.query) && latestId
-            ? fetchBootExtras(code, latestId)
-            : null;
-        const prod = await fetchAFDProduct(prodUrl, { signal: AbortSignal.timeout(8000) });
-        const text = typeof prod?.productText === 'string' ? prod.productText : '';
-        if (!text) throw new Error('empty AFD product');
+    // Switches, read per request (api/_store.js). All off: the live path
+    // below, byte for byte as before.
+    const storeRender = switchOn(STORE_RENDER);
+    const aiForAgents = switchOn(AI_FOR_AGENTS);
+    // The homepage shows an office's edition: tag it with that office (the
+    // poller purges by office) and `home`.
+    if (storeRender) await tagResponse(res, [officeTag(code), HOME_TAG]);
 
-        const sections = editionSections(text);
-        const issued = formatIssued(prod?.issuanceTime, OFFICE_TIMEZONES[code] || 'America/Los_Angeles');
-        const markdown = renderHomeMarkdown({ code, city, sections, issued, edition: true });
+    try {
+        const boot = Boolean(baked) && wantsBoot(chosen, req.query);
+        const wantExtras = boot || aiForAgents;
+        let product;
+        let extrasPending;
+        const stored = storeRender ? await readRenderableEdition(code) : null;
+        if (stored) {
+            product = stored.current;
+            extrasPending = wantExtras ? fetchBootExtras(code, product.id) : null;
+        } else {
+            const items = await fetchAFDList(code, { signal: AbortSignal.timeout(8000) });
+            const prodUrl = productUrlFromItem(items[0]);
+            if (!prodUrl) throw new Error('no AFD product listed');
+            // Boot extras run in parallel with the product fetch (see office-page.js).
+            const latestId = items[0]?.id || null;
+            extrasPending = wantExtras && latestId ? fetchBootExtras(code, latestId) : null;
+            const prod = await fetchAFDProduct(prodUrl, { signal: AbortSignal.timeout(8000) });
+            const text = typeof prod?.productText === 'string' ? prod.productText : '';
+            if (!text) throw new Error('empty AFD product');
+            product = { id: prod?.id || latestId, issuanceTime: prod?.issuanceTime, productText: text };
+        }
+        const text = product.productText;
+        const extras = extrasPending ? await extrasPending : null;
+        const ai = aiForAgents ? aiForSections(text, extras?.translation, code, product.id, MAX_SECTIONS) : null;
+
+        const sections = withAi(editionSections(text), ai);
+        const issued = formatIssued(product.issuanceTime, OFFICE_TIMEZONES[code] || 'America/Los_Angeles');
+        const markdown = renderHomeMarkdown({
+            code, city, sections, issued, edition: true,
+            ...(aiForAgents ? { aiIncluded: Boolean(ai), issuedIso: product.issuanceTime } : {}),
+        });
 
         let html = null;
-        let cacheControl = FULL_CACHE;
+        const fullCache = stored ? STORE_CACHE : FULL_CACHE;
+        let cacheControl = fullCache;
         if (baked) {
             if (!baked.includes(LOADING_DIV)) throw new Error('skeleton marker missing from template');
             // replacer fn: `$`-sequences in forecast text must not be interpreted
-            html = baked.replace(LOADING_DIV, () => buildHomeSsr(code, city, sections, issued));
-            if (extrasPending) {
-                const boot = buildBoot({
+            html = withDateModified(
+                baked.replace(LOADING_DIV, () => buildHomeSsr(code, city, sections, issued,
+                    { ai, issuanceTime: product.issuanceTime })),
+                HOME_PAGE_ID, product.issuanceTime);
+            if (boot && extrasPending) {
+                const bootData = buildBoot({
                     office: code,
-                    product: { id: prod?.id || latestId, issuanceTime: prod?.issuanceTime, productText: text },
-                    extras: await extrasPending,
+                    product: { id: product.id, issuanceTime: product.issuanceTime, productText: text },
+                    extras,
                 });
-                html = insertBoot(html, boot);
-                cacheControl = cacheControlFor(boot, FULL_CACHE);
+                html = insertBoot(html, bootData);
+                cacheControl = cacheControlFor(bootData, fullCache);
             }
         }
+        // With the AI switch on, a page still waiting for its translation is
+        // regenerated soon, in both representations, so the AI text lands.
+        if (aiForAgents && !ai) cacheControl = SHORT_CACHE;
 
         return sendNegotiated(req, res, {
             [HTML]: html || minimalHtml(markdown),

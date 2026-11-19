@@ -13,11 +13,13 @@ import {
     parseSections,
     reorderSections,
     sectionDomId,
+    synopsisTakeaway,
     translateToPlainEnglish,
 } from '../shadcn/src/lib/afd.js';
 import { GLOSSARY } from '../docs/js/glossary.js';
-import { alertWindow, classifyAlertKind, findNearestOffice } from '../shadcn/src/lib/nws.js';
+import { alertIsFromOffice, alertWindow, classifyAlertKind, findNearestOffice } from '../shadcn/src/lib/nws.js';
 import { formatTranslationHTML } from '../shadcn/src/lib/ai.js';
+import { formatInZone, formatIssueTime } from '../shadcn/src/lib/format.js';
 
 const FIXTURE = await Bun.file(new URL('./fixtures/afd/lox-classic-synopsis.txt', import.meta.url)).text();
 
@@ -86,6 +88,94 @@ describe('extractTakeaway', () => {
         const takeaway = extractTakeaway(sections, 'America/Los_Angeles');
         expect(takeaway.toLowerCase()).toContain('onshore flow');
     });
+
+    it('shows two real sentences when the synopsis opens with its issuance stamp', () => {
+        // LOX, Nov 18 2026: the stamp used to fill one of the two slots.
+        const html = extractTakeaway([{ key: 'Synopsis', text: '18/104 PM.\n\nCool, below normal temperatures will be ongoing through the week.\nA moderate to strong low pressure system will bring gusty winds.' }], 'America/Los_Angeles');
+        expect(html).not.toContain('18/104');
+        expect(html).toContain('Cool, below normal');
+        expect(html).toContain('gusty winds');
+    });
+});
+
+describe('time-zone labels (formatInZone)', () => {
+    const at = new Date('2026-11-18T19:51:00Z');
+    const opts = (timeZone) => ({ hour: 'numeric', minute: '2-digit', timeZone, timeZoneName: 'short' });
+
+    it('names Guam and American Samoa time as NWS does', () => {
+        // \s: some ICU builds put a narrow no-break space before AM/PM.
+        expect(formatInZone(at, opts('Pacific/Guam'))).toMatch(/^5:51\sAM ChST$/);
+        expect(formatInZone(at, opts('Pacific/Pago_Pago'))).toMatch(/^8:51\sAM SST$/);
+        // an ordinary space before AM/PM: the reading font has no U+202F
+        expect(formatInZone(at, opts('Pacific/Guam'))).toBe('5:51 AM ChST');
+        expect(formatIssueTime(at, 'Pacific/Guam')).toMatch(/November 19\b.*5:51\sAM ChST$/);
+    });
+
+    it('is toLocaleString everywhere else, and without a zone name', () => {
+        for (const tz of ['America/Los_Angeles', 'America/Chicago', 'Pacific/Honolulu', 'America/Anchorage', 'America/Puerto_Rico']) {
+            expect(formatInZone(at, opts(tz))).toBe(at.toLocaleString('en-US', opts(tz)));
+        }
+        const noName = { hour: 'numeric', timeZone: 'Pacific/Guam' };
+        expect(formatInZone(at, noName)).toBe(at.toLocaleString('en-US', noName));
+    });
+
+    it('converts Zulu times in Guam text to ChST', () => {
+        const html = translateToPlainEnglish('Showers increase after 12Z.', 'Pacific/Guam', '2026-11-18T19:51:00Z');
+        expect(html).toContain('ChST');
+        expect(html).not.toContain('GMT+10');
+    });
+});
+
+// Real synopses (NWS AFDs, Nov 12–18 2026), verbatim.
+describe('synopsisTakeaway (the synopsis fallback)', () => {
+    const LOX_NOV18 = '18/104 PM.\n\nCool, below normal temperatures will be ongoing through the week.\nA moderate to strong low pressure system will bring gusty winds, \nwidespread rain, mountain snow, and a chance for thunderstorms \nWednesday into Thursday. There is a risk of significant impacts, \nincluding a flooding and the potential for wind related issues. \nVery large surf and high tides will continue, with ongoing surf \nand flooding hazards at the coast.';
+
+    it('leads with the first hazard sentence when the opening one names none (LOX)', () => {
+        expect(synopsisTakeaway(LOX_NOV18)).toBe(
+            'A moderate to strong low pressure system will bring gusty winds, widespread rain, mountain snow, and a chance for thunderstorms Wednesday into Thursday. '
+            + 'There is a risk of significant impacts, including a flooding and the potential for wind related issues.'
+        );
+    });
+
+    it('keeps the opening two sentences when the opening one names a hazard', () => {
+        const t = 'Strong gusty winds will develop over island mountain ranges today. Wind speeds will exceed advisory thresholds. Showers favor windward areas.';
+        expect(synopsisTakeaway(t)).toBe('Strong gusty winds will develop over island mountain ranges today. Wind speeds will exceed advisory thresholds.');
+    });
+
+    it('keeps the opening two sentences when no early sentence names a hazard (HFO)', () => {
+        const t = 'Another high pressure system just north of the Hawaiian Islands will drift southeast and weaken through Thursday. A stronger high builds in north of the state by Friday, briefly increasing trade wind speeds. Two passing upper level disturbances will keep wet trade wind weather in the forecast through the end of this week.';
+        expect(synopsisTakeaway(t)).toBe('Another high pressure system just north of the Hawaiian Islands will drift southeast and weaken through Thursday. A stronger high builds in north of the state by Friday, briefly increasing trade wind speeds.');
+    });
+
+    it('does not lead with a hazard that is winding down or ruled out (LOX Nov 14)', () => {
+        const t = '13/807 PM.\n\nMultiple periods of light to moderate rain is expected well into next week, with the first round ending by Saturday morning. There will be a break this weekend, with the next round set for around Monday, then the next around Thursday. The risk of significant impacts and flooding with any of these storms is low, with generally light to moderate rain.';
+        expect(synopsisTakeaway(t)).toMatch(/^Multiple periods of light to moderate rain/);
+    });
+
+    it('starts one earlier when the hazard sentence leans on the one before (LOX Nov 15)', () => {
+        const t = '14/509 PM.\n\nMultiple periods of light to moderate rain are expected this coming week. Dry conditions will prevail through Sunday, with the next round of wet conditions set for Sunday night into Monday night, followed by Wednesday night into Thursday night. The risk of significant impacts and flooding exists with the second storm system, as moderate to heavy rain will be possible. Temperatures will remain at or below normal.';
+        expect(synopsisTakeaway(t)).toMatch(/^Dry conditions will prevail through Sunday.*The risk of significant impacts and flooding exists with the second storm system/);
+    });
+
+    it('keeps two sentences when the hazard sentence is the last one (SEW)', () => {
+        const t = 'An upper level low drifting inland to the south will maintain light showers through tonight before high pressure brings drier conditions through early Saturday. Chances for precipitation increase Sunday and beyond, alongside breezy winds and chances for coastal flooding due to higher astronomical tides.';
+        expect(synopsisTakeaway(t)).toBe(t);
+    });
+
+    it('looks only at the first three sentences', () => {
+        const t = 'Dry today. Dry tomorrow. Dry Friday. Gusty winds next week.';
+        expect(synopsisTakeaway(t)).toBe('Dry today. Dry tomorrow.');
+    });
+
+    it('keeps an inline "Key Messages:" list in the forecaster\'s order (MSO)', () => {
+        const t = 'KEY MESSAGES:\n\n- Localized snow showers and valley rain/snow mix late tonight into\nThursday morning.\n\n- Colder temperatures, with areas of accumulating snow Friday into\nSaturday.';
+        expect(synopsisTakeaway(t)).toMatch(/^KEY MESSAGES: - Localized snow showers/);
+    });
+
+    it('never splits a decimal or a number out of a sentence', () => {
+        const t = 'Rain rates of 0.75 inches per hour are possible. Totals reach 1.5 inches. Drier next week.';
+        expect(synopsisTakeaway(t)).toBe('Rain rates of 0.75 inches per hour are possible. Totals reach 1.5 inches.');
+    });
 });
 
 describe('reorderSections + sectionDomId', () => {
@@ -129,6 +219,31 @@ describe('alert helpers', () => {
     it('finds the nearest office by coordinates', () => {
         expect(findNearestOffice(34.05, -118.24)).toBe('LOX');   // Los Angeles
         expect(findNearestOffice(41.88, -87.63)).toBe('LOT');    // Chicago
+    });
+
+    it('finds the new offices too, Guam and Puerto Rico included', () => {
+        expect(findNearestOffice(13.48, 144.79)).toBe('GUM');    // Hagåtña
+        expect(findNearestOffice(18.47, -66.11)).toBe('SJU');    // San Juan
+        expect(findNearestOffice(-14.28, -170.70)).toBe('PPG');  // Pago Pago
+        expect(findNearestOffice(58.30, -134.42)).toBe('AJK');   // Juneau
+        expect(findNearestOffice(42.65, -73.75)).toBe('ALY');    // Albany
+    });
+});
+
+describe('alertIsFromOffice', () => {
+    const alert = (wmo, senderName = '') => ({ senderName, parameters: wmo ? { WMOidentifier: [wmo] } : {} });
+
+    it('matches on the issuing office in the WMO heading', () => {
+        expect(alertIsFromOffice(alert('WWUS81 KOKX 181200', 'NWS Upton NY'), 'OKX')).toBe(true);
+        expect(alertIsFromOffice(alert('WWUS81 KBOX 181200', 'NWS Boston/Norton MA'), 'OKX')).toBe(false);
+        // Alaska zone-coded alerts (AWIPS NPWALU) still name PAFC as issuer.
+        expect(alertIsFromOffice(alert('WWAK72 PAFC 181740', 'NWS Anchorage AK'), 'AFC')).toBe(true);
+        expect(alertIsFromOffice(alert('WHGM70 PGUM 181200', 'NWS Tiyan GU'), 'GUM')).toBe(true);
+    });
+
+    it('falls back to the sender fragment when there is no heading', () => {
+        expect(alertIsFromOffice(alert(null, 'NWS New York NY'), 'OKX')).toBe(true);
+        expect(alertIsFromOffice(alert(null, 'NWS Boston/Norton MA'), 'OKX')).toBe(false);
     });
 });
 

@@ -23,6 +23,38 @@ function escapeHTML(text) {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// ─── sectionDisplayKeys ─────────────────────────────────────────────
+// Copied from docs/js/app.js (locked by tests/helpers-parity.test.js).
+// Display keys for one product's section headers, in order, never two alike.
+// A key is the SECTION_NAMES name, else the header in sentence case. Where
+// sections would share one (JAX, OUN and HUN on Nov 18 2026: NEAR TERM and
+// SHORT TERM are both "Short Term", so the edition's translation set could
+// never be complete and one section's AI text was lost), the section the name
+// belongs to keeps it (SHORT TERM keeps "Short Term"; else the first) and each
+// other takes its own header in title case ("Near Term"), then an ordinal
+// ("Aviation (2)"). A product without a repeat keeps exactly the keys it had,
+// so stored translations keyed by them still match. The server imports the
+// shadcn copy (api/_translatable.js); forked verbatim into docs/js/app.js and
+// tests/helpers.js (parity-locked).
+export function sectionDisplayKeys(rawKeys) {
+    const name = (raw) => SECTION_NAMES[raw] || raw.charAt(0) + raw.slice(1).toLowerCase();
+    const title = (raw) => raw.toLowerCase().replace(/(^|[\s\/(-])([a-z])/g, (m, before, c) => before + c.toUpperCase());
+    const keys = rawKeys.map(name);
+    const owner = new Map();
+    keys.forEach((key, i) => {
+        const prev = owner.get(key);
+        if (prev === undefined || (title(rawKeys[prev]) !== key && title(rawKeys[i]) === key)) owner.set(key, i);
+    });
+    const used = new Set(owner.keys());
+    return keys.map((key, i) => {
+        if (owner.get(key) === i) return key;
+        let own = title(rawKeys[i]);
+        for (let n = 2; used.has(own); n++) own = `${title(rawKeys[i])} (${n})`;
+        used.add(own);
+        return own;
+    });
+}
+
 // ─── parseSections ──────────────────────────────────────────────────
 // Copied from docs/js/app.js — pure function, no DOM dependency.
 export function parseSections(text) {
@@ -39,14 +71,15 @@ export function parseSections(text) {
         // sections instead of being merged into the previous one. The negative
         // lookahead keeps inline ".KEY MESSAGE 1..." pseudo-headers inside the body.
         // Try with office prefix first (3-letter like LOX, SGX)
-        const headerMatch = line.match(/^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i)
-            || line.match(/^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i);
+        const headerMatch = line.match(/^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/|,\s*(?:Issued|Updated)\b[^.]*))?\s*\.{2,3}/i)
+            || line.match(/^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/|,\s*(?:Issued|Updated)\b[^.]*))?\s*\.{2,3}/i);
         if (headerMatch) {
             if (currentKey) {
                 sections.push({ key: currentKey, text: currentLines.join('\n').trim() });
             }
-            const rawKey = headerMatch[1].trim();
-            currentKey = SECTION_NAMES[rawKey] || rawKey.charAt(0) + rawKey.slice(1).toLowerCase();
+            // The raw header for now: display keys are given per product
+            // at the end (sectionDisplayKeys), so no two sections share one.
+            currentKey = headerMatch[1].trim();
             currentLines = [line.replace(headerMatch[0], '').trim()];
             continue;
         }
@@ -93,30 +126,64 @@ export function parseSections(text) {
         }
     }
 
+    const keys = sectionDisplayKeys(sections.map(s => s.key));
+    sections.forEach((s, i) => { s.key = keys[i]; });
+
     return { sections, forecaster };
 }
 
-// ─── extractTakeaway ────────────────────────────────────────────────
-// Simplified version: returns the first 1-2 sentences of the synopsis
-// section (or first section) without running full translation (which
-// would need timezone state). Returns raw text for testing purposes.
-export function extractTakeaway(sections) {
-    // Prefer KEY MESSAGES section when available
-    const messagesSection = sections.find(s => s.key === 'Messages');
-    if (messagesSection) {
-        const text = messagesSection.text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
-        return text;
+// ─── synopsisTakeaway ───────────────────────────────────────────────
+// Copied from docs/js/app.js (locked by tests/helpers-parity.test.js).
+export function synopsisTakeaway(text) {
+    const HAZARD = /\b(?:thunder\w*|t-?storms?|lightning|tornado\w*|waterspouts?|funnel clouds?|hail\w*|severe|storms?|flood\w*|inundation|(?:heavy|widespread|significant|excessive|torrential|soaking|prolonged) (?:\w+ )?(?:rain\w*|snow\w*|precipitation|showers|downpours)|inch(?:es)? of (?:new )?(?:rain|snow)|atmospheric rivers?|debris flows?|mud ?slides?|land ?slides?|rock ?slides?|burn scars?|avalanche\w*|blizzard\w*|whiteouts?|snow squalls?|(?:mountain|accumulating|lake[- ]effect|pass[- ]level|wet) snow\w*|snow(?:fall)? accumulations?|freeze|freezing (?:rain|drizzle|fog|spray|temperatures)|below freezing|sleet|ice|icy|gusty|gusts?|(?:strong|high|damaging) (?:\w+ )?winds?|damag\w*|(?:extreme|excessive|dangerous|record) heat|heat (?:advisory|warning|risk|index)|heat ?waves?|(?:very|dangerously|extremely) hot|(?:extreme|bitter(?:ly)?|dangerous(?:ly)?) cold|arctic (?:air|blast|outbreak)|wind chills?|frost|record(?:s|-breaking)?|(?:high|large|big|dangerous) (?:\w+ )?(?:surf|swells?|waves|breakers)|(?:hazardous|rough|high|steep|dangerous) seas|rip currents?|sneaker waves?|storm surge|king tides?|high tides?|gales?|hurricane\w*|tropical (?:storms?|depressions?|cyclones?)|typhoons?|dense fog|blowing (?:dust|snow)|dust storms?|haboobs?|smoke|air quality|fire\w*|red flag|warnings?|watch(?:es)?|advisor(?:y|ies)|hazard\w*|dangerous|life[- ]threatening|(?:significant|major|high) impacts?|high[- ]impact|impactful)\b/i;
+    const FADING = /\b(?:diminish\w*|decreas\w*|taper\w*|weaken\w*|subsid\w*|eas(?:e|es|ing)|expir\w*|cancel\w*|below (?:advisory|warning)|no longer|no|not|unlikely|(?:is|are|remains?|stays?) low)\b/i;
+    const LEANS_BACK = /^(?:this|these|that|those|it|its|they|their|additionally|otherwise|however|meanwhile|then|but|and|along with|in addition)\b|^(?:\S+\s+){0,3}of (?:these|those|this|that)\b|\b(?:also|as well)\b|\bthe (?:second|third|latter|former)\b/i;
+    let t = String(text || '')
+        .replace(/^\s*(?:\d{1,2}\/\d{3,4}\s*(?:AM|PM|Z)?\.?\s*)+/i, '')
+        .replace(/^\s*Issued at \d.+?\d{4}\s*/i, '');
+    t = t.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
+    const sentences = t.match(/\S[\s\S]*?[.!?]+(?=\s|$)/g);
+    if (!sentences) return t.substring(0, 200);
+    const names = s => HAZARD.test(s) && !FADING.test(s);
+    let lead = 0;
+    if (!/^key messages?\b/i.test(t) && !names(sentences[0])) {
+        const i = sentences.slice(0, 3).findIndex(names);
+        if (i > 0) {
+            lead = i;
+            if (lead === sentences.length - 1 || LEANS_BACK.test(sentences[lead])) lead--;
+            if (lead > 0 && LEANS_BACK.test(sentences[lead])) lead = 0;
+        }
     }
-    const synSection = sections.find(s => s.key === 'Synopsis')
+    return sentences.slice(lead, lead + 2).join(' ');
+}
+
+// ─── extractTakeaway ────────────────────────────────────────────────
+// Simplified version: the synopsis fallback's sentences (synopsisTakeaway)
+// without running full translation (which would need timezone state).
+// Returns raw text for testing purposes.
+// ─── takeawaySection ─────────────────────────────────────────────────
+// Copied from docs/js/app.js (locked by tests/helpers-parity.test.js).
+// The section the takeaway comes from: Key Messages, else the synopsis, the
+// discussion or the first section. One rule for the page (extractTakeaway)
+// and the server's lede for share cards and RSS (api/_afd-sections.js
+// extractLede, which imports the shadcn copy). Forked verbatim into
+// docs/js/app.js and tests/helpers.js (parity-locked).
+export function takeawaySection(sections) {
+    return sections.find(s => s.key === 'Messages')
+        || sections.find(s => s.key === 'Synopsis')
         || sections.find(s => s.key === 'Discussion')
-        || sections[0];
-    if (!synSection) return '';
-    // Strip leading "Issued at..." timestamps
-    let text = synSection.text.replace(/^Issued at \d.+?\d{4}\s*/i, '');
-    text = text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
-    const sentences = text.match(/[^.!?]+[.!?]+/g);
-    if (!sentences) return text.substring(0, 200);
-    return sentences.slice(0, 2).join(' ').trim();
+        || sections[0]
+        || null;
+}
+
+export function extractTakeaway(sections) {
+    const source = takeawaySection(sections);
+    if (!source) return '';
+    // Prefer KEY MESSAGES section when available
+    if (source.key === 'Messages') {
+        return source.text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
+    }
+    return synopsisTakeaway(source.text);
 }
 
 // ─── stripNWSArtifacts ──────────────────────────────────────────────
@@ -291,6 +358,7 @@ export function reorderSections(sections, office, hasAlerts) {
         'Messages': 1.5,
         'What has changed': 1.8,
         'Update': 1.9,
+        'Near Term': 2,
         'Short Term': 2,
         'Discussion': 2,
         'Long Term': 3,

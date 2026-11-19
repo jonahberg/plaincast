@@ -15,7 +15,10 @@
 // A `type="application/json"` block is data, not script: browsers never
 // execute it, so the CSP (`script-src 'self'`, no 'unsafe-inline') is
 // unaffected. It is placed outside <main>, just before the app's module
-// script, so main-content extractors and the Markdown twin never see it.
+// script: it is the app's input, not page content, and the Markdown twin
+// does not carry it. That says nothing about whether the page's own text
+// includes AI: with PLAINCAST_AI_FOR_AGENTS=1, api/office-page.js and
+// api/home.js put labelled AI summaries in <main> and in the Markdown.
 //
 // Shape (v1):
 //   { v: 1, office, product: { id, issuanceTime, productText },
@@ -25,7 +28,8 @@
 // `changelog` is present only when the server got a definitive answer for
 // THIS issuance; absent means "unknown, fetch it yourself".
 import { changelogKey, sharedGet, translationKey } from './_shared-cache.js';
-import { PROD_SCRIPT } from '../scripts/app-shell.mjs';
+import { untranslatableDisplayKeys } from './_translatable.js';
+import { PROD_SCRIPT_RE } from '../scripts/app-shell.mjs';
 
 export const BOOT_ID = 'plaincast-boot';
 export const BOOT_VERSION = 1;
@@ -56,12 +60,15 @@ export function bootScript(data) {
     return `<script type="application/json" id="${BOOT_ID}">${serializeBoot(data)}</script>`;
 }
 
-// Inserts the block before the app's module script. A shell without that
-// tag (template drift) simply carries no boot block: the app then loads the
-// way it always has, so this never fails the page.
+// Inserts the block before the app's module script, found by PATTERN: the
+// committed shell names the placeholder /assets/app.js, the deployed one the
+// build's /assets/app-<hash>.js (scripts/prepare-deploy.mjs rewrites it), and
+// the tag is re-emitted exactly as found. A shell without that tag (template
+// drift) simply carries no boot block: the app then loads the way it always
+// has, so this never fails the page.
 export function insertBoot(html, data) {
-    if (!data || typeof html !== 'string' || !html.includes(PROD_SCRIPT)) return html;
-    return html.replace(PROD_SCRIPT, () => `${bootScript(data)}\n    ${PROD_SCRIPT}`);
+    if (!data || typeof html !== 'string' || !PROD_SCRIPT_RE.test(html)) return html;
+    return html.replace(PROD_SCRIPT_RE, (tag) => `${bootScript(data)}\n    ${tag}`);
 }
 
 function sameInstant(a, b) {
@@ -71,15 +78,20 @@ function sameInstant(a, b) {
 }
 
 // The stored translate-issuance payload → { translations, complete }. Only
-// string sections survive, and only for the office + id that were asked for.
-export function pickTranslations(res, office, id) {
+// string sections survive, only for the office + id that were asked for, and
+// never one of the edition's never-translated sections (`productText` given:
+// tables and short notes, docs/js/untranslatable.js), whose entry predates
+// that rule.
+export function pickTranslations(res, office, id, productText = null) {
     if (!res || typeof res !== 'object') return { translations: null, complete: false };
     if (res.office && res.office !== office) return { translations: null, complete: false };
     if (res.id && res.id !== id) return { translations: null, complete: false };
     const src = res.sections;
     if (!src || typeof src !== 'object' || Array.isArray(src)) return { translations: null, complete: false };
+    const skip = typeof productText === 'string' ? untranslatableDisplayKeys(productText) : new Set();
     const translations = {};
     for (const [key, text] of Object.entries(src)) {
+        if (skip.has(key)) continue;
         if (typeof text === 'string' && text.trim()) translations[key] = text;
     }
     if (Object.keys(translations).length === 0) return { translations: null, complete: false };
@@ -117,7 +129,7 @@ export function fetchBootExtras(office, id) {
 
 export function buildBoot({ office, product, extras }) {
     if (!product || typeof product.productText !== 'string' || !product.productText || !product.id) return null;
-    const { translations, complete } = pickTranslations(extras?.translation, office, product.id);
+    const { translations, complete } = pickTranslations(extras?.translation, office, product.id, product.productText);
     const boot = {
         v: BOOT_VERSION,
         office,

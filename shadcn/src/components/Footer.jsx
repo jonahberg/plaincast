@@ -21,18 +21,22 @@ function OfficeLink({ code, office, className = '' }) {
             className={`${code === office ? 'font-medium text-foreground' : LINK} ${className}`}
             aria-current={code === office ? 'page' : undefined}
         >
-            {OFFICE_NAMES[code]} ({code})
+            {/* A no-break space: a wrapped name never leaves its code alone
+                on the next line ("Greenville-Spartanburg" / "(GSP)"). A
+                slash may break instead ("Mobile/" / "Pensacola (MOB)"). */}
+            {OFFICE_NAMES[code].split('/').flatMap((part, i) => (i ? ['/', <wbr key={i} />, part] : [part]))}
+            {'\u00a0'}({code})
         </a>
     );
 }
 
 // The React app removes the server-rendered #ssr-root on mount, and with it
-// the 68-office index + National Desk link that crawlers and no-JS readers
+// the full office index + National Desk link that crawlers and no-JS readers
 // get. This footer restores them as real <a href> links (internal linking and
 // a way around the site that doesn't depend on the picker).
 //
 // Phones get the index as a collapsed accordion — one 44px row per region,
-// opening to a two-column list of 44px rows — instead of 68 16px-tall links.
+// opening to a two-column list of 44px rows — instead of 123 16px-tall links.
 // From `sm` up it stays the multi-column grid. (The server-rendered index in
 // #ssr-root is separate and unchanged.)
 export function Footer({ office, rawUrl }) {
@@ -40,7 +44,7 @@ export function Footer({ office, rawUrl }) {
         <footer className="border-t">
             <div className="mx-auto max-w-reading px-4 py-8 text-sm text-muted-foreground sm:px-6">
                 <nav aria-label="All Plaincast forecast offices">
-                    <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <h2 className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
                         The forecast, office by office
                     </h2>
                     <p className="mt-2">
@@ -59,7 +63,7 @@ export function Footer({ office, rawUrl }) {
                                     <ul className="grid grid-cols-2 gap-x-4 text-[13px] leading-5">
                                         {group.codes.map(code => (
                                             <li key={code} className="min-w-0">
-                                                <OfficeLink code={code} office={office} className="flex min-h-11 items-center" />
+                                                <OfficeLink code={code} office={office} className="flex min-h-11 items-center py-1" />
                                             </li>
                                         ))}
                                     </ul>

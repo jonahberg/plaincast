@@ -1,5 +1,7 @@
 // Pure logic for the National Desk. No I/O here — fetchers live in _utils.js,
 // rendering in national-desk.js — so every branch is unit-testable.
+import { alertOfficeCode } from '../docs/js/offices.js';
+import { formatInZone, shortZoneName } from '../shadcn/src/lib/format.js';
 
 // Office code = last 3 chars of the AWIPS identifier (e.g. SVRPUB -> PUB).
 // Verified against the live feed 2026-08-15; senderName is NOT parseable
@@ -9,6 +11,27 @@ export function officeFromAlert(props) {
     const id = Array.isArray(awips) ? String(awips[0] || '') : '';
     const code = id.slice(-3);
     return /^[A-Z]{3}$/.test(code) && id.length >= 6 ? code : null;
+}
+
+// Which Wire row an alert belongs to, and what to call it:
+//   1. the AWIPS suffix, when it is a known office (SVRPUB → PUB);
+//   2. otherwise the issuing office in the alert's WMO heading, when known.
+//      Alaska offices put ZONE codes in the AWIPS id — live feed 2026-11-18:
+//      AER and ALU under PAFC (Anchorage), NSB and WCZ under PAFG
+//      (Fairbanks), AEG and YAK under PAJK (Juneau) — so those alerts join
+//      their office's row, and the quiet count stays honest;
+//   3. otherwise the AWIPS suffix as-is, unlinked, labelled with the alert's
+//      own senderName when that names someone. A bare "NWS" (national
+//      centres, issuing id KWBC) names no office, so it stays a bare code.
+// Null when the alert carries no usable AWIPS id and no known issuer.
+export function dispatchOffice(props, officeNames) {
+    const own = officeFromAlert(props);
+    if (own && officeNames[own]) return { code: own, city: officeNames[own], sender: null };
+    const parent = alertOfficeCode(props);
+    if (parent && officeNames[parent]) return { code: parent, city: officeNames[parent], sender: null };
+    if (!own) return null;
+    const sender = String(props?.senderName || '').replace(/\s+/g, ' ').trim();
+    return { code: own, city: null, sender: sender && sender !== 'NWS' ? sender : null };
 }
 
 // One Wire row per office under an active Severe/Extreme *Warning*.
@@ -24,14 +47,16 @@ export function groupDispatches(features, officeNames) {
     for (const feat of features || []) {
         const p = feat?.properties || {};
         if (!/warning/i.test(p.event || '')) continue;
-        const code = officeFromAlert(p);
-        if (!code) continue;
+        const office = dispatchOffice(p, officeNames);
+        if (!office) continue;
+        const { code } = office;
         const extreme = /extreme/i.test(p.severity || '');
         const row = byOffice.get(code);
         if (!row) {
             byOffice.set(code, {
                 code,
-                city: officeNames[code] || null,
+                city: office.city,
+                sender: office.sender,
                 event: p.event,
                 count: 1,
                 extreme,
@@ -365,7 +390,8 @@ export function formatExpiry(iso, tz) {
         if (!iso) return null; // new Date(null) resolves to the epoch, not NaN
         const d = new Date(iso);
         if (Number.isNaN(d.getTime())) return null;
-        const t = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' });
+        // formatInZone: ChST and SST, as NWS writes them (shadcn/src/lib/format.js).
+        const t = formatInZone(d, { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' });
         return `until ${t}`;
     } catch { return null; }
 }
@@ -420,7 +446,9 @@ export function formatClock(iso, timeZone = DESK_TIME_ZONE) {
             timeZone, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short',
         }).formatToParts(d)) parts[p.type] = p.value;
         if (!parts.hour || !parts.minute || !parts.dayPeriod) return null;
+        // The zone through the shared mapping (ChST, SST, not GMT offsets).
+        const zone = parts.timeZoneName ? shortZoneName(d, timeZone) : '';
         return `${parts.hour}:${parts.minute} ${parts.dayPeriod.toUpperCase()}`
-            + (parts.timeZoneName ? ` ${parts.timeZoneName}` : '');
+            + (zone ? ` ${zone}` : '');
     } catch { return null; }
 }

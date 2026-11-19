@@ -19,11 +19,19 @@
 // under api/, underscore-prefixed so Vercel does not treat it as an endpoint,
 // and ship it through includeFiles. docs/index.html remains the file humans
 // edit and the local-dev homepage; this is its committed twin.
+//
+// The same office roster also drives four hand-written files, whose office
+// LISTS (only) this script regenerates:
+//   api/_national-shell.html  the National Desk's office index
+//   docs/llms.txt             the "## Supported NWS Offices" section
+//   docs/openapi.json         every `office` enum
+//   vercel.json               the codes the legacy /?office= redirect matches
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
-import { buildAppShell } from './app-shell.mjs';
+import { OFFICE_GROUPS } from '../shadcn/src/lib/offices-groups.js';
+import { buildAppShell, injectOfficeIndex, officeIndexCodes } from './app-shell.mjs';
 import { officeTitle } from '../shadcn/src/lib/seo.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,6 +40,10 @@ const API = join(__dirname, '..', 'api');
 
 // The bundled homepage shell — byte-identical to docs/index.html.
 export const HOME_SHELL = join(API, '_home-shell.html');
+export const NATIONAL_SHELL = join(API, '_national-shell.html');
+export const LLMS_TXT = join(DOCS, 'llms.txt');
+export const OPENAPI = join(DOCS, 'openapi.json');
+export const VERCEL_JSON = join(__dirname, '..', 'vercel.json');
 
 // Exact strings from docs/index.html that vary per office.
 const TITLE_TEMPLATE = 'Plaincast - What the forecast actually says';
@@ -54,8 +66,10 @@ export function officeImageAlt(city) {
 }
 
 // Office-specific structured data: WebPage (with BreadcrumbList home→office)
-// about a Place. The generic WebApplication/FAQ/HowTo JSON-LD stays shared;
-// this block is what makes each /o/<CODE>/ page's structured data unique.
+// about a Place. It is the office page's ONLY block: the template's own
+// blocks (the homepage's WebPage, and the site-wide WebApplication, FAQPage
+// and HowTo) describe the homepage and stay there (renderOfficePage).
+// api/office-page.js adds dateModified (the issuance time) after the @id line.
 export function officeJsonLd(code, city) {
     const url = `https://plaincast.live/o/${code}/`;
     const data = {
@@ -90,10 +104,28 @@ export function officeJsonLd(code, city) {
     return `<script type="application/ld+json">\n    ${json.split('\n').join('\n    ')}\n    </script>`;
 }
 
+// One JSON-LD <script> block, with its indentation and line break.
+const JSON_LD_BLOCK_RE = /[ \t]*<script type="application\/ld\+json">[\s\S]*?<\/script>\n?/g;
+
+// The template's structured data replaced by the office's own block, at the
+// position of the first one (before </head> if the template has none).
+export function withOfficeJsonLd(html, code, city) {
+    let placed = false;
+    const out = html.replace(JSON_LD_BLOCK_RE, () => {
+        if (placed) return '';
+        placed = true;
+        return `    ${officeJsonLd(code, city)}\n`;
+    });
+    return placed ? out : out.replace('</head>', () => `${officeJsonLd(code, city)}\n</head>`);
+}
+
 export function renderOfficePage(template, code, city) {
     const title = escHtml(officeTitle(city));
     const desc = escHtml(officeDescription(city, code));
-    let html = template;
+    // Structured data first: the homepage's WebPage block repeats the title
+    // and description template strings, which the rewrites below would
+    // otherwise turn into a second, contradictory office WebPage.
+    let html = withOfficeJsonLd(template, code, city);
     // title appears in <title>, og:title, twitter:title; desc in 3 meta tags.
     html = html.split(TITLE_TEMPLATE).join(title);
     html = html.split(DESC_TEMPLATE).join(desc);
@@ -129,24 +161,28 @@ export function renderOfficePage(template, code, city) {
     html = html.replace('href="manifest.json"', 'href="/manifest.json"');
     html = html.replace('href="styles.css"', 'href="/styles.css"');
     html = html.replace('src="js/app.js"', 'src="/js/app.js"');
-    // office-specific structured data (WebPage + Place + BreadcrumbList)
-    html = html.replace('</head>', `${officeJsonLd(code, city)}\n</head>`);
     // mark this office's own entry in the footer office index
     html = html.replace(`<a href="/o/${code}/">`, `<a href="/o/${code}/" aria-current="page">`);
     return html;
 }
 
-// lastmod defaults to the generation date (YYYY-MM-DD). Google ignores
-// changefreq/priority but does read <lastmod>, so every URL carries one.
-export function renderSitemap(codes, lastmod = new Date().toISOString().slice(0, 10)) {
-    const urls = [`  <url><loc>https://plaincast.live/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`];
-    urls.push(`  <url><loc>https://plaincast.live/national/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>`);
+// No <lastmod>, on purpose. Search engines read it as a claim about when the
+// page's content last changed, and no date this generator can know is true:
+// the homepage, /national/ and every office page change several times a day
+// (each new NWS issuance), and the four prose pages render from one shared
+// module (api/_pages.js) and shell, so a git date is not per page, and the
+// commit that changes a page could not carry its own date here. A
+// generation date was false for all of them. Deterministic: the output
+// depends only on the office list, so regenerating changes nothing.
+export function renderSitemap(codes) {
+    const urls = ['  <url><loc>https://plaincast.live/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>'];
+    urls.push('  <url><loc>https://plaincast.live/national/</loc><changefreq>daily</changefreq><priority>0.9</priority></url>');
     // Trust anchors: static prose, so they change on deploy rather than daily.
     for (const slug of ['about', 'contact', 'developers', 'privacy']) {
-        urls.push(`  <url><loc>https://plaincast.live/${slug}</loc><lastmod>${lastmod}</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>`);
+        urls.push(`  <url><loc>https://plaincast.live/${slug}</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>`);
     }
     for (const code of codes) {
-        urls.push(`  <url><loc>https://plaincast.live/o/${code}/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>`);
+        urls.push(`  <url><loc>https://plaincast.live/o/${code}/</loc><changefreq>daily</changefreq><priority>0.8</priority></url>`);
     }
     return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -155,9 +191,66 @@ ${urls.join('\n')}
 `;
 }
 
+// docs/llms.txt: the office section, from its heading up to the next "## ".
+const LLMS_SECTION_RE = /## Supported NWS Offices[^\n]*\n[\s\S]*?(?=\n## )/;
+export function renderLlmsOffices(llms) {
+    const n = Object.keys(OFFICE_NAMES).length;
+    const groups = OFFICE_GROUPS.map(g =>
+        `**${g.label}:** ${g.codes.map(c => `${OFFICE_NAMES[c]} (${c})`).join(', ')}`);
+    const section = [
+        `## Supported NWS Offices (${n}, organized by region)`,
+        '',
+        `Each office has a dedicated page at https://plaincast.live/o/<CODE>/ — substitute the 3-letter code below (e.g. https://plaincast.live/o/LOX/ for Los Angeles). All ${n} are listed in https://plaincast.live/sitemap.xml.`,
+        '',
+        groups.join('\n\n'),
+        '',
+    ].join('\n');
+    if (!LLMS_SECTION_RE.test(llms)) throw new Error('docs/llms.txt: "## Supported NWS Offices" section not found');
+    return llms.replace(LLMS_SECTION_RE, () => section);
+}
+
+// docs/openapi.json: every enum whose items are 3-letter office codes, kept
+// in the file's own formatting (indentation, \u escapes) — a JSON round-trip
+// would rewrite the whole file.
+const OFFICE_ENUM_RE = /("enum": \[\n)([ \t]*)"[A-Z]{3}",?\n(?:[ \t]*"[A-Z]{3}",?\n)*([ \t]*\])/g;
+export function renderOpenApiEnums(spec, codes = Object.keys(OFFICE_NAMES)) {
+    let count = 0;
+    const out = spec.replace(OFFICE_ENUM_RE, (_, open, indent, close) => {
+        count++;
+        return `${open}${codes.map((c, i) => `${indent}"${c}"${i < codes.length - 1 ? ',' : ''}`).join('\n')}\n${close}`;
+    });
+    if (!count) throw new Error('docs/openapi.json: no office enum found');
+    return out;
+}
+
+// vercel.json: the legacy /?office=<CODE> deep link answers 308 to
+// /o/<CODE>/ (Vercel evaluates `redirects` before the filesystem and the
+// rewrites; the request's query string, `office` included, passes through).
+// The `has` value is an exact alternation of the roster, in any letter case
+// ([Oo][Kk][Xx]: a regex flag is not portable here), so an unknown or
+// malformed code does not match and falls through to api/home.js as before.
+// A lowercase code lands on /o/okx/, which api/office-page.js serves with
+// the canonical /o/OKX/. Anchored explicitly, so it means the same whether
+// or not the platform anchors `has` values itself. Rewritten in place, as
+// text: a JSON round-trip would reformat the whole file.
+const anyCase = (code) => [...code].map(ch => `[${ch}${ch.toLowerCase()}]`).join('');
+export function officeRedirectPattern(codes = Object.keys(OFFICE_NAMES)) {
+    return `^(?<code>${codes.map(anyCase).join('|')})$`;
+}
+const OFFICE_REDIRECT_RE = /("key": "office", "value": ")\^\(\?<code>[A-Za-z|[\]]*\)\$(")/;
+export function renderVercelRedirect(text, codes = Object.keys(OFFICE_NAMES)) {
+    if (!OFFICE_REDIRECT_RE.test(text)) throw new Error('vercel.json: the /?office= redirect\'s `has` value was not found');
+    return text.replace(OFFICE_REDIRECT_RE, (_, open, close) => `${open}${officeRedirectPattern(codes)}${close}`);
+}
+
 export function buildAll() {
     const template = buildAppShell();
     const codes = Object.keys(OFFICE_NAMES);
+    // The picker order (region groups) must be exactly the roster.
+    const indexCodes = officeIndexCodes();
+    if (indexCodes.length !== codes.length || indexCodes.some((c, i) => c !== codes[i])) {
+        throw new Error('OFFICE_GROUPS and OFFICE_NAMES disagree; run bun scripts/build-office-data.mjs');
+    }
     for (const code of codes) {
         const dir = join(DOCS, 'o', code);
         mkdirSync(dir, { recursive: true });
@@ -166,6 +259,10 @@ export function buildAll() {
     writeFileSync(join(DOCS, 'sitemap.xml'), renderSitemap(codes));
     // The functions' copy of the homepage shell (see the header note).
     writeFileSync(HOME_SHELL, template);
+    writeFileSync(NATIONAL_SHELL, injectOfficeIndex(readFileSync(NATIONAL_SHELL, 'utf8')));
+    writeFileSync(LLMS_TXT, renderLlmsOffices(readFileSync(LLMS_TXT, 'utf8')));
+    writeFileSync(OPENAPI, renderOpenApiEnums(readFileSync(OPENAPI, 'utf8')));
+    writeFileSync(VERCEL_JSON, renderVercelRedirect(readFileSync(VERCEL_JSON, 'utf8'), codes));
     return codes.length;
 }
 

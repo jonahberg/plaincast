@@ -2,8 +2,7 @@ import { describe, it, expect, afterEach } from 'bun:test';
 import {
     sharedGet, sharedSet, translationKey, changelogKey, ledeKey,
     __setSharedCacheBackendForTests, GET_TIMEOUT_MS, SET_TIMEOUT_MS,
-    TRANSLATION_TTL, CHANGELOG_TTL, LEDE_TTL,
-} from '../api/_shared-cache.js';
+    TRANSLATION_TTL, CHANGELOG_TTL, LEDE_TTL, tagResponse, CACHE_TAG_HEADER, __setCacheTaggerForTests,} from '../api/_shared-cache.js';
 import { memoryBackend, recordFetches } from './shared-cache-backend.js';
 
 const savedVercel = process.env.VERCEL;
@@ -15,8 +14,8 @@ afterEach(() => {
 
 describe('api/_shared-cache.js key builders', () => {
     it('build versioned keys per family', () => {
-        expect(translationKey('LOX', 'a1b2-c3')).toBe('ti:v5:LOX:a1b2-c3');
-        expect(translationKey('lox', 'a1b2-c3')).toBe('ti:v5:LOX:a1b2-c3');
+        expect(translationKey('LOX', 'a1b2-c3')).toBe('ti:v6:LOX:a1b2-c3');
+        expect(translationKey('lox', 'a1b2-c3')).toBe('ti:v6:LOX:a1b2-c3');
         expect(changelogKey('OKX', 'cur-1')).toBe('cl:v3:OKX:cur-1');
         expect(ledeKey('2026-11-12T05:23:00Z')).toBe('lede:v3:2026-11-12T05:23:00.000Z');
     });
@@ -126,5 +125,179 @@ describe('api/_shared-cache.js sharedGet / sharedSet', () => {
         backend.seed('ti:v1:LOX:x', { ok: true });
         __setSharedCacheBackendForTests(backend);
         expect(await sharedGet('ti:v1:LOX:x')).toEqual({ ok: true });
+    });
+});
+
+// ── The engine's families and I/O (api/_store.js, api/cron-refresh.js) ──
+import {
+    editionKey, pollStateKey, leaseKey, modelCallsKey, sectionKey,
+    storeRead, storeWrite, purgeTag, __setPurgeBackendForTests, sharedSetReported,
+    STORE_READ_TIMEOUT_MS,
+} from '../api/_shared-cache.js';
+
+describe('api/_shared-cache.js engine key builders', () => {
+    it('build versioned keys per family', () => {
+        expect(editionKey('lox')).toBe('ed:v1:LOX');
+        expect(pollStateKey()).toBe('poll:v1');
+        expect(leaseKey()).toBe('lease:v1');
+        expect(modelCallsKey('2026-11-18')).toBe('mc:v1:2026-11-18');
+        expect(sectionKey('LOX', 'a'.repeat(64))).toBe(`ts:v2:LOX:${'a'.repeat(64)}`);
+    });
+
+    it('return null for input that cannot name an entry', () => {
+        for (const o of [null, '', 'LOXX', 'L0X']) expect(editionKey(o)).toBe(null);
+        for (const d of [null, '2026-1-18', 'today', 20261118]) expect(modelCallsKey(d)).toBe(null);
+        expect(sectionKey('LOX', 'abc')).toBe(null);
+        expect(sectionKey('LOX', 'G'.repeat(64))).toBe(null);
+        expect(sectionKey('LOXX', 'a'.repeat(64))).toBe(null);
+    });
+});
+
+describe('api/_shared-cache.js storeRead / storeWrite', () => {
+    afterEach(() => __setPurgeBackendForTests(null));
+
+    it('tells a miss from a failure', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        expect(await storeRead('ed:v1:LOX')).toEqual({ ok: true, value: null });
+        backend.seed('ed:v1:LOX', { a: 1 });
+        expect(await storeRead('ed:v1:LOX')).toEqual({ ok: true, value: { a: 1 } });
+
+        __setSharedCacheBackendForTests({ get: async () => { throw new Error('down'); }, set: async () => {} });
+        expect(await storeRead('ed:v1:LOX')).toEqual({ ok: false });
+        expect(await storeRead(null)).toEqual({ ok: false });
+    });
+
+    it('a hanging read is a failure after its timeout, not a miss', async () => {
+        __setSharedCacheBackendForTests({ get: () => new Promise(() => {}), set: async () => {} });
+        const t = performance.now();
+        expect(await storeRead('poll:v1')).toEqual({ ok: false });
+        expect(performance.now() - t).toBeLessThan(STORE_READ_TIMEOUT_MS + 200);
+        expect(await storeRead('poll:v1', { timeoutMs: 20 })).toEqual({ ok: false });
+    });
+
+    it('off Vercel there is no store: reads and writes fail, nothing is touched', async () => {
+        delete process.env.VERCEL;
+        expect(await storeRead('poll:v1')).toEqual({ ok: false });
+        expect(await storeWrite('poll:v1', { at: 1 })).toBe(false);
+    });
+
+    it('writes untagged, with the TTL, and reports success', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        expect(await storeWrite('ed:v1:LOX', { a: 1 }, { ttl: 3600 })).toBe(true);
+        expect(await storeWrite('poll:v1', { at: 1 })).toBe(true);
+        expect(backend.writes).toEqual([
+            { key: 'ed:v1:LOX', options: { ttl: 3600 } },
+            { key: 'poll:v1', options: {} },
+        ]);
+        expect(await storeWrite(null, { a: 1 })).toBe(false);
+        expect(await storeWrite('poll:v1', undefined)).toBe(false);
+    });
+
+    it('a failing or hanging write reports false, never throws', async () => {
+        __setSharedCacheBackendForTests({ get: async () => null, set: async () => { throw new Error('down'); } });
+        expect(await storeWrite('poll:v1', { at: 1 })).toBe(false);
+        __setSharedCacheBackendForTests({ get: async () => null, set: () => new Promise(() => {}) });
+        expect(await storeWrite('poll:v1', { at: 1 }, { timeoutMs: 20 })).toBe(false);
+    });
+});
+
+describe('api/_shared-cache.js purgeTag', () => {
+    afterEach(() => __setPurgeBackendForTests(null));
+
+    it('hard-deletes or invalidates through the injected API, with the tag list', async () => {
+        const calls = [];
+        __setPurgeBackendForTests({
+            invalidateByTag: async (t) => { calls.push(['invalidate', t]); },
+            dangerouslyDeleteByTag: async (t) => { calls.push(['delete', t]); },
+        });
+        expect(await purgeTag('office-LOX', { hard: true })).toEqual({ ok: true });
+        expect(await purgeTag(['office-LOX', 'home'])).toEqual({ ok: true });
+        expect(calls).toEqual([['delete', ['office-LOX']], ['invalidate', ['office-LOX', 'home']]]);
+    });
+
+    it('drops tags that cannot be tags (commas, empty) and refuses an empty list', async () => {
+        const calls = [];
+        __setPurgeBackendForTests({ invalidateByTag: async (t) => { calls.push(t); }, dangerouslyDeleteByTag: async () => {} });
+        expect(await purgeTag(['a,b', '', null])).toEqual({ ok: false, reason: 'no-tags' });
+        expect(calls).toEqual([]);
+    });
+
+    it('a resolved promise is not proof: no request context or off Vercel reports not purged', async () => {
+        delete process.env.VERCEL;
+        expect((await purgeTag('office-LOX', { hard: true })).ok).toBe(false);
+        process.env.VERCEL = '1';
+        expect(await purgeTag('office-LOX', { hard: true })).toEqual({ ok: false, reason: 'no-purge-context' });
+    });
+
+    it('a throwing or hanging purge API reports failure, never throws', async () => {
+        __setPurgeBackendForTests({ invalidateByTag: async () => { throw new Error('purge 500'); }, dangerouslyDeleteByTag: () => { throw new Error('sync'); } });
+        expect(await purgeTag('office-LOX')).toEqual({ ok: false, reason: 'purge 500' });
+        expect(await purgeTag('office-LOX', { hard: true })).toEqual({ ok: false, reason: 'sync' });
+    });
+});
+
+describe('api/_shared-cache.js sharedSetReported', () => {
+    it('tags like sharedSet and reports whether the write landed', async () => {
+        const backend = memoryBackend();
+        __setSharedCacheBackendForTests(backend);
+        expect(await sharedSetReported('ti:v2:LOX:x', { a: 1 }, { ttl: 60 })).toBe(true);
+        expect(backend.writes).toEqual([{ key: 'ti:v2:LOX:x', options: { tags: ['ti'], ttl: 60 } }]);
+        __setSharedCacheBackendForTests({ get: async () => null, set: async () => { throw new Error('down'); } });
+        expect(await sharedSetReported('ti:v2:LOX:x', { a: 1 })).toBe(false);
+        __setSharedCacheBackendForTests({ get: async () => null, set: () => new Promise(() => {}) });
+        expect(await sharedSetReported('ti:v2:LOX:x', { a: 1 }, { timeoutMs: 20 })).toBe(false);
+        delete process.env.VERCEL;
+        __setSharedCacheBackendForTests(null);
+        expect(await sharedSetReported('ti:v2:LOX:x', { a: 1 })).toBe(false);
+        expect(await sharedSetReported(null, { a: 1 })).toBe(false);
+    });
+});
+
+// Nov 18 2026: on a preview, a page that had read a tagged Runtime Cache item
+// (a stored translation) could not be purged by the tag in its header alone.
+describe('tagResponse: the page tag goes through both the header and addCacheTag', () => {
+    const fakeRes = () => { const h = {}; return { h, setHeader: (k, v) => { h[k] = v; } }; };
+
+    it('sets Vercel-Cache-Tag and registers the same tags with the runtime', async () => {
+        const seen = [];
+        __setCacheTaggerForTests(async (tags) => { seen.push(tags); });
+        try {
+            const res = fakeRes();
+            expect(await tagResponse(res, ['office-LOX', 'home'])).toBe(true);
+            expect(res.h[CACHE_TAG_HEADER]).toBe('office-LOX,home');
+            expect(seen).toEqual([['office-LOX', 'home']]);
+            const one = fakeRes();
+            expect(await tagResponse(one, 'office-BTV')).toBe(true);
+            expect(one.h[CACHE_TAG_HEADER]).toBe('office-BTV');
+        } finally { __setCacheTaggerForTests(null); }
+    });
+
+    it('drops tags that cannot be tags (empty, non-string, containing a comma)', async () => {
+        const seen = [];
+        __setCacheTaggerForTests(async (tags) => { seen.push(tags); });
+        try {
+            const res = fakeRes();
+            await tagResponse(res, ['office-LOX', '', 'a,b', null, 42]);
+            expect(res.h[CACHE_TAG_HEADER]).toBe('office-LOX');
+            expect(seen).toEqual([['office-LOX']]);
+            expect(await tagResponse(fakeRes(), [])).toBe(false);
+        } finally { __setCacheTaggerForTests(null); }
+    });
+
+    it('off Vercel with no tagger: the header is still set and nothing throws', async () => {
+        const res = fakeRes();
+        expect(await tagResponse(res, 'office-LOX')).toBe(false);
+        expect(res.h[CACHE_TAG_HEADER]).toBe('office-LOX');
+    });
+
+    it('a failing or hanging tagger never breaks the response', async () => {
+        __setCacheTaggerForTests(async () => { throw new Error('no context'); });
+        try {
+            const res = fakeRes();
+            expect(await tagResponse(res, 'office-LOX')).toBe(false);
+            expect(res.h[CACHE_TAG_HEADER]).toBe('office-LOX');
+        } finally { __setCacheTaggerForTests(null); }
     });
 });

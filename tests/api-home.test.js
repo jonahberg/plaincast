@@ -164,9 +164,34 @@ describe('the homepage is readable without JavaScript', () => {
         // template's.
         const boot = /<script type="application\/json" id="plaincast-boot">[^<]*<\/script>\n {4}(?=<script type="module" crossorigin src="\/assets\/app\.js"><\/script>)/;
         expect(res.body).toMatch(boot);
-        const body = res.body.replace(boot, '');
+        // The one insertion into <head>: the issuance time as dateModified,
+        // right after the homepage WebPage's @id.
+        const dateModified = '\n        "dateModified": "2026-07-03T11:40:00+00:00",';
+        expect(res.body).toContain(`"@id": "https://plaincast.live/",${dateModified}`);
+        const body = res.body.replace(boot, '').replace(dateModified, '');
         expect(body.startsWith(head)).toBe(true);
         expect(body.endsWith(tail)).toBe(true);
+    });
+
+    it('carries the issuance time as data: <time datetime> in the dateline and dateModified in the WebPage JSON-LD', async () => {
+        const res = mockRes();
+        await handler(get(), res);
+        expect(res.body).toMatch(/· issued <time datetime="2026-07-03T11:40:00\+00:00">[^<]+<\/time>\./);
+        const blocks = [...res.body.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => JSON.parse(m[1]));
+        const page = blocks.filter(b => b['@type'] === 'WebPage');
+        expect(page.length).toBe(1);
+        expect(page[0]['@id']).toBe('https://plaincast.live/');
+        expect(page[0].dateModified).toBe('2026-07-03T11:40:00+00:00');
+        // The homepage keeps the site-wide blocks.
+        expect(blocks.map(b => b['@type']).sort()).toEqual(['FAQPage', 'HowTo', 'WebApplication', 'WebPage']);
+    });
+
+    it('an unparseable issuance time leaves the dateline as text and the JSON-LD without dateModified', async () => {
+        mockProducts['https://api.weather.gov/products/curr'].issuanceTime = 'not a time';
+        const res = mockRes();
+        await handler(get(), res);
+        expect(res.body).not.toContain('<time');
+        expect(res.body).not.toContain('dateModified');
     });
 });
 

@@ -298,6 +298,44 @@
     #ssr-root .forecast-section.ssr .section-title + p {
         @apply mt-5;
     }
+    /* With PLAINCAST_AI_FOR_AGENTS=1 a section is the AI summary under a
+       label, then the NWS text in a closed <details> (api/office-page.js
+       aiSectionBody). They mirror what the app paints a moment later: the
+       label in the voice of its "via Claude" (small muted sans, under the
+       title where the app's tabs sit on phones), the summary as reading
+       prose, and the original as the app's Original tab (system mono 13px /
+       1.6 on the muted inset). The label also matches `.section-title + p`
+       at equal specificity, so these come after it. */
+    #ssr-root .forecast-section.ssr p.ssr-ai-label {
+        max-width: none; /* 65ch of 12px type broke it a few words short */
+        @apply mt-3 font-sans text-xs text-muted-foreground;
+    }
+    #ssr-root .forecast-section.ssr p.ssr-ai-label small {
+        font-size: inherit; /* preflight sets <small> to 80% */
+    }
+    #ssr-root .forecast-section.ssr p.ssr-ai-label + p {
+        @apply mt-5;
+    }
+    #ssr-root .forecast-section.ssr .ssr-original {
+        @apply mt-5;
+    }
+    #ssr-root .forecast-section.ssr .ssr-original summary {
+        @apply w-fit cursor-pointer rounded-sm font-sans text-[13px] leading-5 text-muted-foreground hover:text-foreground pointer-coarse:py-3;
+    }
+    /* One continuous inset across the paragraphs: no margins between them,
+       the padding carries the spacing and the corners round only at the ends. */
+    #ssr-root .forecast-section.ssr .ssr-original p {
+        max-width: none;
+        margin: 0;
+        font-variant-numeric: normal;
+        @apply bg-muted px-4 pt-[0.8em] font-mono text-[13px] leading-[1.6] text-foreground;
+    }
+    #ssr-root .forecast-section.ssr .ssr-original summary + p {
+        @apply mt-3 rounded-t-md pt-4;
+    }
+    #ssr-root .forecast-section.ssr .ssr-original p:last-child {
+        @apply rounded-b-md pb-4;
+    }
     #ssr-root .ssr-note {
         @apply mt-10 border-t pt-6 text-[13px] leading-5 text-muted-foreground;
     }

@@ -10,6 +10,8 @@ import { buildOfficeUrl, parseRoute } from '../shadcn/src/lib/route.js';
 import { extractTakeaway, parseSections, splitTakeawayItems } from '../shadcn/src/lib/afd.js';
 import { alertGroupKey, groupAlerts } from '../shadcn/src/lib/nws.js';
 import { editionName, readingOrNull } from '../shadcn/src/lib/format.js';
+import { OFFICES_WITHOUT_NORMAL } from '../shadcn/src/lib/almanac.js';
+import { alertStatusVariants } from '../shadcn/src/lib/alert-status.js';
 import { changelogTitle, officeCanonical, officeFeedHref, officeTitle } from '../shadcn/src/lib/seo.js';
 import { officeTitle as ssrOfficeTitle } from '../scripts/build-offices.mjs';
 import { track } from '../shadcn/src/lib/track.js';
@@ -130,6 +132,39 @@ describe('/api/conditions readings', () => {
         expect(readingOrNull(81)).toBe(81);
         expect(readingOrNull('72')).toBe(72);
     });
+
+    it('the strip never reserves a normal-high cell the server can never fill', async () => {
+        const { CLIMATE_NORMALS } = await import('../api/_climate-normals.js');
+        const { OFFICE_NAMES } = await import('../docs/js/offices.js');
+        const missing = Object.keys(OFFICE_NAMES).filter(c => !CLIMATE_NORMALS[c]).sort();
+        expect([...OFFICES_WITHOUT_NORMAL].sort()).toEqual(missing);
+    });
+
+    it('an empty reading drops its cell instead of showing a dash', async () => {
+        const intro = await read('shadcn/src/components/PageIntro.jsx');
+        const almanac = intro.slice(intro.indexOf('function Almanac('), intro.indexOf('function AlertStatus('));
+        expect(almanac).not.toContain("'—'");
+        expect(almanac).toContain("else if (!conditions) out.push({ label, value: '\\u00a0' });");
+        expect(almanac).toContain("if (!OFFICES_WITHOUT_NORMAL.has(office)) live('Normal high', normal);");
+    });
+});
+
+describe('alert status line variants', () => {
+    const a = (event, extra = {}) => ({ id: `${event}-${Math.random()}`, event, ends: '2026-11-19T00:00:00Z', severity: 'Moderate', ...extra });
+
+    it('condenses by whole names, longest first, each with an accurate "+N"', () => {
+        const alerts = [a('Flood Watch'), a('Wind Advisory'), a('High Surf Advisory'), a('Coastal Flood Advisory')];
+        expect(alertStatusVariants(alerts)).toEqual([
+            '4 active alerts: Flood Watch, Wind Advisory +2',
+            '4 active alerts: Flood Watch +3',
+            '4 active alerts',
+        ]);
+    });
+
+    it('has no duplicate variants when there is only one event', () => {
+        expect(alertStatusVariants([a('Frost Advisory')])).toEqual(['1 active alert: Frost Advisory', '1 active alert']);
+        expect(alertStatusVariants([])).toEqual([]);
+    });
 });
 
 describe('titles and head links', () => {
@@ -208,5 +243,67 @@ describe('theme key migration', () => {
         const js = await read('shadcn/public/theme-init.js');
         expect(js).toContain("localStorage.getItem('plaincast-theme')");
         expect(js).toContain("localStorage.getItem('theme')");
+    });
+});
+
+// A document from another deployment asks for /assets/ files that 404 there
+// (hashed names are per build; the old stable names are gone). theme-init.js
+// keeps one stable name, so it carries the reload-once recovery.
+describe('theme-init.js: reload once when the page\'s own assets are missing', () => {
+    const run = async ({ stored = null, now = 1_000_000 } = {}) => {
+        const js = await read('shadcn/public/theme-init.js');
+        const listeners = [];
+        const session = new Map(stored === null ? [] : [['plaincast-asset-reload', String(stored)]]);
+        let reloads = 0;
+        const env = {
+            window: null,
+            localStorage: { getItem: () => null, setItem() {} },
+            sessionStorage: { getItem: k => (session.has(k) ? session.get(k) : null), setItem: (k, v) => session.set(k, String(v)) },
+            matchMedia: () => ({ matches: false }),
+            document: { documentElement: { classList: { add() {} } } },
+            location: { origin: 'https://plaincast.live', reload: () => { reloads++; } },
+            addEventListener: (type, fn, capture) => listeners.push({ type, fn, capture }),
+            Date: { now: () => now },
+            Number, String,
+        };
+        env.window = env;
+        new Function(...Object.keys(env), js)(...Object.values(env));
+        const fire = (target) => listeners.filter(l => l.type === 'error').forEach(l => l.fn({ target }));
+        return { listeners, fire, reloads: () => reloads, session, env };
+    };
+    const script = (src) => ({ tagName: 'SCRIPT', src });
+    const sheet = (href) => ({ tagName: 'LINK', rel: 'stylesheet', href });
+
+    it('listens in the capture phase (element load errors do not bubble)', async () => {
+        const { listeners } = await run();
+        expect(listeners).toEqual([{ type: 'error', fn: expect.any(Function), capture: true }]);
+    });
+    it('reloads once when the app script or stylesheet 404s', async () => {
+        const a = await run();
+        a.fire(script('https://plaincast.live/assets/app.js'));
+        expect(a.reloads()).toBe(1);
+        a.fire(sheet('https://plaincast.live/assets/app-OLDHASH.css')); // same page, moments later
+        expect(a.reloads()).toBe(1);
+        const b = await run();
+        b.fire(sheet('https://plaincast.live/assets/app.css'));
+        expect(b.reloads()).toBe(1);
+    });
+    it('does not loop: a reload that just happened is not repeated, a later one is allowed', async () => {
+        const recent = await run({ stored: 1_000_000 - 5_000 });
+        recent.fire(script('https://plaincast.live/assets/app.js'));
+        expect(recent.reloads()).toBe(0);
+        const later = await run({ stored: 1_000_000 - 120_000 });
+        later.fire(script('https://plaincast.live/assets/app.js'));
+        expect(later.reloads()).toBe(1);
+    });
+    it('ignores everything that is not one of the page\'s own /assets/ tags', async () => {
+        const { fire, reloads, env } = await run();
+        fire(script('https://plaincast.live/_vercel/insights/script.js'));
+        fire(script('https://example.com/assets/app.js'));
+        fire({ tagName: 'IMG', src: 'https://plaincast.live/assets/x.png' });
+        fire({ tagName: 'LINK', rel: 'modulepreload', href: 'https://plaincast.live/assets/vendor.js' });
+        fire(env); // a runtime error on window itself
+        fire(null);
+        expect(reloads()).toBe(0);
     });
 });

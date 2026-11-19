@@ -268,7 +268,7 @@ describe('annotateZuluTimes — weekday only when the text fixes the day (Nov 18
         expect(annotateZuluTimes('until 12-18Z THURSDAY', 'LOT', LOT_WED)).toBe('until 12-18Z THURSDAY (6 AM-12 PM CST Thu)');
     });
 
-    it('offices: no pin from an abbreviation ("sat" imagery) or a weekday with a part of day', () => {
+    it('offices: no pin from a lowercase abbreviation ("sat" imagery) or a weekday with a part of day', () => {
         const LOT_WED = '2026-11-18T23:20:00+00:00';
         expect(annotateZuluTimes('the 18Z sat imagery', 'LOT', LOT_WED)).toBe('the 18Z (12 PM CST) sat imagery');
         // "06Z Friday night" means Friday night local (Saturday 06Z), not Friday 06Z:
@@ -289,5 +289,99 @@ describe('annotateZuluTimes — weekday only when the text fixes the day (Nov 18
         // 3 PM EST Thu Nov 12: the next 12Z is Friday morning.
         expect(annotateZuluTimes('by 12Z', null, '2026-11-12T20:00:00Z', { timeZone: 'America/New_York', weekdayPins: true }))
             .toBe('by 12Z (7 AM EST Fri)');
+    });
+});
+
+// Nov 18 2026 (follow-up). A capitalised weekday abbreviation right after the
+// token pins its UTC day too, in the full-name form, so no bare UTC weekday
+// is left for the model. SGX Aviation reached the model as "after 00Z (4 PM
+// PST) Fri" and the AI wrote "after 4 PM Friday"; 00Z Friday is 4 PM PST
+// Thursday. Not a pin: lowercase ("18Z sat imagery"), a Sat/Sun followed by a
+// data word ("18Z Sat imagery shows"), a part of day, or the start of another
+// word ("Sunny"). "12Z Sun model run" IS a pin: a capitalised Sun right after
+// a time is the weekday in NWS writing, and the local label (6 AM CST Sun)
+// is right whichever week the run was. 24Z is the end of its UTC day: JAX
+// Aviation's "18-24Z" reached the model with no annotation at all.
+describe('annotateZuluTimes — weekday abbreviations and 24Z (Nov 18 2026)', () => {
+    const live = (code) => JSON.parse(readFileSync(new URL(`./fixtures/afd/live-2026-11-18/${code}.json`, import.meta.url), 'utf8'));
+    const LOT_WED = '2026-11-18T23:20:00+00:00'; // 5:20 PM CST Wed
+
+    it('SGX: "after 00Z Fri" is Thursday 4 PM PST, in the full-name form', () => {
+        const sgx = live('SGX');
+        expect(sgx.productText).toContain('weaken after 00Z Fri.');
+        const out = annotateZuluTimes('Winds will become westerly and weaken after 00Z Fri.', 'SGX', sgx.issuanceTime);
+        expect(out).toBe('Winds will become westerly and weaken after 00Z Fri (4 PM PST Thu).');
+        expect(out).not.toContain('(4 PM PST) Fri');
+        // the full name was already pinned the same way
+        expect(annotateZuluTimes('after 00Z Friday.', 'SGX', sgx.issuanceTime)).toBe('after 00Z Friday (4 PM PST Thu).');
+    });
+
+    it('more real ones: MLB "18Z Thu", PQR "18-20z Thu", IWX "14z Thu"', () => {
+        expect(annotateZuluTimes('beginning 18Z Thu.', 'MLB', '2026-11-18T23:38:00+00:00')).toBe('beginning 18Z Thu (1 PM EST Thu).');
+        const pqr = live('PQR');
+        expect(pqr.productText).toContain('After 18-20z Thu,');
+        expect(annotateZuluTimes('After 18-20z Thu, any fog', 'PQR', pqr.issuanceTime)).toBe('After 18-20z Thu (10 AM-12 PM PST Thu), any fog');
+        expect(annotateZuluTimes('for KSBN after 14z Thu.', 'IWX', '2026-11-18T23:35:00+00:00')).toBe('for KSBN after 14z Thu (9 AM EST Thu).');
+    });
+
+    it('every capitalised abbreviation pins (title case or all caps)', () => {
+        expect(annotateZuluTimes('by 12Z Sat.', 'LOT', LOT_WED)).toBe('by 12Z Sat (6 AM CST Sat).');
+        expect(annotateZuluTimes('by 00Z Mon', 'LOT', LOT_WED)).toBe('by 00Z Mon (6 PM CST Sun)');
+        expect(annotateZuluTimes('through 06Z Tues', 'LOT', LOT_WED)).toBe('through 06Z Tues (12 AM CST Tue)');
+        expect(annotateZuluTimes('BY 00Z FRI', 'LOT', LOT_WED)).toBe('BY 00Z FRI (6 PM CST Thu)');
+    });
+
+    it('not a pin: lowercase, a satellite/data word after Sat or Sun, a part of day, another word', () => {
+        expect(annotateZuluTimes('the 18Z sat imagery', 'LOT', LOT_WED)).toBe('the 18Z (12 PM CST) sat imagery');
+        expect(annotateZuluTimes('the 18Z Sat imagery shows', 'LOT', LOT_WED)).toBe('the 18Z (12 PM CST) Sat imagery shows');
+        expect(annotateZuluTimes('the 18Z SAT LOOP', 'LOT', LOT_WED)).toBe('the 18Z (12 PM CST) SAT LOOP');
+        expect(annotateZuluTimes('18Z Sat pics and 18Z Sat data', 'LOT', LOT_WED)).toBe('18Z (12 PM CST) Sat pics and 18Z (12 PM CST) Sat data');
+        expect(annotateZuluTimes('after 06Z Fri night', 'LOT', LOT_WED)).toBe('after 06Z (12 AM CST) Fri night');
+        expect(annotateZuluTimes('at 00Z fri', 'LOT', LOT_WED)).toBe('at 00Z (6 PM CST) fri');
+        expect(annotateZuluTimes('18Z Sunny skies', 'LOT', LOT_WED)).toBe('18Z (12 PM CST) Sunny skies');
+    });
+
+    it('"12Z Sun model run" pins: a capitalised Sun after a time is the weekday', () => {
+        expect(annotateZuluTimes('the 12Z Sun model run', 'LOT', LOT_WED)).toBe('the 12Z Sun (6 AM CST Sun) model run');
+        // a weather word after it is no reason to doubt the day
+        expect(annotateZuluTimes('after 00Z Sun winds become westerly', 'LOT', LOT_WED)).toBe('after 00Z Sun (6 PM CST Sat) winds become westerly');
+    });
+
+    it('a forecaster\'s parenthesis after the weekday does not block the pin', () => {
+        expect(annotateZuluTimes('by 06Z Sat (30% chance)', 'LOT', LOT_WED)).toBe('by 06Z Sat (12 AM CST Sat) (30% chance)');
+        expect(annotateZuluTimes('by 06Z Saturday (30% chance)', 'LOT', LOT_WED)).toBe('by 06Z Saturday (12 AM CST Sat) (30% chance)');
+        // with no weekday, a parenthesis still means the token is explained
+        expect(annotateZuluTimes('after 00Z (4 PM PST) the winds ease', 'LOT', LOT_WED)).toBe('after 00Z (4 PM PST) the winds ease');
+        expect(annotateZuluTimes('by 06Z (30% chance)', 'LOT', LOT_WED)).toBe('by 06Z (30% chance)');
+    });
+
+    it('JAX: "18-24Z" ends at the end of that UTC day (7 PM EST)', () => {
+        const jax = live('JAX');
+        expect(jax.productText).toContain('from 18-24Z, but');
+        expect(annotateZuluTimes('the TAF period from 18-24Z, but for now', 'JAX', jax.issuanceTime))
+            .toBe('the TAF period from 18-24Z (1-7 PM EST), but for now');
+    });
+
+    it('24Z alone, with a DD/ prefix and with a weekday', () => {
+        expect(annotateZuluTimes('VFR through 24Z.', 'LOT', LOT_WED)).toBe('VFR through 24Z (6 PM CST).');
+        // the end of the 19th is 00Z on the 20th: Thursday evening in Chicago
+        expect(annotateZuluTimes('valid until 19/24Z', 'LOT', LOT_WED)).toBe('valid until 19/24Z (6 PM CST Thu)');
+        expect(annotateZuluTimes('until 24Z Fri', 'LOT', LOT_WED)).toBe('until 24Z Fri (6 PM CST Fri)');
+        // a range across local days names a day only where it is not the issue day, as before
+        expect(annotateZuluTimes('from 00-24Z Thu', 'LOT', LOT_WED)).toBe('from 00-24Z Thu (6 PM CST-6 PM CST Thu)');
+        expect(annotateZuluTimes('the 25Z and 2460Z tokens', 'LOT', LOT_WED)).toBe('the 25Z and 2460Z tokens');
+    });
+
+    it('is idempotent on the new forms', () => {
+        for (const text of ['after 00Z Fri.', 'the 18Z Sat imagery', 'from 18-24Z, but', 'the 12Z Sun model run', 'BY 00Z FRI',
+            'by 06Z Sat (30% chance)', 'after 06Z Fri night', 'from 00-24Z Thu', 'After 18-20z Thu, any fog', 'at 1717Z at KLAX', '6-9Z Tue']) {
+            const once = annotateZuluTimes(text, 'LOT', LOT_WED);
+            expect(annotateZuluTimes(once, 'LOT', LOT_WED)).toBe(once);
+        }
+    });
+
+    it('the National Desk keeps its rule: any weekday form pins, when asked', () => {
+        const PINNED = { timeZone: 'America/New_York', weekdayPins: true };
+        expect(annotateZuluTimes('the 18Z sat imagery', null, '2026-11-12T20:00:00Z', PINNED)).toBe('the 18Z sat (1 PM EST Sat) imagery');
     });
 });

@@ -3,7 +3,7 @@
 // deployed site's /api helpers (conditions, changelog) which soft-fail when
 // unavailable (standalone dev).
 
-import { OFFICE_COORDS, OFFICE_STATES, OFFICE_SENDER } from '../../../docs/js/offices.js';
+import { OFFICE_COORDS, OFFICE_STATES, OFFICE_SENDER, alertOfficeCode } from '../../../docs/js/offices.js';
 
 const HEADERS = { 'User-Agent': 'Plaincast/1.0 (plaincast.live; shadcn edition)' };
 
@@ -51,8 +51,19 @@ export async function fetchLatestAFD(office, { force = false } = {}) {
     return { product, rawUrl: prodUrl, list: graph };
 }
 
-// Active alerts for the office's state, filtered to this office's sender
-// name. Returns { alerts, severe, ok } — `severe` is an active Severe/Extreme
+// True when an alert was issued by `office`. The WMO heading names the
+// issuing office for every NWS alert (KOKX → OKX, PAFC → AFC — including
+// Alaska alerts whose AWIPS id carries a zone code); the sender-name fragment
+// is only the fallback for an alert without one.
+export function alertIsFromOffice(props, office) {
+    const issuer = alertOfficeCode(props);
+    if (issuer) return issuer === office;
+    const senderMatch = OFFICE_SENDER[office] || '';
+    return !senderMatch || (props?.senderName || '').includes(senderMatch);
+}
+
+// Active alerts for the office's state, filtered to the ones this office
+// issued. Returns { alerts, severe, ok } — `severe` is an active Severe/Extreme
 // Warning (tightens the refresh poll, same as the vanilla client); `ok` is
 // false when the feed could not be read, so the page never claims "No active
 // alerts" on a failed fetch.
@@ -66,11 +77,10 @@ export async function fetchAlerts(office) {
         });
         if (!res.ok) return { alerts: [], severe: false, ok: false };
         const data = await res.json();
-        const senderMatch = OFFICE_SENDER[office] || '';
         let alerts = [];
         for (const f of (data.features || [])) {
             const p = f.properties;
-            if (senderMatch && !(p.senderName || '').includes(senderMatch)) continue;
+            if (!alertIsFromOffice(p, office)) continue;
             alerts.push({
                 id: p.id || f.id || '',
                 event: p.event || '',

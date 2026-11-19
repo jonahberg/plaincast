@@ -31,21 +31,21 @@ describe('per-office SEO pages stay in sync with the app shell (shadcn/index.htm
         expect(readFileSync(join(ROOT, 'api', '_home-shell.html'), 'utf8')).toBe(template);
     });
 
-    it('sitemap.xml matches the generator', () => {
-        // <lastmod> is stamped with the generation date, so pin the comparison
-        // to the committed file's own date (else this drifts daily).
+    it('sitemap.xml matches the generator, which is deterministic', () => {
         const committed = readFileSync(join(DOCS, 'sitemap.xml'), 'utf8');
-        const lastmod = committed.match(/<lastmod>(\d{4}-\d{2}-\d{2})<\/lastmod>/)?.[1];
-        expect(lastmod).toBeTruthy();
-        expect(committed).toBe(renderSitemap(codes, lastmod));
+        expect(committed).toBe(renderSitemap(codes));
+        expect(renderSitemap(codes)).toBe(renderSitemap(codes));
     });
 
-    it('every sitemap URL carries a YYYY-MM-DD <lastmod>', () => {
+    // A generation date in <lastmod> was false for every URL: the edition
+    // pages change several times a day, the prose pages rarely. No URL
+    // carries one; changefreq stays.
+    it('no sitemap URL carries a <lastmod>; every URL keeps its changefreq', () => {
         const committed = readFileSync(join(DOCS, 'sitemap.xml'), 'utf8');
         const locs = [...committed.matchAll(/<loc>/g)].length;
-        const stamps = [...committed.matchAll(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/g)].length;
         expect(locs).toBe(codes.length + 6); // homepage + /national/ + 4 prose pages + every office
-        expect(stamps).toBe(locs);
+        expect(committed).not.toContain('<lastmod>');
+        expect([...committed.matchAll(/<changefreq>(?:daily|monthly)<\/changefreq>/g)].length).toBe(locs);
     });
 
     it('the sitemap lists the trust-anchor pages and the developer portal', () => {
@@ -63,6 +63,9 @@ describe('per-office SEO pages stay in sync with the app shell (shadcn/index.htm
             expect(html).toContain(`<link rel="alternate" type="text/markdown" href="https://plaincast.live/o/${code}/">`);
             expect(html).not.toContain('<link rel="alternate" type="text/markdown" href="https://plaincast.live/">');
             expect(html).not.toContain('<title>Plaincast - What the forecast actually says</title>');
+            // The PLACEHOLDER names (committed; docs/o/ is not deployed). The
+            // deploy rewrites api/_home-shell.html's copies to the build's
+            // hashed files (tests/hashed-assets.test.js).
             expect(html).toContain('href="/assets/app.css"');
             expect(html).toContain('src="/assets/app.js"');
             expect(html).toContain(`href="/api/feed?office=${code}"`);
@@ -109,7 +112,7 @@ describe('per-office OG share cards', () => {
 describe('footer office index (internal links to all /o/ pages)', () => {
     it('the template links every office exactly once, as City (CODE)', () => {
         const links = [...template.matchAll(/<li><a href="\/o\/([A-Z]{3})\/"[^>]*>([^<]+) \((\1)\)<\/a><\/li>/g)];
-        expect(links.length).toBe(codes.length); // 68
+        expect(links.length).toBe(codes.length);
         const byCode = new Map(links.map(m => [m[1], m[2]]));
         expect([...byCode.keys()].sort()).toEqual([...codes].sort());
         for (const code of codes) {
@@ -117,7 +120,7 @@ describe('footer office index (internal links to all /o/ pages)', () => {
         }
     });
 
-    it('rendered office pages keep all 68 links and mark their own with aria-current', () => {
+    it('rendered office pages keep every office link and mark their own with aria-current', () => {
         const html = renderOfficePage(template, 'LOX', OFFICE_NAMES.LOX);
         const hrefs = [...html.matchAll(/<li><a href="\/o\/([A-Z]{3})\/"/g)].map(m => m[1]);
         expect(hrefs.length).toBe(codes.length);
@@ -148,9 +151,63 @@ describe('per-office structured data', () => {
     it('every JSON-LD block on a rendered page parses as valid JSON', () => {
         const html = renderOfficePage(template, 'LOX', OFFICE_NAMES.LOX);
         const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
-        expect(blocks.length).toBeGreaterThanOrEqual(4); // WebApplication, FAQ, HowTo + office block
+        expect(blocks.length).toBe(1); // the office's own WebPage only
         for (const [, json] of blocks) {
             expect(() => JSON.parse(json)).not.toThrow();
         }
+    });
+});
+
+// Structured data per page type. The site-wide blocks (WebApplication,
+// FAQPage, HowTo) describe the homepage and stay there; every page carries
+// exactly one WebPage, whose @id is its own canonical URL.
+function jsonLdBlocks(html) {
+    return [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => JSON.parse(m[1]));
+}
+function allIds(node, out = []) {
+    if (Array.isArray(node)) for (const v of node) allIds(v, out);
+    else if (node && typeof node === 'object') {
+        if (typeof node['@id'] === 'string') out.push(node['@id']);
+        for (const v of Object.values(node)) allIds(v, out);
+    }
+    return out;
+}
+
+describe('structured data by page type', () => {
+    it('the homepage carries WebPage, WebApplication, FAQPage and HowTo, all valid JSON, no duplicate @id', () => {
+        const blocks = jsonLdBlocks(template);
+        expect(blocks.map(b => b['@type'])).toEqual(['WebPage', 'WebApplication', 'FAQPage', 'HowTo']);
+        expect(blocks[0]['@id']).toBe('https://plaincast.live/');
+        const ids = allIds(blocks);
+        expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it('every office page carries only its own WebPage (+ breadcrumb), valid JSON, no duplicate @id', () => {
+        for (const code of codes) {
+            const blocks = jsonLdBlocks(read(code));
+            expect(blocks.map(b => b['@type'])).toEqual(['WebPage']);
+            expect(blocks[0]['@id']).toBe(`https://plaincast.live/o/${code}/`);
+            expect(blocks[0].breadcrumb['@type']).toBe('BreadcrumbList');
+            const ids = allIds(blocks);
+            expect(new Set(ids).size).toBe(ids.length);
+        }
+    });
+
+    it('no page claims JavaScript is required (every page is server-rendered)', () => {
+        expect(template).not.toContain('browserRequirements');
+        expect(read('LOX')).not.toContain('browserRequirements');
+    });
+
+    it('the homepage office count comes from the roster, never a literal in shadcn/index.html', () => {
+        const n = codes.length;
+        const ld = JSON.stringify(jsonLdBlocks(template));
+        expect(ld).toContain(`"${n} NWS forecast offices"`);
+        expect(ld).toContain(`Plaincast supports ${n} NWS forecast offices`);
+        expect(ld).toContain(`Plaincast supports ${n} offices across the United States`);
+        expect(template).not.toContain('__OFFICE_COUNT__');
+        // The source holds the placeholder, so the count cannot go stale there.
+        const source = readFileSync(join(ROOT, 'shadcn', 'index.html'), 'utf8');
+        expect(source).not.toMatch(/\b\d+ (?:NWS forecast )?offices\b/);
+        expect(source.split('__OFFICE_COUNT__').length - 1).toBe(3);
     });
 });

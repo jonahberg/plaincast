@@ -1,28 +1,28 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FileWarning, RefreshCw, WifiOff, X } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { OFFICE_NAMES, OFFICE_TIMEZONES } from '@data/offices.js';
-import { computeDiff } from '@data/diff.js';
+import { isUntranslatable } from '@data/untranslatable.js';
 import { extractTakeaway, hasRealAlerts, parseSections, reorderSections } from '@/lib/afd';
 import {
     fetchAFDList, fetchAlerts, fetchChangelog, fetchConditions, fetchProduct, historyItems,
 } from '@/lib/nws';
 import { fetchEditionSnapshot, primeIssuanceTranslations } from '@/lib/ai';
 import { bootFor, readBoot } from '@/lib/boot';
-import { ALERTS_KEY, alertStatusSummary, withAlertsSection } from '@/lib/alert-status';
+import { ALERTS_KEY, alertStatusSummary, alertStatusVariants, withAlertsSection } from '@/lib/alert-status';
 import { loadLastEdition, saveLastEdition } from '@/lib/offline';
 import { currentRoute, officeUrl } from '@/lib/route';
 import { headFor, officeFeedHref } from '@/lib/seo';
 import { track } from '@/lib/track';
 import { formatIssueTime, timeAgo } from '@/lib/format';
+import { onDemand, useOnDemand } from '@/lib/on-demand';
+import { toast } from '@/lib/toast';
 import { useTheme } from '@/hooks/useTheme';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Toaster } from '@/components/ui/sonner';
 
 import { Header } from '@/components/Header';
 import { PageIntro } from '@/components/PageIntro';
@@ -31,9 +31,20 @@ import { SectionNav } from '@/components/SectionNav';
 import { ForecastSection } from '@/components/ForecastSection';
 import { AlertsSection } from '@/components/AlertsSection';
 import { Footer } from '@/components/Footer';
-import { KbdDialog } from '@/components/KbdDialog';
-import { ChangelogView } from '@/components/ChangelogView';
+import { ChangelogFrame, ChangelogSkeleton } from '@/components/ChangelogFrame';
+import { ToasterHost } from '@/components/ToasterHost';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+
+// Chunks fetched on first need, never with the page (src/lib/on-demand.js):
+// the changelog view, the shortcuts dialog, and the diff engine behind the
+// "What changed" tabs (its result only exists after the previous edition
+// has been fetched anyway). Toasts load the same way (src/lib/toast.js).
+const loadChangelog = onDemand(() => import('@/components/ChangelogView'));
+const loadKbdDialog = onDemand(() => import('@/components/KbdDialog'));
+const loadDiff = onDemand(() => import('@data/diff.js'));
+const prefetch = (get) => () => { get().catch(() => { /* retried when needed */ }); };
+const prefetchChangelog = prefetch(loadChangelog);
+const prefetchKbdDialog = prefetch(loadKbdDialog);
 
 const OFFICE_KEY = 'plaincast-office';
 const HISTORY_LIMIT = 10;
@@ -91,6 +102,8 @@ function sameInstant(a, b) {
 // from their first frame.
 function initialApp() {
     const loc = initialState();
+    // Opened on the ledger: its chunk starts now, beside the first render.
+    if (loc.view === 'changelog') prefetchChangelog();
     const boot = bootFor(readBoot(), loc);
     if (!boot) return { loc, boot: null, state: { status: 'loading' } };
     const state = productToState(boot.product, {
@@ -161,6 +174,8 @@ export default function App() {
     const [newerEdition, setNewerEdition] = useState(null); // product id of an unseen issuance
     const [offlineNow, setOfflineNow] = useState(!navigator.onLine);
     const [kbdOpen, setKbdOpen] = useState(false);
+    const kbdChunk = useOnDemand(loadKbdDialog, kbdOpen);
+    const changelogChunk = useOnDemand(loadChangelog, inChangelog);
     const [activeKey, setActiveKey] = useState(null);
     const [announcement, setAnnouncement] = useState('');
 
@@ -176,6 +191,16 @@ export default function App() {
     const renderedRoute = useRef(currentRoute());
 
     const announce = useCallback((msg) => setAnnouncement(msg), []);
+
+    // The shortcuts dialog's chunk could not load (offline before it was ever
+    // fetched): close rather than stay "open" with nothing on screen. The
+    // next open tries again.
+    const kbdFailed = Boolean(kbdChunk.error);
+    useEffect(() => {
+        if (!kbdFailed) return;
+        setKbdOpen(false);
+        kbdChunk.retry();
+    }, [kbdFailed]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // The served page carries a server-rendered digest (#ssr-root in
     // index.html) for crawlers and no-JS readers; the app supersedes it.
@@ -229,11 +254,15 @@ export default function App() {
             });
         }
         if (prevItem) {
-            fetchProduct(prevItem.url).then(prev => {
+            // The diff engine's chunk loads alongside the previous edition.
+            Promise.all([fetchProduct(prevItem.url), loadDiff()]).then(([prev, { computeDiff, renderDiffHTML }]) => {
                 if (gen !== generation.current) return;
                 const prevSections = parseSections(prev.productText || '').sections;
                 const results = computeDiff(prevSections, sections);
-                setDiffs(new Map(results.map(r => [r.key, r])));
+                // The "What changed" panel's HTML, for the sections that get one.
+                setDiffs(new Map(results.map(r => [r.key, (r.status === 'changed' || r.status === 'added')
+                    ? { ...r, html: renderDiffHTML(r) }
+                    : r])));
             }).catch(() => { /* the tabs simply don't appear */ });
         }
     }, []);
@@ -537,7 +566,7 @@ export default function App() {
     // The intro's alert status line (PageIntro's second meta row).
     const parsedAlertsListed = ready && state.sections.some(s => s.key === ALERTS_KEY && hasRealAlerts(s.text));
     const alertRow = useMemo(() => {
-        if (alerts.length) return { kind: 'live', summary: alertStatusSummary(alerts), severe };
+        if (alerts.length) return { kind: 'live', summary: alertStatusSummary(alerts), variants: alertStatusVariants(alerts), severe };
         if (alertsStatus === 'pending') return { kind: 'pending' };
         // The forecaster's coded watch/warning list, with no live match.
         if (parsedAlertsListed) return { kind: 'listed' };
@@ -545,15 +574,24 @@ export default function App() {
         return { kind: 'none' };
     }, [alerts, alertsStatus, parsedAlertsListed, severe]);
 
+    // Sections the shared rule never sends to the model (tables, sections
+    // under 25 words: docs/js/untranslatable.js, the same rule the server
+    // applies). They are not AI-eligible: no request, no "Summarizing…", no
+    // "via Claude" — the regex-expanded NWS text from the first frame.
+    const untranslatable = useMemo(
+        () => new Set(ready ? state.sections.filter(s => isUntranslatable(s.key, s.text)).map(s => s.key) : []),
+        [ready, state.sections]
+    );
+
     const takeawayHTML = useMemo(
         () => (ready ? extractTakeaway(state.sections, tz) : ''),
         [ready, state.sections, tz]
     );
     const takeawayFromMessages = ready && state.sections.some(s => s.key === 'Messages');
 
-    const issueLine = ready && state.issuedAt
-        ? `Issued ${formatIssueTime(state.issuedAt, tz)} (${timeAgo(state.issuedAt)})`
-        : '';
+    const issued = ready && state.issuedAt
+        ? { at: formatIssueTime(state.issuedAt, tz), ago: timeAgo(state.issuedAt) }
+        : null;
 
     const jumpTo = useCallback((key) => {
         setActiveKey(key);
@@ -623,6 +661,8 @@ export default function App() {
     }, []);
 
     const shareUrl = officeUrl(office, viewingHistorical ? state.productId : null, view).toString();
+    const ChangelogView = changelogChunk.mod?.ChangelogView;
+    const KbdDialog = kbdChunk.mod?.KbdDialog;
     const changelogHref = officeUrl(office, null, 'changelog').toString();
 
     return (
@@ -641,6 +681,7 @@ export default function App() {
                     shareUrl={shareUrl}
                     onOfficeChange={changeOffice}
                     onShowKbd={() => setKbdOpen(true)}
+                    onKbdIntent={prefetchKbdDialog}
                     theme={theme}
                     onToggleTheme={toggle}
                     selectRef={selectRef}
@@ -694,12 +735,31 @@ export default function App() {
 
                     {inChangelog && (
                         <ErrorBoundary scoped resetKey={`changelog|${office}`}>
-                            <ChangelogView
-                                office={office}
-                                announce={announce}
-                                onBack={() => leaveChangelog(null)}
-                                onOpenEdition={(id) => leaveChangelog(id)}
-                            />
+                            {/* The frame is here, not in the on-demand
+                                ChangelogView, so it is in place from the
+                                first frame; the skeleton holds the body
+                                until the chunk arrives. */}
+                            <ChangelogFrame office={office} onBack={() => leaveChangelog(null)}>
+                                {ChangelogView ? (
+                                    <ChangelogView
+                                        office={office}
+                                        announce={announce}
+                                        onOpenEdition={(id) => leaveChangelog(id)}
+                                    />
+                                ) : changelogChunk.error ? (
+                                    <Alert variant="destructive">
+                                        <AlertTitle>Couldn't load the changelog</AlertTitle>
+                                        <AlertDescription>
+                                            <p>Check your connection and try again.</p>
+                                            <Button variant="outline" size="sm" className="tap-target mt-2" onClick={changelogChunk.retry}>
+                                                Try again
+                                            </Button>
+                                        </AlertDescription>
+                                    </Alert>
+                                ) : (
+                                    <ChangelogSkeleton />
+                                )}
+                            </ChangelogFrame>
                         </ErrorBoundary>
                     )}
 
@@ -758,7 +818,7 @@ export default function App() {
                                 takeawayHTML={takeawayHTML}
                                 takeawayFromMessages={takeawayFromMessages}
                                 forecaster={state.forecaster}
-                                issueLine={issueLine}
+                                issued={issued}
                                 fullText={state.fullText}
                                 conditions={conditions}
                                 conditionsExpected={!state.archived && !state.offline}
@@ -770,6 +830,7 @@ export default function App() {
                                 viewingHistorical={viewingHistorical}
                                 changelogHref={changelogHref}
                                 onOpenChangelog={openChangelog}
+                                onChangelogIntent={prefetchChangelog}
                                 alertRow={alertRow}
                                 onJumpToAlerts={() => jumpTo(ALERTS_KEY)}
                             />
@@ -790,7 +851,7 @@ export default function App() {
                                         office={office}
                                         productId={state.productId}
                                         issuanceTime={state.issuedAt?.toISOString()}
-                                        aiEligible={section.key !== 'Active Alerts' && !state.offline}
+                                        aiEligible={section.key !== 'Active Alerts' && !state.offline && !untranslatable.has(section.key)}
                                         diff={diffs?.get(section.key) || null}
                                         sectionRef={setSectionRef(section.key)}
                                     />
@@ -809,8 +870,8 @@ export default function App() {
 
                 <Footer office={office} rawUrl={!inChangelog && ready ? state.rawUrl : null} />
             </div>
-            <KbdDialog open={kbdOpen} onOpenChange={setKbdOpen} />
-            <Toaster theme={theme} position="bottom-right" />
+            {KbdDialog && <KbdDialog open={kbdOpen} onOpenChange={setKbdOpen} />}
+            <ToasterHost theme={theme} />
         </TooltipProvider>
     );
 }

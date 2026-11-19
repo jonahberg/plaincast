@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "headers": {
+    "cache-control": "public, s-maxage=300",
+    "content-type": "text/html; charset=utf-8",
+    "vary": "Accept, Accept-Encoding"
+  },
+  "body": "<<SHELL>>"
+}
