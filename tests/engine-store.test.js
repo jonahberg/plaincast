@@ -142,20 +142,42 @@ describe('mergeListing', () => {
         expect(state.offices.LOX).toMatchObject({ id: 'lox-3', prevId: 'lox-2b', stored: 'lox-3' });
     });
 
-    it('two products with one issuance time mark the office as a tie (live path)', () => {
+    it('a same-time twin (a correction) is a new edition: tie (live path), id moves, office reported changed', () => {
         const state = emptyState();
-        state.offices.LOX = { id: 'lox-2', issuanceTime: '2026-11-18T05:00:00+00:00', prevId: 'lox-1' };
-        mergeListing(state, [item('KLOX', 'lox-2b', '2026-11-18T05:00:00+00:00')]);
-        expect(state.offices.LOX.tie).toBe(true);
-        expect(state.offices.LOX.id).toBe('lox-2');
-        // A newer product clears it.
-        mergeListing(state, [item('KLOX', 'lox-3', '2026-11-18T11:00:00+00:00')]);
+        state.offices.LOX = { id: 'lox-2', issuanceTime: '2026-11-18T05:00:00+00:00', prevId: 'lox-1', stored: 'lox-2', purge: { id: 'lox-2', n: 2 } };
+        const changed = mergeListing(state, [item('KLOX', 'lox-2b', '2026-11-18T05:00:00+00:00')]);
+        expect(changed).toEqual(['LOX']);
+        expect(state.offices.LOX).toMatchObject({ id: 'lox-2b', prevId: 'lox-1', tie: true, tieIds: ['lox-2', 'lox-2b'], stored: 'lox-2' });
+        // Seen again: nothing new.
+        expect(mergeListing(state, [item('KLOX', 'lox-2', '2026-11-18T05:00:00+00:00'), item('KLOX', 'lox-2b', '2026-11-18T05:00:00+00:00')])).toEqual([]);
+        // A newer issuance clears it.
+        expect(mergeListing(state, [item('KLOX', 'lox-3', '2026-11-18T11:00:00+00:00')])).toEqual(['LOX']);
         expect(state.offices.LOX.tie).toBeUndefined();
-        expect(state.offices.LOX.id).toBe('lox-3');
+        expect(state.offices.LOX.tieIds).toBeUndefined();
+        expect(state.offices.LOX).toMatchObject({ id: 'lox-3', prevId: 'lox-2b' });
+    });
 
-        const s2 = emptyState();
-        mergeListing(s2, [item('KLOX', 'a', '2026-11-18T05:00:00Z'), item('KLOX', 'b', '2026-11-18T05:00:00Z')], { full: true });
-        expect(s2.offices.LOX.tie).toBe(true);
+    it('twin detection does not depend on listing order, in either mode', () => {
+        const P = item('KOTX', 'P', '2026-11-18T22:45:00+00:00');
+        const A = item('KOTX', 'A', '2026-11-18T23:11:00+00:00');
+        const B = item('KOTX', 'B-RRA', '2026-11-18T23:11:00+00:00');
+        for (const full of [false, true]) {
+            for (const order of [[A, B, P], [B, A, P]]) {
+                const s = emptyState();
+                mergeListing(s, [P], { full: true });
+                mergeListing(s, [A, P]);
+                s.offices.OTX.purge = { id: 'A', n: 2 };
+                s.offices.OTX.stored = 'A';
+                expect(mergeListing(s, order, { full })).toEqual(['OTX']);
+                expect(s.offices.OTX).toMatchObject({ id: 'B-RRA', prevId: 'P', tie: true, tieIds: ['A', 'B-RRA'] });
+            }
+        }
+        // Both twins in the first listing ever: a tie either way round, same id.
+        for (const order of [[A, B, P], [B, A, P]]) {
+            const s = emptyState();
+            mergeListing(s, order, { full: true });
+            expect(s.offices.OTX).toMatchObject({ id: 'B-RRA', prevId: 'P', tie: true });
+        }
     });
 
     it('drops malformed items', () => {

@@ -219,6 +219,22 @@ describe('cron-refresh: polling and the edition store', () => {
         expect((await readRenderableEdition('LOX', { now: clock }))?.current.id).toBe('lox-1');
     });
 
+    it('a same-time twin (correction) hard-purges the office and keeps it off the store', async () => {
+        const { readRenderableEdition } = await import('../api/_store.js');
+        nws.add('LOX', 'lox-1', '2026-11-18T11:50:00+00:00');
+        await run({ PLAINCAST_STORE_RENDER: '1' });
+        later(); await run({ PLAINCAST_STORE_RENDER: '1' });
+        expect((await readRenderableEdition('LOX', { now: clock }))?.current.id).toBe('lox-1');
+        purge.calls.length = 0;
+        nws.add('LOX', 'lox-1-cor', '2026-11-18T11:50:00+00:00', { synopsis: 'CORRECTED: high pressure keeps the region dry and mild through the weekend.' });
+        later();
+        const s = await run({ PLAINCAST_STORE_RENDER: '1' });
+        expect(s.newEditions).toEqual(['LOX']);
+        expect(purge.calls).toEqual([{ tags: ['office-LOX'], hard: true }]);
+        expect(backend.peek(pollStateKey()).offices.LOX).toMatchObject({ id: 'lox-1-cor', tie: true });
+        expect(await readRenderableEdition('LOX', { now: clock })).toBe(null);
+    });
+
     it('a failed purge is retried from state next run; switch off → no purge at all', async () => {
         nws.add('LOX', 'lox-1', '2026-11-18T05:00:00+00:00');
         await run(); // switch off
