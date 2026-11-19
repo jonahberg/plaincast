@@ -403,11 +403,12 @@ describe('cron-refresh: pre-translation', () => {
     });
 
     it('section reuse hit → no model call for that section', async () => {
-        nws.add('LOX', 'lox-1', '2026-11-18T05:00:00+00:00');
+        // Same local (LA) date: the fixture's sections carry no stamp.
+        nws.add('LOX', 'lox-1', '2026-11-18T16:00:00+00:00');
         await run();
         expect(modelCalls.length).toBe(3);
         // Reissue with only the Short Term rewritten.
-        nws.add('LOX', 'lox-2', '2026-11-18T12:10:00+00:00', { short: 'Rewritten: clouds thicken tonight with drizzle possible along the coast by morning.' });
+        nws.add('LOX', 'lox-2', '2026-11-18T20:10:00+00:00', { short: 'Rewritten: clouds thicken tonight with drizzle possible along the coast by morning.' });
         clock = Date.parse('2026-11-18T12:20:00Z');
         modelCalls = [];
         const s = await run();
