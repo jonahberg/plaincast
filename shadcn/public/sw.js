@@ -8,11 +8,16 @@
 //                  response, each under its own path (query stripped). A 404,
 //                  a redirect, or /about never becomes the offline page.
 //                  Offline fallback: that exact page → the cached `/` shell.
-//   /assets/*    → network-first with cache fallback (the names are STABLE,
-//                  not content-hashed — the committed SSR shell references
-//                  them — so cache-first would pin stale code). The shell and
-//                  its assets are precached on install so the first visit
-//                  already works offline.
+//   /assets/*    → cache-first. The names are content-hashed and served
+//                  `immutable` (shadcn/vite.config.js, vercel.json): a URL's
+//                  bytes never change, so a cached copy is never stale. Only
+//                  a clean 200 is stored (a missing asset hits the 404
+//                  catch-all, which must never be cached as code). The shell,
+//                  /theme-init.js and every asset the app can load (ASSETS)
+//                  are precached on install, so the first visit already works
+//                  offline, on-demand pieces included. Older builds' hashed
+//                  files stay in CACHE until the next CACHE bump (an offline
+//                  page cached under an older build still needs them).
 //   api.weather.gov GETs → network-first with cache fallback, so the last
 //                  fetched forecast still renders offline; its own cache is
 //                  capped at NWS_MAX entries (oldest evicted first).
@@ -20,24 +25,38 @@
 //                  have since expired; the app drops those client-side
 //                  (dropExpiredAlerts in src/lib/nws.js), so an offline
 //                  reader never sees an expired Warning as live.
-const CACHE = 'plaincast-shadcn-v6';
+const CACHE = 'plaincast-shadcn-v7';
 const NWS_CACHE = 'plaincast-shadcn-nws-v3';
 const NWS_MAX = 60;
-const PRECACHE = ['/', '/assets/app.js', '/assets/vendor.js', '/assets/app.css', '/theme-init.js'];
+// This build's hashed /assets/* files: the entry, its CSS, vendor and the
+// on-demand chunks (changelog view, shortcuts dialog, toasts, diff). The line
+// below is the marker scripts/prepare-deploy.mjs replaces in dist/sw.js with
+// the list from the Vite manifest (scripts/hashed-assets.mjs). Left empty
+// (the source, `vite preview`), only the shell is precached and each asset is
+// cached on first use.
+const ASSETS = [];
+const PRECACHE = ['/', '/theme-init.js', ...ASSETS];
 const SHELL_PATH = /^\/(?:o\/[A-Z]{3}\/)?$/;
 
 self.addEventListener('install', (event) => {
     // allSettled, not addAll: one missing file must not fail the install
     // (a worker that never installs never takes over the old one).
+    // A hashed asset already cached (unchanged since an earlier build, e.g.
+    // vendor) is not fetched again.
     event.waitUntil(
         caches.open(CACHE)
             .then(c => Promise.allSettled(PRECACHE.map(path =>
-                fetch(path, { cache: 'no-cache' }).then(res => (isCacheable(res) ? c.put(path, res) : null))
+                (path.startsWith('/assets/') ? c.match(path) : Promise.resolve(undefined))
+                    .then(hit => hit || fetch(path, { cache: 'no-cache' })
+                        .then(res => (isCacheable(res) ? c.put(path, res) : null)))
             )))
             .then(() => self.skipWaiting())
     );
 });
 
+// Deletes every cache this worker does not own: an older plaincast-shadcn-v*
+// (and with it the previous release's assets) and the vanilla client's
+// plaincast-v* precaches. The NWS data cache is kept.
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys()
@@ -90,15 +109,15 @@ self.addEventListener('fetch', (event) => {
 
     if (url.origin === location.origin && url.pathname.startsWith('/assets/')) {
         event.respondWith(
-            fetch(request)
+            caches.match(url.pathname, { cacheName: CACHE }).then(hit => hit || fetch(request)
                 .then(res => {
-                    if (res.ok) {
+                    if (isCacheable(res)) {
                         const copy = res.clone();
                         event.waitUntil(caches.open(CACHE).then(c => c.put(url.pathname, copy)));
                     }
                     return res;
-                })
-                .catch(() => caches.match(url.pathname, { cacheName: CACHE }).then(hit => hit || Response.error()))
+                }))
+                .catch(() => Response.error())
         );
         return;
     }

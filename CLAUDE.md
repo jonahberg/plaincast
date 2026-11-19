@@ -6,12 +6,18 @@ shadcn/            PRODUCTION FRONTEND: shadcn/ui + Vite + React SPA.
   index.html       The app shell — carries the TEMPLATE MARKERS that
                    scripts/build-offices.mjs and the SSR functions key on
                    (edit markers only with the generator, then regenerate)
-  public/sw.js     The deployed /sw.js (takes over old registrations)
+  public/sw.js     The deployed /sw.js (takes over old registrations); its
+                   `const ASSETS = [];` line is filled at deploy with the
+                   build's hashed asset list (see Release rule)
   src/lib/afd.js   Ported pure logic — parity-locked to docs/js/app.js by
                    tests/shadcn-parity.test.js
   dist/            Build output = Vercel outputDirectory (buildCommand runs
                    vite build + scripts/prepare-deploy.mjs, which deletes
-                   dist/index.html and copies docs/ statics in)
+                   dist/index.html, copies docs/ statics in, rewrites the
+                   shell's asset names and fills dist/sw.js's precache list).
+                   Assets are content-hashed: assets/app-<hash>.js,
+                   app-<hash>.css, vendor-<hash>.js, and the on-demand chunks
+                   ChangelogView/KbdDialog/sonner/diff-<hash>.js
 docs/              LEGACY vanilla client (no longer deployed as the frontend)
                    + the canonical data modules and the deployed static
                    surface (copied into dist at build)
@@ -63,7 +69,9 @@ api/               Vercel serverless functions
   _section-reuse.js  section-level translation reuse (PLAINCAST_PRETRANSLATE)
   _snapshots.js    Blob-backed edition snapshots (inert unless BLOB_READ_WRITE_TOKEN is set)
   _utils.js        shared fetch/cache/rate-limit helpers
-  *-shell.html     committed HTML shells (generated; see Routing rule)
+  *-shell.html     committed HTML shells (generated; see Routing rule).
+                   _home-shell.html names PLACEHOLDER assets (/assets/app.js,
+                   app.css, vendor.js), rewritten to hashed names at deploy
   translate.js     AI translation of one section (Claude API; model in _model.js)
   translate-issuance.js  AI translation of a whole edition
   changelog.js     AI one-liner on what changed between issuances
@@ -79,7 +87,12 @@ scripts/
                         office lists in the national shell, llms.txt,
                         openapi.json and vercel.json (the /?office= redirect)
   app-shell.mjs         shadcn/index.html → the production shell (fills the
-                        office count, injects the office index)
+                        office count, injects the office index, names the
+                        placeholder assets); PROD_SCRIPT_RE finds the app's
+                        module script in either form (placeholder or hashed)
+  hashed-assets.mjs     the pure deploy rewrite: Vite manifest → placeholder
+                        map, shell rewrite, SW precache list (tested in
+                        tests/hashed-assets.test.js)
   build-office-data.mjs docs/js/offices.js, offices-groups.js and
                         api/_climate-normals.js from scripts/data/ (offline)
   fetch-office-data.mjs / fetch-climate-normals.mjs  refresh scripts/data/
@@ -87,7 +100,9 @@ scripts/
   office-curation.mjs   the only hand-entered office facts
   build-og-fallback.mjs docs/og-image.png
   subset-reading-font.py  docs/fonts subset
-  prepare-deploy.mjs    deploy assembly (buildCommand)
+  prepare-deploy.mjs    deploy assembly (buildCommand). Mutates the checkout's
+                        api/_home-shell.html: never commit what a local run
+                        leaves (`git checkout -- api/_home-shell.html`)
 tests/             Bun test suite (1171 tests)
 ```
 
@@ -113,7 +128,20 @@ file at a path shadows a rewrite to that path. That is why
 output (else it shadows the `/` → api/home.js rewrite), and why the functions
 read the shell from the committed `api/_home-shell.html` twin (generated from
 `shadcn/index.html` by `scripts/build-offices.mjs`) via
-`functions.*.includeFiles`. The 404 catch-all must stay LAST in the
+`functions.*.includeFiles`. That committed shell cannot know a per-build
+hash, so it names placeholder assets (`/assets/app.css`, `/assets/vendor.js`,
+`/assets/app.js`), and `scripts/prepare-deploy.mjs` rewrites them IN PLACE in
+the Vercel build checkout to the build's content-hashed files, from the Vite
+manifest, before Vercel packages the functions; it fails the build on any
+`/assets/` reference it cannot map or whose file is missing. This relies on
+Vercel bundling `includeFiles` after the buildCommand (local `vercel build`
+does; if a deployed function ever reads a placeholder,
+`api/office-page.js` `loadTemplate()` logs a `console.error` saying so).
+There is exactly one URL for the app entry per deployment: never emit a
+stable-named copy or add `?v=`, or the on-demand chunks (which import
+`./app-<hash>.js`) would evaluate the app a second time. `api/_boot.js` finds
+the app's module script by pattern (`PROD_SCRIPT_RE`), not by string, so the
+boot data survives the rewrite. The 404 catch-all must stay LAST in the
 `rewrites` array, and the `/api/:path*` → `/api/api-not-found` rewrite must
 stay BEFORE it — otherwise `/api/bogus` serves an HTML page to an agent
 probing the API. `redirects` run before the filesystem: the one entry 308s
@@ -157,19 +185,31 @@ acceptmarkdown.com test vectors live in `tests/negotiate.test.js`.
   pages, the AI endpoints and Markdown negotiation are functions, so they need
   `vercel dev` from the repo root.
 - `cd shadcn && bun run build` — production build (Vercel runs this plus
-  scripts/prepare-deploy.mjs)
+  scripts/prepare-deploy.mjs; run that only in a scratch copy, it rewrites
+  api/_home-shell.html). `vite preview` serves Vite's own dist/index.html,
+  which already names the hashed files.
 - `bun scripts/build-offices.mjs` — regenerate per-office pages, sitemap and
-  api/_home-shell.html after editing shadcn/index.html
+  api/_home-shell.html after editing shadcn/index.html (deterministic: the
+  shell carries placeholders, never a hash)
 
 ## Release rule
-The deployed service worker is shadcn/public/sw.js. Any PR that changes the
-frontend (shadcn/src, shadcn/index.html, or the docs/ statics copied into the
-deploy) MUST bump its CACHE const. Its asset strategy is network-first (the
-built asset names are STABLE, not hashed — the committed SSR shell references
-them), so stale-code risk is lower than the old cache-first worker, but the
-cache namespace still needs the bump to shed old entries. The old rule (bump
+The deployed service worker is shadcn/public/sw.js. Built assets are
+content-hashed and served `public, max-age=31536000, immutable`
+(vercel.json), so the worker serves `/assets/*` cache-first, and
+scripts/prepare-deploy.mjs writes the build's full asset list (entry, CSS,
+vendor and the four on-demand chunks) into dist/sw.js's `const ASSETS = [];`
+line, so the worker precaches them all on install and its bytes change with
+every asset change (browsers pick up the new worker by themselves).
+Navigations stay network-first. Old builds' hashed files stay in the cache
+(an offline page cached under an older build still needs them) until CACHE
+changes, so any PR that changes the frontend (shadcn/src, shadcn/index.html,
+or the docs/ statics copied into the deploy) MUST still bump its CACHE
+const: that is what sheds old entries (activate deletes every other cache).
+`/js/*` and `/styles.css` are not handled by the worker. The old rule (bump
 CACHE_NAME in docs/sw.js on docs/ changes) still applies while the legacy
-client stays committed.
+client stays committed. If a deployed page ever loads `/assets/app.js` (the
+placeholder; 404), the function bundle got the un-rewritten shell: revert
+the hashed-assets commit.
 
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions. Since

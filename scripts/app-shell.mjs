@@ -1,7 +1,12 @@
 // The production app shell: shadcn/index.html (the dev source, script src
-// /src/main.jsx) transformed to reference the BUILT assets. Deterministic —
-// no Vite run needed — because shadcn/vite.config.js pins stable output
-// names (assets/app.js, assets/vendor.js, assets/app.css).
+// /src/main.jsx) transformed to reference the BUILT assets by PLACEHOLDER
+// names (/assets/app.css, /assets/vendor.js, /assets/app.js). Deterministic —
+// no Vite run needed — because the placeholders never change. The build's
+// real files are content-hashed (assets/app-<hash>.js, …;
+// shadcn/vite.config.js), and scripts/prepare-deploy.mjs rewrites each
+// placeholder to its hashed file in the Vercel build checkout's
+// api/_home-shell.html, from the Vite manifest, before the functions are
+// bundled. The committed shell never carries a hash.
 //
 // This transform is the single source of the served HTML shell:
 // scripts/build-offices.mjs feeds its output to api/_home-shell.html (what
@@ -23,8 +28,20 @@ const CSS_MARKER = '<!--app-css-->';
 const PROD_HEAD =
     '<link rel="stylesheet" crossorigin href="/assets/app.css">\n' +
     '    <link rel="modulepreload" crossorigin href="/assets/vendor.js">';
-// Exported: api/_boot.js inserts the boot data block right before it.
+// The committed shell's module script (placeholder name).
 export const PROD_SCRIPT = '<script type="module" crossorigin src="/assets/app.js"></script>';
+
+// The placeholder asset paths PROD_HEAD and PROD_SCRIPT name. A deployed
+// shell must carry none of them (api/office-page.js checks on Vercel).
+export const ASSET_PLACEHOLDERS = ['/assets/app.css', '/assets/vendor.js', '/assets/app.js'];
+
+// The app's module script in EITHER form: the committed placeholder
+// (/assets/app.js) or the deployed, rewritten one (/assets/app-<hash>.js;
+// Rollup's hash alphabet is [A-Za-z0-9_-]). api/_boot.js inserts the boot
+// data block right before the tag this matches, and scripts/prepare-deploy.mjs
+// fails the build unless the rewritten shell matches it exactly once, so a
+// rewrite can never silently cost the pages their boot data.
+export const PROD_SCRIPT_RE = /<script type="module" crossorigin src="\/assets\/app(?:-[A-Za-z0-9_-]+)?\.js"><\/script>/;
 
 // The office index (<ul class="office-index-list …">) is GENERATED: every
 // office in picker order (OFFICE_GROUPS), as "City (CODE)" links. Whatever the

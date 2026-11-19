@@ -29,7 +29,7 @@
 // THIS issuance; absent means "unknown, fetch it yourself".
 import { changelogKey, sharedGet, translationKey } from './_shared-cache.js';
 import { tabularDisplayKeys } from './_translatable.js';
-import { PROD_SCRIPT } from '../scripts/app-shell.mjs';
+import { PROD_SCRIPT_RE } from '../scripts/app-shell.mjs';
 
 export const BOOT_ID = 'plaincast-boot';
 export const BOOT_VERSION = 1;
@@ -60,12 +60,15 @@ export function bootScript(data) {
     return `<script type="application/json" id="${BOOT_ID}">${serializeBoot(data)}</script>`;
 }
 
-// Inserts the block before the app's module script. A shell without that
-// tag (template drift) simply carries no boot block: the app then loads the
-// way it always has, so this never fails the page.
+// Inserts the block before the app's module script, found by PATTERN: the
+// committed shell names the placeholder /assets/app.js, the deployed one the
+// build's /assets/app-<hash>.js (scripts/prepare-deploy.mjs rewrites it), and
+// the tag is re-emitted exactly as found. A shell without that tag (template
+// drift) simply carries no boot block: the app then loads the way it always
+// has, so this never fails the page.
 export function insertBoot(html, data) {
-    if (!data || typeof html !== 'string' || !html.includes(PROD_SCRIPT)) return html;
-    return html.replace(PROD_SCRIPT, () => `${bootScript(data)}\n    ${PROD_SCRIPT}`);
+    if (!data || typeof html !== 'string' || !PROD_SCRIPT_RE.test(html)) return html;
+    return html.replace(PROD_SCRIPT_RE, (tag) => `${bootScript(data)}\n    ${tag}`);
 }
 
 function sameInstant(a, b) {

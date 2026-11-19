@@ -63,6 +63,9 @@ describe('per-office SEO pages stay in sync with the app shell (shadcn/index.htm
             expect(html).toContain(`<link rel="alternate" type="text/markdown" href="https://plaincast.live/o/${code}/">`);
             expect(html).not.toContain('<link rel="alternate" type="text/markdown" href="https://plaincast.live/">');
             expect(html).not.toContain('<title>Plaincast - What the forecast actually says</title>');
+            // The PLACEHOLDER names (committed; docs/o/ is not deployed). The
+            // deploy rewrites api/_home-shell.html's copies to the build's
+            // hashed files (tests/hashed-assets.test.js).
             expect(html).toContain('href="/assets/app.css"');
             expect(html).toContain('src="/assets/app.js"');
             expect(html).toContain(`href="/api/feed?office=${code}"`);

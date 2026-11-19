@@ -47,6 +47,7 @@ import { fileURLToPath } from 'node:url';
 import { OFFICE_NAMES, OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { isTabularSection } from '../docs/js/tabular.js';
 import { renderOfficePage, escHtml, officeTitle } from '../scripts/build-offices.mjs';
+import { ASSET_PLACEHOLDERS } from '../scripts/app-shell.mjs';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractSections, regexTranslate } from './_afd-sections.js';
 import { renderEditionMarkdown } from './_edition-markdown.js';
@@ -140,12 +141,31 @@ export function loadTemplate() {
     ];
     let lastErr = null;
     for (const p of candidates) {
+        let html;
         try {
-            templateCache = readFileSync(p, 'utf8');
-            return templateCache;
-        } catch (err) { lastErr = err; }
+            html = readFileSync(p, 'utf8');
+        } catch (err) { lastErr = err; continue; }
+        templateCache = html;
+        const problem = unrewrittenShellError(html);
+        if (problem) console.error(problem);
+        return templateCache;
     }
     throw lastErr || new Error('office-page: homepage shell not found');
+}
+
+// Deploy self-check (hashed assets). The committed shell names placeholder
+// assets (/assets/app.js, …) that a hashed build does not contain;
+// scripts/prepare-deploy.mjs rewrites them to the build's files in the Vercel
+// build checkout, which is only correct if the functions are bundled AFTER the
+// buildCommand. If this bundle got the un-rewritten file instead, every `/` and
+// /o/<CODE>/ page loads a script and stylesheet that 404. Say so once per
+// instance (the template is cached), plainly; never guess file names. Off
+// Vercel (tests, local) the placeholders are expected, so it stays quiet.
+export function unrewrittenShellError(html, env = process.env) {
+    if (!env.VERCEL || typeof html !== 'string') return null;
+    const left = ASSET_PLACEHOLDERS.filter(p => html.includes(`"${p}"`));
+    if (!left.length) return null;
+    return `office-page: api/_home-shell.html in this function bundle still names the un-hashed placeholder asset(s) ${left.join(', ')}, which do not exist in a hashed build: scripts/prepare-deploy.mjs's rewrite did not reach the function bundle, so / and /o/<CODE>/ load no app. Revert the hashed-assets commit (CLAUDE.md, Release rule).`;
 }
 
 function titleCase(key) {
