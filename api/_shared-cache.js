@@ -250,6 +250,38 @@ export async function storeWrite(key, value, { ttl, timeoutMs = STORE_WRITE_TIME
     return settleWithin(write, timeoutMs, false);
 }
 
+// Tag the response being built, so a purge by tag reaches its CDN copies.
+// Two routes, on purpose. The `Vercel-Cache-Tag` header alone is not enough:
+// seen on a preview (Nov 18 2026), a page that had read a TAGGED Runtime
+// Cache item while rendering (a stored translation carries its family tag,
+// `ti`) could not be purged by the tag in its header, while a page that read
+// none could. The runtime collects tags per request and appears to write the
+// header from that set, so the page's own tag goes into the same set through
+// addCacheTag. Never throws; a no-op off Vercel beyond the header.
+export const CACHE_TAG_HEADER = 'Vercel-Cache-Tag';
+export const TAG_TIMEOUT_MS = 1000;
+let testTagger = null;
+export function __setCacheTaggerForTests(fn) {
+    testTagger = fn || null;
+}
+export async function tagResponse(res, tags) {
+    const list = (Array.isArray(tags) ? tags : [tags]).filter(t => typeof t === 'string' && t && !t.includes(','));
+    if (list.length === 0) return false;
+    try { res?.setHeader?.(CACHE_TAG_HEADER, list.join(',')); } catch { /* headers already sent */ }
+    const attempt = (async () => {
+        let add = testTagger;
+        if (!add) {
+            if (!process.env.VERCEL) return false;
+            const api = await vercelFunctions();
+            if (typeof api?.addCacheTag !== 'function') return false;
+            add = api.addCacheTag;
+        }
+        await add(list);
+        return true;
+    })().catch(() => false);
+    return settleWithin(attempt, TAG_TIMEOUT_MS, false);
+}
+
 // Purge CDN responses by cache tag (and, per Vercel, Runtime Cache and data
 // cache items with that tag: which is why the engine's items carry none).
 // `hard` deletes (dangerouslyDeleteByTag); otherwise the entries are marked

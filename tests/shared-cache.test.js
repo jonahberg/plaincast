@@ -2,8 +2,7 @@ import { describe, it, expect, afterEach } from 'bun:test';
 import {
     sharedGet, sharedSet, translationKey, changelogKey, ledeKey,
     __setSharedCacheBackendForTests, GET_TIMEOUT_MS, SET_TIMEOUT_MS,
-    TRANSLATION_TTL, CHANGELOG_TTL, LEDE_TTL,
-} from '../api/_shared-cache.js';
+    TRANSLATION_TTL, CHANGELOG_TTL, LEDE_TTL, tagResponse, CACHE_TAG_HEADER, __setCacheTaggerForTests,} from '../api/_shared-cache.js';
 import { memoryBackend, recordFetches } from './shared-cache-backend.js';
 
 const savedVercel = process.env.VERCEL;
@@ -253,5 +252,52 @@ describe('api/_shared-cache.js sharedSetReported', () => {
         __setSharedCacheBackendForTests(null);
         expect(await sharedSetReported('ti:v2:LOX:x', { a: 1 })).toBe(false);
         expect(await sharedSetReported(null, { a: 1 })).toBe(false);
+    });
+});
+
+// Nov 18 2026: on a preview, a page that had read a tagged Runtime Cache item
+// (a stored translation) could not be purged by the tag in its header alone.
+describe('tagResponse: the page tag goes through both the header and addCacheTag', () => {
+    const fakeRes = () => { const h = {}; return { h, setHeader: (k, v) => { h[k] = v; } }; };
+
+    it('sets Vercel-Cache-Tag and registers the same tags with the runtime', async () => {
+        const seen = [];
+        __setCacheTaggerForTests(async (tags) => { seen.push(tags); });
+        try {
+            const res = fakeRes();
+            expect(await tagResponse(res, ['office-LOX', 'home'])).toBe(true);
+            expect(res.h[CACHE_TAG_HEADER]).toBe('office-LOX,home');
+            expect(seen).toEqual([['office-LOX', 'home']]);
+            const one = fakeRes();
+            expect(await tagResponse(one, 'office-BTV')).toBe(true);
+            expect(one.h[CACHE_TAG_HEADER]).toBe('office-BTV');
+        } finally { __setCacheTaggerForTests(null); }
+    });
+
+    it('drops tags that cannot be tags (empty, non-string, containing a comma)', async () => {
+        const seen = [];
+        __setCacheTaggerForTests(async (tags) => { seen.push(tags); });
+        try {
+            const res = fakeRes();
+            await tagResponse(res, ['office-LOX', '', 'a,b', null, 42]);
+            expect(res.h[CACHE_TAG_HEADER]).toBe('office-LOX');
+            expect(seen).toEqual([['office-LOX']]);
+            expect(await tagResponse(fakeRes(), [])).toBe(false);
+        } finally { __setCacheTaggerForTests(null); }
+    });
+
+    it('off Vercel with no tagger: the header is still set and nothing throws', async () => {
+        const res = fakeRes();
+        expect(await tagResponse(res, 'office-LOX')).toBe(false);
+        expect(res.h[CACHE_TAG_HEADER]).toBe('office-LOX');
+    });
+
+    it('a failing or hanging tagger never breaks the response', async () => {
+        __setCacheTaggerForTests(async () => { throw new Error('no context'); });
+        try {
+            const res = fakeRes();
+            expect(await tagResponse(res, 'office-LOX')).toBe(false);
+            expect(res.h[CACHE_TAG_HEADER]).toBe('office-LOX');
+        } finally { __setCacheTaggerForTests(null); }
     });
 });

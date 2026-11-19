@@ -58,6 +58,7 @@ import {
 import { sendError } from './_errors.js';
 import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot, SHORT_CACHE } from './_boot.js';
 import { AI_FOR_AGENTS, STORE_RENDER, officeTag, readRenderableEdition, switchOn } from './_store.js';
+import { CACHE_TAG_HEADER, tagResponse } from './_shared-cache.js';
 import { displaySections, sectionHeadings, translatableSections } from './_translatable.js';
 import { aiParagraphs } from './_ai-text.js';
 // ChST / SST where Intl prints "GMT+10" / "GMT-11" (Guam, American Samoa).
@@ -74,7 +75,7 @@ const FULL_CACHE = 'public, s-maxage=900, stale-while-revalidate=3600';
 // bound the live path has today (tests/engine-config.test.js pins it).
 export const STORE_CACHE = 'public, s-maxage=300, stale-while-revalidate=3600';
 // The CDN cache tag header (comma-separated tags).
-export const CACHE_TAG_HEADER = 'Vercel-Cache-Tag';
+export { CACHE_TAG_HEADER };
 
 // The app uses boot data only for the latest edition of the reading view
 // (src/App.jsx): a ?edition= permalink or the ?view=changelog ledger loads
@@ -562,7 +563,7 @@ export default async function handler(req, res) {
     const aiForAgents = switchOn(AI_FOR_AGENTS);
     // Every response that shows this office's edition carries its tag, so
     // the poller's purge reaches every cached copy, live or stored.
-    if (storeRender) res.setHeader(CACHE_TAG_HEADER, officeTag(code));
+    if (storeRender) await tagResponse(res, officeTag(code));
 
     try {
         const boot = wantsBoot(chosen, req.query);

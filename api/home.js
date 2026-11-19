@@ -36,6 +36,7 @@ import {
 } from './office-page.js';
 import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot, SHORT_CACHE } from './_boot.js';
 import { AI_FOR_AGENTS, HOME_TAG, STORE_RENDER, officeTag, readRenderableEdition, switchOn } from './_store.js';
+import { tagResponse } from './_shared-cache.js';
 import { renderHomeMarkdown } from './_edition-markdown.js';
 import { sendNegotiated, HTML, MARKDOWN, send406, setVary, selectRepresentation, acceptHeader } from './_negotiate.js';
 import { sendError } from './_errors.js';
@@ -205,7 +206,7 @@ export default async function handler(req, res) {
     const aiForAgents = switchOn(AI_FOR_AGENTS);
     // The homepage shows an office's edition: tag it with that office (the
     // poller purges by office) and `home`.
-    if (storeRender) res.setHeader(CACHE_TAG_HEADER, `${officeTag(code)},${HOME_TAG}`);
+    if (storeRender) await tagResponse(res, [officeTag(code), HOME_TAG]);
 
     try {
         const boot = Boolean(baked) && wantsBoot(chosen, req.query);
