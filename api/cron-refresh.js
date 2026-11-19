@@ -66,12 +66,10 @@ export const TRANSLATE_START_MS = 200 * 1000;     // no new issuance translation
 export const TRANSLATE_CONCURRENCY = 2;
 export const MAX_ATTEMPTS = 2;                    // per edition id, translation and changelog each
 export const PURGES_PER_EDITION = 2;
-// Tags per purge call. Vercel documents 16 tags per bulk purge request, and
-// this used to send 50. UNCONFIRMED as the cause, from one observation on a
-// preview (Nov 18 2026): a 50-tag call returned ok, eight pages late in their
-// batches were deleted, and one page early in its batch (also the only fully
-// translated one checked) stayed cached. Staying under the documented limit
-// is right either way; whether it explains that page is not established.
+// Tags per purge call, kept under Vercel's documented 16 per bulk purge
+// request (this used to send 50). A page that survived a 50-tag purge on a
+// preview (Nov 18 2026) turned out to have a different cause: translated
+// pages lost their office tag (see tagResponse in api/_shared-cache.js).
 export const PURGE_BATCH = 10;
 export const VERIFY_PER_RUN = 12;
 export const PER_RUN_DEFAULT = 6;
