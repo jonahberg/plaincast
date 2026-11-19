@@ -541,3 +541,78 @@ describe('sanitizeTranslation — explicit time zone', () => {
         expect(out).toBe('Storms build today. Clearing by Sunday.');
     });
 });
+
+// Nov 18 2026 (PR #48 measurement on a preview deploy): sentences about the
+// document or the calendar rose from 4 of 21 sections to 11 of 33. The output
+// filter removes only sentences that are ENTIRELY narration (no forecast
+// content), matched as a whole sentence; a sentence that mixes narration with
+// forecast content is left for the prompt to prevent.
+describe('sanitizeTranslation — sentences only about the document or the calendar', () => {
+    const HGX = { office: 'HGX', issuanceTime: '2026-11-18T23:36:00+00:00' };
+    const OKX = { office: 'OKX', issuanceTime: '2026-11-18T23:42:00+00:00' };
+
+    it('removes the issue-time sentence that opens HGX Marine (real output)', () => {
+        const rest = 'A **Small Craft Advisory** is in effect for offshore waters 20 to 60 nautical miles out, through late **Thursday** night. Northeast winds near **20 knots** and seas of **5 to 8 feet** are expected over the Gulf waters through Thursday.\n\nConditions are forecast to improve as the week goes on.';
+        const text = 'This marine forecast was issued at 12:01 PM on Wednesday, November 18, 2026, by the National Weather Service office in Houston/Galveston. ' + rest;
+        expect(sanitizeTranslation(text, HGX)).toBe(rest);
+    });
+
+    it('removes calendar reasoning: OKX What has changed and Messages, HGX Messages (real outputs)', () => {
+        const changed = 'The forecast office has updated its outlook to highlight the possibility of a coastal storm affecting the area from Sunday into Monday.';
+        expect(sanitizeTranslation(changed + ' Sunday would fall on November 22 and Monday on November 23, based on the issue date of Wednesday, November 18.', OKX))
+            .toBe(changed);
+        const messages = 'The weather looks mostly sunny and dry through Saturday, with temperatures running above what is typical for this time of year. Since this forecast was issued on Wednesday, November 18, that stretch covers the rest of this week and into the weekend.\n\nConditions could change by Sunday, when a coastal low pressure system may approach the area.';
+        expect(sanitizeTranslation(messages, OKX)).toBe('The weather looks mostly sunny and dry through Saturday, with temperatures running above what is typical for this time of year.\n\nConditions could change by Sunday, when a coastal low pressure system may approach the area.');
+        const hgx = 'Dry weather is expected to hold through the rest of the work week, with temperatures gradually warming up as the days go on. Since today is Wednesday, November 18, the work week runs through Friday, November 20.\n\nA weak cold front arrives on **Sunday**.';
+        expect(sanitizeTranslation(hgx, { office: 'HGX', issuanceTime: '2026-11-18T18:18:00+00:00' }))
+            .toBe('Dry weather is expected to hold through the rest of the work week, with temperatures gradually warming up as the days go on.\n\nA weak cold front arrives on **Sunday**.');
+    });
+
+    it('removes other pure issue-time sentences (zones, offices, bold, "updated")', () => {
+        for (const sentence of [
+            'This area forecast discussion was issued at 3:05 AM Pacific time on Thursday, November 19, 2026.',
+            'The forecast was updated at 9:15 PM CST.',
+            '**This aviation forecast** was issued at 5:28 PM Central Standard Time on **Wednesday**.',
+            'This discussion from the Los Angeles/Oxnard office was issued Wednesday afternoon.',
+            'The update was issued at 12:01 PM by the NWS office in Peachtree City (FFC).',
+        ]) {
+            expect(sanitizeTranslation(`Rain ends Friday. ${sentence} Highs warm Saturday.`, HGX)).toBe('Rain ends Friday. Highs warm Saturday.');
+        }
+    });
+
+    it('leaves every sentence that also carries forecast content (the prompt handles those)', () => {
+        for (const sentence of [
+            // narration + content in one sentence (real Nov 18 outputs)
+            'This aviation forecast, issued Wednesday evening, November 18, 2026, at 5:28 PM Central time, warns that flying conditions will get worse tonight.',
+            'This hydrology outlook from the National Weather Service Seattle office, issued Wednesday, November 18, 2026, anticipates that rivers in the area will stay within their banks through next Wednesday, November 25.',
+            'This aviation discussion from the Los Angeles/Oxnard office covers a stormy stretch for Thursday, November 19, and into Friday.',
+            'Since this forecast was issued on Wednesday, November 18, the work week refers to the days ahead, and the warming trend means each day should be a bit milder than the last.',
+            'Since this is a forecast for the week starting from Wednesday, November 18, the warmth will be noticeable compared with what is typical for this time of year.',
+            'They are highly confident that gusty south to west winds and light rain, which the forecast abbreviates as light rain showers, will begin this afternoon and continue through the period.',
+            // the TAF cycle it covers is header content; left for the prompt
+            'This aviation forecast was issued at 6:35 PM Eastern on Wednesday, November 18, 2026, and it covers the 00Z terminal forecasts, which correspond to 7 PM Eastern.',
+            // table legends key the numbers that remain; left for the prompt
+            'The columns show, for each location, the high and low temperatures for the first two periods, followed by the chance of precipitation for those same periods.',
+            // forecast content that mentions the NWS, issuing or updating
+            'The National Weather Service in Miami has issued a Small Craft Advisory for all local waters of South Florida, which remains in effect through Thursday night, November 19.',
+            'Because those high elevations are remote and the impacts are expected to be limited, no snow-related products will be issued.',
+            'Check the local National Weather Service office and the National Hurricane Center for updates through the weekend.',
+            'The National Weather Service does not expect severe weather that would require trained spotters to go out and report conditions, so no spotter activation is planned for now.',
+            'Spotters are encouraged to report any significant weather or impacts to the National Weather Service following standard procedures.',
+            'For Harry Reid International Airport, the forecast package issued for 10 AM Pacific time on Thursday, November 19, calls for easterly winds under **10 knots** into early afternoon.',
+            'As of 1:24 PM Wednesday, the main message is that a weather system could bring rain and gusty winds to central North Carolina this weekend, though how much impact it has is still very uncertain.',
+            'The forecast office has updated its outlook to highlight the possibility of a coastal storm affecting the area from Sunday into Monday.',
+            'The forecast was updated to add patchy fog.',
+            'This update was issued to account for the Flood Watch.',
+            'Since today is Wednesday, the work week brings dry weather.',
+        ]) {
+            const text = `Rain ends Friday. ${sentence} Highs warm Saturday.`;
+            expect(sanitizeTranslation(text, HGX)).toBe(text);
+        }
+    });
+
+    it('still never returns an empty translation', () => {
+        const only = 'This marine forecast was issued at 12:01 PM on Wednesday, November 18, 2026.';
+        expect(sanitizeTranslation(only, HGX)).toBe(only);
+    });
+});

@@ -683,6 +683,50 @@ const ASIDE_RES = [
     /\b[Aa]s an AI\b/,
 ];
 const isAside = (s) => ASIDE_RES.some(re => re.test(s));
+
+// Sentences only about the document or the calendar (Nov 18 2026, PR #48
+// measurement: 11 of 33 sections had one). Each pattern must match a WHOLE
+// sentence (bold removed) built only from narration and metadata: a date, a
+// clock time, an office. Any forecast word makes it fail, so "This aviation
+// forecast, issued Wednesday at 5:28 PM, warns that flying conditions will get
+// worse tonight" stays; the prompt has to prevent that kind.
+const N_WEEKDAY = '(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)';
+const N_PART = '(?:\\s+(?:morning|afternoon|evening|night))?';
+// "Wednesday, November 18, 2026" / "November 18" / "Wednesday evening"
+const N_DATE = `(?:(?:${N_WEEKDAY}${N_PART},?\\s+)?(?:${MONTH_ALT})\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+20\\d{2})?|${N_WEEKDAY}${N_PART})`;
+const N_ZONE = '(?:[A-Z]{1,2}[SD]T|(?:Eastern|Central|Mountain|Pacific|Alaska|Hawaii)(?:\\s+(?:Standard|Daylight))?(?:\\s+[Tt]ime)?)';
+const N_TIME = `(?:\\d{1,2}(?::\\d{2})?\\s*(?:AM|PM|a\\.m\\.|p\\.m\\.)(?:\\s+${N_ZONE})?|noon|midnight)`;
+// Up to six words ("Los Angeles/Oxnard", "Peachtree City (FFC)"); the cap
+// keeps a long run of capitalised words from backtracking quadratically.
+const N_PLACE = "[A-Z][\\w.'-]*(?:[ /-][A-Z][\\w.'-]*){0,5}(?:\\s+\\([A-Z]{3,4}\\))?";
+// "the National Weather Service office in Houston/Galveston", "the NWS
+// office in Peachtree City (FFC)", "the Los Angeles/Oxnard office"
+const N_OFFICE = `(?:the\\s+)?(?:(?:National Weather Service|NWS)(?:\\s+(?:forecast\\s+)?office)?(?:\\s+(?:in|at|for)\\s+${N_PLACE})?|${N_PLACE}\\s+(?:forecast\\s+)?office|(?:forecast\\s+)?office(?:\\s+in\\s+${N_PLACE})?)`;
+const N_META = `(?:,?\\s+(?:(?:at|on|by|from|in|around)\\s+)?(?:${N_TIME}|${N_DATE}|${N_OFFICE}))`;
+const N_DOC = '(?:This|The)\\s+(?:[A-Za-z-]+\\s+){0,3}?(?:forecast|discussion|outlook|update|section|product)(?:\\s+package)?';
+// Calendar words only: "the rest of this week and into the weekend".
+const N_CAL_WORDS = `(?:,?\\s+(?:through|until|to|into|and|the|rest|of|this|next|coming|week|weekend|days?|ahead|${N_DATE}))+`;
+const NARRATION_RES = [
+    // "This marine forecast was issued at 12:01 PM on Wednesday, November 18,
+    // 2026, by the National Weather Service office in Houston/Galveston."
+    new RegExp(`^${N_DOC}(?:\\s+from\\s+${N_OFFICE})?,?\\s+(?:was|is|has been)\\s+(?:issued|updated|released|written)${N_META}*\\.$`),
+    // "Sunday would fall on November 22 and Monday on November 23, based on
+    // the issue date of Wednesday, November 18."
+    new RegExp(`^${N_WEEKDAY}\\s+(?:(?:would|will)\\s+(?:fall|be)|falls|is)\\s+on\\s+${N_DATE}`
+        + `(?:,?\\s+and\\s+${N_WEEKDAY}(?:\\s+(?:(?:would|will)\\s+(?:fall|be)|falls|is))?\\s+on\\s+${N_DATE})*`
+        + `,?\\s+(?:based on|counting from|going by|given)\\s+the\\s+(?:issue|issuance)\\s+(?:date|time)(?:\\s+of\\s+${N_DATE})?\\.$`),
+    // "Since today is Wednesday, November 18, the work week runs through
+    // Friday, November 20." / "Since this forecast was issued on Wednesday,
+    // November 18, that stretch covers the rest of this week and into the
+    // weekend."
+    new RegExp('^Since\\s+(?:today\\s+is|(?:this|the)\\s+(?:forecast|discussion|update|outlook)\\s+was\\s+issued\\s+on|the\\s+(?:issue|issuance)\\s+date\\s+is)'
+        + `\\s+${N_DATE},\\s+(?:the|this|that)\\s+(?:work\\s*week|week|weekend|stretch|period)\\s+(?:runs|lasts|covers|extends|ends|means|includes|refers\\s+to|is)${N_CAL_WORDS}\\.$`),
+];
+const isNarration = (s) => {
+    const t = s.replace(/\*\*/g, '').trim();
+    return NARRATION_RES.some(re => re.test(t));
+};
+
 // Sentence end: punctuation (+ closing quote/bracket/bold), whitespace, then
 // a capital or digit. Decimals ("0.50") and "a.m. tomorrow" never split.
 const SENTENCE_END_RE = /([.!?]+["'”’)\]*]*)(\s+)(?=["'“‘(*]*[A-Z0-9])/g;
@@ -697,13 +741,14 @@ function stripAsidesFromParagraph(p) {
         last = end + m[2].length;
     }
     sentences.push({ text: q.slice(last), sep: '' });
-    const kept = sentences.filter(s => !isAside(s.text));
+    const kept = sentences.filter(s => !isAside(s.text) && !isNarration(s.text));
     if (q === p && kept.length === sentences.length) return p;
     return kept.map(s => s.text + s.sep).join('').replace(/[ \t]{2,}/g, ' ').trim();
 }
 
+// Returns `text` itself when nothing is removed (no early exit: the
+// narration patterns are whole-sentence, so they cannot pre-test the text).
 function stripAsides(text) {
-    if (!isAside(text)) return text;
     const pieces = text.split(/(\n[ \t]*\n\s*)/); // odd indices: paragraph breaks
     let changed = false;
     for (let i = 0; i < pieces.length; i += 2) {
