@@ -664,3 +664,82 @@ describe('sanitizeTranslation — sentences only about the document or the calen
         expect(sanitizeTranslation(only, HGX)).toBe(only);
     });
 });
+
+// Nov 18 2026 follow-up: stripping the section's header line hid WHEN the
+// section was written, and 27 of 53 measured header lines were written 3+ h
+// before their product. A section written at 10 PM Tuesday that says
+// "tonight", inside a product issued at 3 AM Wednesday, would be read against
+// Wednesday. The written time now rides in the prompt's reference block
+// (background, never restated) instead of the model input.
+describe('buildSystemPrompt — the section\'s own written time as reference', () => {
+    const live18 = (office) => JSON.parse(readFileSync(new URL(`./fixtures/afd/live-2026-11-18/${office}.json`, import.meta.url), 'utf8'));
+    const real = (office, key) => {
+        const prod = live18(office);
+        return { text: extractSections(prod.productText).find(s => s.key === key).text, issuanceTime: prod.issuanceTime };
+    };
+    const RELATIVE = '(relative words such as "tonight" and "tomorrow" in this section are relative to that time, not to the AFD issuance time)';
+    const refBlock = (prompt) => prompt.slice(prompt.indexOf('\nReference for reading the source'));
+
+    it('HGX Aviation (real): the "Issued at" time, verbatim, inside the reference block', () => {
+        const { text, issuanceTime } = real('HGX', 'AVIATION');
+        const prompt = buildSystemPrompt({ section: 'Aviation', office: 'HGX', issuanceTime, text });
+        const line = `- This section was written: 528 PM CST Wed Nov 18 2026 ${RELATIVE}`;
+        expect(refBlock(prompt)).toContain(line + '\n');
+        expect(prompt).toContain('- Use the time this section was written to understand "today", "tonight", "tomorrow"');
+    });
+
+    it('HGX Marine (real): written 5.5 h before the product', () => {
+        const { text, issuanceTime } = real('HGX', 'MARINE');
+        const prompt = buildSystemPrompt({ section: 'Marine', office: 'HGX', issuanceTime, text });
+        expect(refBlock(prompt)).toContain(`- This section was written: 1201 PM CST Wed Nov 18 2026 ${RELATIVE}\n`);
+        expect(prompt).toContain('AFD issuance time in the local office timezone: Wednesday, November 18, 2026 at 5:36 PM CST');
+    });
+
+    it('LOX (real): the short stamp verbatim with its day-of-month/time reading; the Zulu stamp too', () => {
+        const syn = real('LOX', 'SYNOPSIS');
+        expect(syn.text.startsWith('18/104 PM.')).toBe(true);
+        expect(refBlock(buildSystemPrompt({ section: 'Synopsis', office: 'LOX', issuanceTime: syn.issuanceTime, text: syn.text })))
+            .toContain(`- This section was written: 18/104 PM (format day-of-month/time: Wednesday, November 18 at 1:04 PM local time; ${RELATIVE.slice(1)}\n`);
+        const lt = real('LOX', 'LONG TERM');
+        expect(refBlock(buildSystemPrompt({ section: 'Long Term', office: 'LOX', issuanceTime: lt.issuanceTime, text: lt.text })))
+            .toContain('- This section was written: 18/312 AM (format day-of-month/time: Wednesday, November 18 at 3:12 AM local time;');
+        const av = real('LOX', 'AVIATION');
+        expect(refBlock(buildSystemPrompt({ section: 'Aviation', office: 'LOX', issuanceTime: av.issuanceTime, text: av.text })))
+            .toContain(`- This section was written: 18/1736Z (format day-of-month/time in UTC: Wednesday, November 18 at 9:36 AM PST; ${RELATIVE.slice(1)}\n`);
+    });
+
+    it('the Nov 11 stamp that was misread as "November 22" is decoded for the model', () => {
+        // LOX Long Term issued 2026-11-12T04:55Z (Wed Nov 11, 8:55 PM PST)
+        const prompt = buildSystemPrompt({ section: 'Long Term', office: 'LOX', issuanceTime: LOX_ISSUED, text: LONG_TERM });
+        expect(prompt).toContain('- This section was written: 11/220 PM (format day-of-month/time: Wednesday, November 11 at 2:20 PM local time;');
+    });
+
+    it('cross-midnight: written 10:05 PM Tuesday inside a product issued 3 AM Wednesday', () => {
+        const text = 'Issued at 1005 PM CST Tue Nov 17 2026\n\nDense fog develops tonight and lingers into tomorrow morning.';
+        const prompt = buildSystemPrompt({ section: 'Discussion', office: 'LOT', issuanceTime: '2026-11-18T09:00:00Z', text });
+        expect(prompt).toContain('AFD issuance time in the local office timezone: Wednesday, November 18, 2026 at 3:00 AM CST');
+        expect(refBlock(prompt)).toContain(`- This section was written: 1005 PM CST Tue Nov 17 2026 ${RELATIVE}\n`);
+        // a short stamp on the previous day, across a month boundary
+        const dec = buildSystemPrompt({ section: 'Short Term', office: 'LOX', issuanceTime: '2026-12-01T09:00:00Z', text: '30/1045 PM.\n\nRain tonight.' });
+        expect(dec).toContain('- This section was written: 30/1045 PM (format day-of-month/time: Monday, November 30 at 10:45 PM local time;');
+    });
+
+    it('omits the line when the section has no stamp, or when no text is given', () => {
+        const sew = 'An upper level low drifting inland to the south will maintain\nlight showers through tonight.';
+        for (const prompt of [
+            buildSystemPrompt({ section: 'Synopsis', office: 'SEW', issuanceTime: '2026-11-18T22:00:00Z', text: sew }),
+            buildSystemPrompt({ section: 'Aviation', office: 'HGX', issuanceTime: '2026-11-18T23:36:00Z' }),
+        ]) {
+            expect(prompt).not.toContain('This section was written');
+            expect(prompt).toContain('- Use the issuance time to understand "today", "tonight", "tomorrow", "this weekend" and "next month", and to resolve bare day-of-month references relative to that issuance date and forecast window');
+        }
+        // a mid-text "Issued at" is not the section's stamp
+        const mid = buildSystemPrompt({ section: 'Discussion', office: 'HGX', issuanceTime: '2026-11-18T23:36:00Z', text: 'Fog tonight.\nIssued at 528 PM CST Wed Nov 18 2026\n\nMore fog.' });
+        expect(mid).not.toContain('This section was written');
+    });
+
+    it('the model input is unchanged by this: the stamp still leaves the prompt text', () => {
+        const { text } = real('HGX', 'AVIATION');
+        expect(stripHeaderStamp(text)).not.toContain('Issued at');
+    });
+});

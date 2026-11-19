@@ -753,6 +753,8 @@ describe('POST /api/translate — header stamp + output guard (Nov 11 2026)', ()
         expect(aiArgs.prompt).not.toContain('11/220');
         expect(aiArgs.prompt.startsWith('Sunday should be a pleasant day')).toBe(true);
         expect(aiArgs.system).toContain('Wednesday, November 11, 2026'); // the matched product's calendar
+        // the section's own written time rides in the reference block instead (Nov 18 2026)
+        expect(aiArgs.system).toContain('- This section was written: 11/220 PM (format day-of-month/time: Wednesday, November 11 at 2:20 PM local time;');
         expect(res.body.translation).not.toContain('November 22');
         expect(res.body.translation).not.toContain('source text');
         expect(res.body.translation).toContain('Sunday should be a pleasant day');

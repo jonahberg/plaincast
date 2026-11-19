@@ -480,12 +480,72 @@ const HEADER_STAMP_RE = /^\s*(?:\d{1,2}\/\d{3,4}\s*(?:AM|PM)\b\.?\s*)+/i;
 // "Issued 545 AM CDT Mon Sep 28 2026"), after any qualifier lines such as
 // "(00Z TAF Issuance)" or "(Rest of today through Thursday)", which are
 // content and stay (group 1).
-const ISSUED_LINE_RE = /^(\s*(?:\([^()\n]*\)[ \t]*\r?\n\s*)*)(?:Issued|Updated)(?:[ \t]+at)?[ \t]+\d{1,4}[ \t]*(?:AM|PM)[ \t]+[A-Z]{2,5}[ \t]+(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)[ \t]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[ \t]+\d{1,2}[ \t]+\d{4}[ \t]*(?:\r?\n\s*|$)/i;
+// Group 2 is the time itself ("528 PM CST Wed Nov 18 2026"), for sectionWrittenTime.
+const ISSUED_LINE_RE = /^(\s*(?:\([^()\n]*\)[ \t]*\r?\n\s*)*)(?:Issued|Updated)(?:[ \t]+at)?[ \t]+(\d{1,4}[ \t]*(?:AM|PM)[ \t]+[A-Z]{2,5}[ \t]+(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)[ \t]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[ \t]+\d{1,2}[ \t]+\d{4})[ \t]*(?:\r?\n\s*|$)/i;
 
 export function stripHeaderStamp(text) {
     if (typeof text !== 'string') return text;
     const out = text.replace(HEADER_STAMP_RE, '').replace(ISSUED_LINE_RE, '$1');
     return out.trim() ? out : text;
+}
+
+// When the section itself was written, for the prompt's reference block
+// (Nov 18 2026). The stamps above leave the model input, but a section is
+// often older than its product (27 of 53 measured header lines were written
+// 3+ h before it): a section written at 10 PM Tuesday that says "tonight",
+// inside a product issued at 3 AM Wednesday, means Tuesday night. Reads the
+// same header shapes stripHeaderStamp removes, plus the LOX Zulu stamp
+// ("18/1736Z.", which stays in the input with its local time). Returns the
+// reference line's text, or null when the section has no stamp. Every part of
+// it comes from a regex-matched stamp (digits, AM/PM, zone, day and month
+// abbreviations), so client-sent text cannot put anything else in the prompt.
+const STAMP_PARTS_RE = /(\d{1,2})\/(\d{3,4})\s*(AM|PM)\b/gi;
+const ZULU_HEADER_STAMP_RE = /^\s*(\d{1,2})\/(\d{2})(\d{2})Z\b/;
+const WRITTEN_RELATIVE = 'relative words such as "tonight" and "tomorrow" in this section are relative to that time, not to the AFD issuance time';
+const LONG_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+export function sectionWrittenTime(text, office, issuanceTime) {
+    if (typeof text !== 'string' || !text) return null;
+    const timeZone = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
+    const base = getSafeIssueDate(issuanceTime);
+    const [y, m, d] = localParts(base, timeZone).dateKey.split('-').map(Number); // local issue date
+    const stamp = HEADER_STAMP_RE.exec(text);
+    const issued = ISSUED_LINE_RE.exec(stamp ? text.slice(stamp[0].length) : text);
+    if (issued) return `This section was written: ${issued[2].replace(/[ \t]+/g, ' ')} (${WRITTEN_RELATIVE})`;
+    if (stamp) {
+        // "18/104 PM" = the 18th at 1:04 PM local. The latest stamp if several.
+        const [, dd, hm, ampm] = [...stamp[0].matchAll(STAMP_PARTS_RE)].pop();
+        const dom = Number(dd), h = Number(hm.slice(0, -2)), min = hm.slice(-2);
+        const verbatim = `${dd}/${hm} ${ampm.toUpperCase()}`;
+        // The issue date's month, or the month before for a day number ahead
+        // of it ("30/1045 PM" in a December 1 product).
+        const t = Date.UTC(y, m - 1 - (dom > d + 1 ? 1 : 0), dom);
+        if (dom < 1 || h < 1 || h > 12 || Number(min) > 59 || new Date(t).getUTCDate() !== dom) {
+            return `This section was written: ${verbatim} (format day-of-month/time; ${WRITTEN_RELATIVE})`;
+        }
+        const day = `${WEEKDAYS[new Date(t).getUTCDay()]}, ${LONG_MONTHS[new Date(t).getUTCMonth()]} ${dom}`;
+        return `This section was written: ${verbatim} (format day-of-month/time: ${day} at ${h}:${min} ${ampm.toUpperCase()} local time; ${WRITTEN_RELATIVE})`;
+    }
+    const z = ZULU_HEADER_STAMP_RE.exec(text);
+    if (z) {
+        const [, dd, hh, mm] = z;
+        const verbatim = `${dd}/${hh}${mm}Z`;
+        const dom = Number(dd);
+        let t = null;
+        // The nearest UTC date with that day of month, as annotateZuluTimes reads a DD/ prefix.
+        for (const off of [0, -1, 1, -2, 2, -3, 3]) {
+            const u = Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate() + off, Number(hh), Number(mm));
+            if (new Date(u).getUTCDate() === dom) { t = u; break; }
+        }
+        if (t === null || Number(hh) > 23 || Number(mm) > 59) {
+            return `This section was written: ${verbatim} (format day-of-month/time in UTC; ${WRITTEN_RELATIVE})`;
+        }
+        const local = new Intl.DateTimeFormat('en-US', {
+            timeZone, weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+        }).format(new Date(t)).replace(/[  ]/g, ' ');
+        return `This section was written: ${verbatim} (format day-of-month/time in UTC: ${local}; ${WRITTEN_RELATIVE})`;
+    }
+    return null;
 }
 
 // ── Output guard ─────────────────────────────────────────────────────
@@ -793,8 +853,17 @@ export function sanitizeTranslation(text, { office, issuanceTime, timeZone } = {
 // or layout; the calendar, office and section follow the rules as reference
 // material. The label lines keep their exact text: tests and
 // translate-issuance tests match on them.
-export function buildSystemPrompt({ section, office, issuanceTime }) {
+//
+// `text` (optional): the RAW section text, stamp included. When it carries a
+// header stamp, the reference block says when the section was written
+// (sectionWrittenTime), and relative days are read from that time. Callers
+// that do not pass it get no such line, exactly as before.
+export function buildSystemPrompt({ section, office, issuanceTime, text }) {
     const calendarContext = getTranslationCalendarContext(office, issuanceTime);
+    const written = sectionWrittenTime(text, office, issuanceTime);
+    const relativeDays = written
+        ? '- Use the time this section was written to understand "today", "tonight", "tomorrow", "this weekend" and "next month"; resolve bare day-of-month references relative to the issuance date and forecast window. Write the resolved day or date in the sentence, never the reasoning'
+        : '- Use the issuance time to understand "today", "tonight", "tomorrow", "this weekend" and "next month", and to resolve bare day-of-month references relative to that issuance date and forecast window. Write the resolved day or date in the sentence, never the reasoning';
 
     return `You are a weather translator. Convert NWS Area Forecast Discussion text into clear, natural plain English that anyone can understand.
 
@@ -827,7 +896,7 @@ Reference for reading the source (background only: never restate any of it in th
 - AFD issuance time in the local office timezone: ${calendarContext.localIssueTime}
 - Office timezone: ${calendarContext.timeZone}
 - Local issue date for calendar references: ${calendarContext.localDateLabel}
-- Use the issuance time to understand "today", "tonight", "tomorrow", "this weekend" and "next month", and to resolve bare day-of-month references relative to that issuance date and forecast window. Write the resolved day or date in the sentence, never the reasoning
+${written ? `- ${written}\n` : ''}${relativeDays}
 - ${calendarContext.monthBoundaryExample}
 - If a day number is still genuinely ambiguous, keep the original day number instead of inventing a month`;
 }
@@ -926,7 +995,9 @@ export default async function handler(req, res) {
     // Calendar context: trust the matched product's issuance time over the
     // client's claim; the client value is only a hint when NWS is unreachable.
     const promptIssuanceTime = matchedProduct?.issuanceTime || issuanceTime;
-    const systemPrompt = buildSystemPrompt({ section: promptSectionLabel(sectionKey), office: officeCode, issuanceTime: promptIssuanceTime });
+    // The raw text (stamp included) gives the section's written time; the
+    // cache key is that same raw text, so the prompt stays a function of the key.
+    const systemPrompt = buildSystemPrompt({ section: promptSectionLabel(sectionKey), office: officeCode, issuanceTime: promptIssuanceTime, text });
 
     try {
         const result = await generateText({
