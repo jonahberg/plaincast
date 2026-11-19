@@ -6,6 +6,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TRANSLATE_START_MS, FETCH_PHASE_MS } from '../api/cron-refresh.js';
+import { HEARTBEAT_FRESH_MS } from '../api/_store.js';
+import { STORE_CACHE } from '../api/office-page.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const vercel = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8'));
@@ -50,5 +52,14 @@ describe('vercel.json: the edition poller', () => {
         const json404 = r.findIndex(x => x.source === '/api/:path*' && x.destination === '/api/api-not-found');
         expect(json404).toBeGreaterThan(0);
         expect(json404).toBeLessThan(r.length - 1);
+    });
+});
+
+describe('store render staleness bound', () => {
+    const sMaxAge = (cc) => Number(/s-maxage=(\d+)/.exec(cc)[1]);
+    it('heartbeat window + store page s-maxage <= 900 s (the live path\'s bound today)', () => {
+        expect(HEARTBEAT_FRESH_MS / 1000 + sMaxAge(STORE_CACHE)).toBeLessThanOrEqual(900);
+        expect(HEARTBEAT_FRESH_MS).toBe(10 * 60 * 1000);
+        expect(sMaxAge(STORE_CACHE)).toBe(300);
     });
 });

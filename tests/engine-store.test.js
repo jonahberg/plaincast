@@ -68,7 +68,7 @@ describe('tags and switches', () => {
 
 describe('heartbeat freshness', () => {
     const now = Date.parse('2026-11-18T12:00:00Z');
-    it('fresh up to 20 minutes, stale after, never for garbage or the far future', () => {
+    it('fresh up to 10 minutes, stale after, never for garbage or the far future', () => {
         expect(heartbeatFresh('2026-11-18T11:59:00Z', now)).toBe(true);
         expect(heartbeatFresh(new Date(now - HEARTBEAT_FRESH_MS).toISOString(), now)).toBe(true);
         expect(heartbeatFresh(new Date(now - HEARTBEAT_FRESH_MS - 1000).toISOString(), now)).toBe(false);
@@ -221,7 +221,7 @@ describe('readRenderableEdition', () => {
     });
 
     it('stale heartbeat → null (live path)', async () => {
-        seed(state({ at: '2026-11-18T11:39:00Z' }), record());
+        seed(state({ at: '2026-11-18T11:49:00Z' }), record());
         expect(await readRenderableEdition('LOX', { now: NOW })).toBe(null);
     });
 

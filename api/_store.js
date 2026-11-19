@@ -21,7 +21,7 @@
 // A page renders from the store only when ALL of these hold; otherwise it
 // takes the live path, unchanged:
 //   - PLAINCAST_STORE_RENDER=1 (read per request);
-//   - the heartbeat is at most HEARTBEAT_FRESH_MS old;
+//   - the heartbeat is at most HEARTBEAT_FRESH_MS (10 min) old;
 //   - the newest product the listing showed for the office IS the stored
 //     current edition (a new issuance the poller has seen but not yet
 //     fetched, for a 403, a cap or a timeout, makes the office live);
@@ -70,7 +70,11 @@ export function officeTag(code) {
 }
 
 // ── Freshness ────────────────────────────────────────────────────────
-export const HEARTBEAT_FRESH_MS = 20 * 60 * 1000;
+// STALENESS INVARIANT: HEARTBEAT_FRESH_MS + the store page's s-maxage
+// (api/office-page.js STORE_CACHE) <= 15 minutes, the live path's bound. A
+// poll at 12:00 that misses a 12:02 issuance can still render the old
+// edition until 12:10, and that copy may be cached until 12:15.
+export const HEARTBEAT_FRESH_MS = 10 * 60 * 1000;
 
 export function heartbeatFresh(at, now = Date.now()) {
     const t = Date.parse(at);

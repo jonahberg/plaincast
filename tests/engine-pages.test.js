@@ -174,13 +174,13 @@ describe('PLAINCAST_STORE_RENDER=1: office page', () => {
         expect(res.headers.vary).toContain('Accept');
     });
 
-    it('a complete translation → the store policy (30 min), still tagged', async () => {
+    it('a complete translation → the store policy (5 min), still tagged', async () => {
         seedStore(backend);
         backend.seed(translationKey('LOX', CURR_ID), completeTi());
         const res = await office();
         expect(nwsCalls).toEqual([]);
         expect(res.headers['cache-control']).toBe(STORE_CACHE);
-        expect(STORE_CACHE).toBe('public, s-maxage=1800, stale-while-revalidate=3600');
+        expect(STORE_CACHE).toBe('public, s-maxage=300, stale-while-revalidate=3600');
         // The boot block carries the stored translation, as on the live path.
         expect(res.body).toContain('"translationsComplete":true');
     });
@@ -217,7 +217,7 @@ describe('PLAINCAST_STORE_RENDER=1: office page', () => {
     });
 
     it('stale heartbeat → the live path', async () => {
-        seedStore(backend, { at: new Date(Date.now() - 21 * 60 * 1000).toISOString() });
+        seedStore(backend, { at: new Date(Date.now() - 11 * 60 * 1000).toISOString() });
         const res = await office();
         expect(nwsCalls[0]).toBe('list:LOX');
         expect(res.headers['cache-control']).toBe(SHORT_CACHE);

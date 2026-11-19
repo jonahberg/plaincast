@@ -60,10 +60,13 @@ import { aiParagraphs } from './_ai-text.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const FULL_CACHE = 'public, s-maxage=900, stale-while-revalidate=3600';
-// A page rendered from the edition store (PLAINCAST_STORE_RENDER=1). The
-// poller hard-deletes the office's tagged copies the moment it sees a new
-// issuance, so the CDN may keep a page longer than the live path can.
-export const STORE_CACHE = 'public, s-maxage=1800, stale-while-revalidate=3600';
+// A page rendered from the edition store (PLAINCAST_STORE_RENDER=1).
+// STALENESS INVARIANT: the store renders an edition only while the poller's
+// heartbeat is at most HEARTBEAT_FRESH_MS (api/_store.js, 10 min) old, and a
+// copy rendered at the end of that window may then sit in the CDN for this
+// s-maxage. Window + s-maxage must stay within FULL_CACHE's 15 minutes, the
+// bound the live path has today (tests/engine-config.test.js pins it).
+export const STORE_CACHE = 'public, s-maxage=300, stale-while-revalidate=3600';
 // The CDN cache tag header (comma-separated tags).
 export const CACHE_TAG_HEADER = 'Vercel-Cache-Tag';
 
