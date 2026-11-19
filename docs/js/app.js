@@ -211,6 +211,18 @@ function stripNWSArtifacts(text) {
     return t.trim();
 }
 
+// date.toLocaleString('en-US', options), except for the two US zones Intl
+// has no short name for ("GMT+10", "GMT-11"): NWS writes ChST and SST.
+// Code-identical to shadcn/src/lib/format.js (tests/shadcn-parity.test.js).
+function formatInZone(date, options) {
+    const ZONE_NAMES = { 'Pacific/Guam': 'ChST', 'Pacific/Saipan': 'ChST', 'Pacific/Pago_Pago': 'SST' };
+    const name = options && options.timeZoneName === 'short' ? ZONE_NAMES[options.timeZone] : null;
+    if (!name) return date.toLocaleString('en-US', options);
+    return new Intl.DateTimeFormat('en-US', options).formatToParts(date)
+        .map(p => (p.type === 'timeZoneName' ? name : p.value))
+        .join('');
+}
+
 // Zulu (UTC) times → office-local clock times, for the instant regex
 // translation shown before the AI arrives. Handles HHZ, HHMMZ, single-digit
 // HZ and ranges ("6-9Z", "05-09z", "20z-22z", "15-18Z" — both ends
@@ -235,7 +247,7 @@ function zuluToLocal(text, tz, issuedAt) {
     const fmt = (d) => {
         const m = d.getUTCMinutes();
         try {
-            return d.toLocaleString('en-US', { hour: 'numeric', minute: m > 0 ? '2-digit' : undefined, timeZone: tz, timeZoneName: 'short' })
+            return formatInZone(d, { hour: 'numeric', minute: m > 0 ? '2-digit' : undefined, timeZone: tz, timeZoneName: 'short' })
                 .replace(/[  ]/g, ' ');
         } catch (e) {
             const stdOffsets = { 'America/New_York': -5, 'America/Detroit': -5, 'America/Indiana/Indianapolis': -5, 'America/Chicago': -6, 'America/Denver': -7, 'America/Phoenix': -7, 'America/Los_Angeles': -8, 'America/Anchorage': -9, 'Pacific/Honolulu': -10 };
@@ -1573,7 +1585,7 @@ async function renderAFD(prodData, office) {
     if (folioOffice) folioOffice.textContent = `NWS ${office}`;
 
     // "Issued <time> · <ago>" lives in the lede meta line, beside confidence.
-    issuePrefix = `Issued ${issueTime.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' })}`;
+    issuePrefix = `Issued ${formatInZone(issueTime, { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' })}`;
     document.getElementById('issue-time').textContent = `${issuePrefix} · ${timeAgo(issueTime)}`;
 
     // Byline — the forecaster, in their own newsroom
@@ -2233,7 +2245,7 @@ function renderHistorySelector(items, currentId) {
         items.forEach((item, i) => {
             const opt = document.createElement('option');
             opt.value = item.id;
-            const label = item.time.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', weekday: 'short', month: 'short', day: 'numeric', timeZone: tz, timeZoneName: 'short' });
+            const label = formatInZone(item.time, { hour: 'numeric', minute: '2-digit', weekday: 'short', month: 'short', day: 'numeric', timeZone: tz, timeZoneName: 'short' });
             opt.textContent = i === 0 ? 'Latest edition' : `${label} (${timeAgo(item.time)})`;
             if (inWindow && item.id === currentId) opt.selected = true;
             sel.appendChild(opt);
@@ -2310,7 +2322,7 @@ async function fetchTimelineProducts(items) {
 function timelineDateline(time, tz) {
     return {
         date: time.toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: tz }),
-        clock: time.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' }),
+        clock: formatInZone(time, { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' }),
         edition: editionName(localHour(time, tz)),
     };
 }

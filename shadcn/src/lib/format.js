@@ -11,9 +11,23 @@ export function timeAgo(date) {
     return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
+// date.toLocaleString('en-US', options), except for the two US zones Intl
+// has no short name for: it prints an offset ("GMT+10", "GMT-11") where NWS
+// writes ChST (Guam and the Northern Marianas) and SST (American Samoa).
+// Every office time label goes through this — the client, docs/js/app.js
+// (code-identical copy, tests/shadcn-parity.test.js) and the server pages.
+export function formatInZone(date, options) {
+    const ZONE_NAMES = { 'Pacific/Guam': 'ChST', 'Pacific/Saipan': 'ChST', 'Pacific/Pago_Pago': 'SST' };
+    const name = options && options.timeZoneName === 'short' ? ZONE_NAMES[options.timeZone] : null;
+    if (!name) return date.toLocaleString('en-US', options);
+    return new Intl.DateTimeFormat('en-US', options).formatToParts(date)
+        .map(p => (p.type === 'timeZoneName' ? name : p.value))
+        .join('');
+}
+
 export function formatIssueTime(date, tz) {
     try {
-        return date.toLocaleString('en-US', {
+        return formatInZone(date, {
             weekday: 'long', month: 'long', day: 'numeric',
             hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short',
         });

@@ -15,6 +15,7 @@
 import { GLOSSARY, GLOSSARY_COMPILED } from '../../../docs/js/glossary.js';
 import { FULL_ABBREVIATIONS } from '../../../docs/js/abbreviations.js';
 import { SECTION_NAMES } from '../../../docs/js/offices.js';
+import { formatInZone } from './format.js';
 
 export function parseSections(text) {
     // Remove header lines (product header, timestamps at very top)
@@ -193,7 +194,7 @@ export function zuluToLocal(text, tz, issuedAt) {
     const fmt = (d) => {
         const m = d.getUTCMinutes();
         try {
-            return d.toLocaleString('en-US', { hour: 'numeric', minute: m > 0 ? '2-digit' : undefined, timeZone: tz, timeZoneName: 'short' })
+            return formatInZone(d, { hour: 'numeric', minute: m > 0 ? '2-digit' : undefined, timeZone: tz, timeZoneName: 'short' })
                 .replace(/[  ]/g, ' ');
         } catch (e) {
             const stdOffsets = { 'America/New_York': -5, 'America/Detroit': -5, 'America/Indiana/Indianapolis': -5, 'America/Chicago': -6, 'America/Denver': -7, 'America/Phoenix': -7, 'America/Los_Angeles': -8, 'America/Anchorage': -9, 'Pacific/Honolulu': -10 };

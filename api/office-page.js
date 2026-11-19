@@ -56,6 +56,8 @@ import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot, SHORT_CACHE } 
 import { AI_FOR_AGENTS, STORE_RENDER, officeTag, readRenderableEdition, switchOn } from './_store.js';
 import { displayKey, translatableSections } from './_translatable.js';
 import { aiParagraphs } from './_ai-text.js';
+// ChST / SST where Intl prints "GMT+10" / "GMT-11" (Guam, American Samoa).
+import { formatInZone } from '../shadcn/src/lib/format.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -189,7 +191,7 @@ function formatIssued(iso, tz) {
     try {
         const d = new Date(iso);
         if (Number.isNaN(d.getTime())) return null;
-        return d.toLocaleString('en-US', {
+        return formatInZone(d, {
             weekday: 'long', month: 'long', day: 'numeric',
             hour: 'numeric', minute: '2-digit',
             timeZone: tz, timeZoneName: 'short',

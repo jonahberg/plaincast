@@ -19,6 +19,7 @@ import {
 import { GLOSSARY } from '../docs/js/glossary.js';
 import { alertIsFromOffice, alertWindow, classifyAlertKind, findNearestOffice } from '../shadcn/src/lib/nws.js';
 import { formatTranslationHTML } from '../shadcn/src/lib/ai.js';
+import { formatInZone, formatIssueTime } from '../shadcn/src/lib/format.js';
 
 const FIXTURE = await Bun.file(new URL('./fixtures/afd/lox-classic-synopsis.txt', import.meta.url)).text();
 
@@ -94,6 +95,31 @@ describe('extractTakeaway', () => {
         expect(html).not.toContain('18/104');
         expect(html).toContain('Cool, below normal');
         expect(html).toContain('gusty winds');
+    });
+});
+
+describe('time-zone labels (formatInZone)', () => {
+    const at = new Date('2026-11-18T19:51:00Z');
+    const opts = (timeZone) => ({ hour: 'numeric', minute: '2-digit', timeZone, timeZoneName: 'short' });
+
+    it('names Guam and American Samoa time as NWS does', () => {
+        expect(formatInZone(at, opts('Pacific/Guam'))).toBe('5:51 AM ChST');
+        expect(formatInZone(at, opts('Pacific/Pago_Pago'))).toBe('8:51 AM SST');
+        expect(formatIssueTime(at, 'Pacific/Guam')).toBe('Thursday, November 19 at 5:51 AM ChST');
+    });
+
+    it('is toLocaleString everywhere else, and without a zone name', () => {
+        for (const tz of ['America/Los_Angeles', 'America/Chicago', 'Pacific/Honolulu', 'America/Anchorage', 'America/Puerto_Rico']) {
+            expect(formatInZone(at, opts(tz))).toBe(at.toLocaleString('en-US', opts(tz)));
+        }
+        const noName = { hour: 'numeric', timeZone: 'Pacific/Guam' };
+        expect(formatInZone(at, noName)).toBe(at.toLocaleString('en-US', noName));
+    });
+
+    it('converts Zulu times in Guam text to ChST', () => {
+        const html = translateToPlainEnglish('Showers increase after 12Z.', 'Pacific/Guam', '2026-11-18T19:51:00Z');
+        expect(html).toContain('ChST');
+        expect(html).not.toContain('GMT+10');
     });
 });
 

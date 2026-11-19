@@ -6,7 +6,7 @@ import { computeDiff, renderDiffHTML } from '@data/diff.js';
 import { buildTimelineEntries } from '@data/timeline.js';
 import { parseSections } from '@/lib/afd';
 import { fetchAFDList, fetchProduct, historyItems } from '@/lib/nws';
-import { editionName, localHour } from '@/lib/format';
+import { editionName, formatInZone, localHour } from '@/lib/format';
 import { track } from '@/lib/track';
 import {
     Accordion,
@@ -50,7 +50,7 @@ async function fetchProducts(items) {
 function dateline(time, tz) {
     return {
         date: time.toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: tz }),
-        clock: time.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' }),
+        clock: formatInZone(time, { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' }),
         edition: editionName(localHour(time, tz)),
     };
 }
