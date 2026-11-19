@@ -179,7 +179,7 @@ describe('annotateZuluTimes — explicit zone and weekday pins (National Desk)',
         expect(annotateZuluTimes('by 06Z', 'HFO', SPC_ISSUED, EASTERN)).toBe('by 06Z (1 AM EST)');
     });
 
-    it('without weekdayPins a trailing weekday is ignored, exactly as for offices', () => {
+    it('explicit zone without weekdayPins: a trailing weekday is ignored (offices pin full names since Nov 18 2026)', () => {
         expect(annotateZuluTimes('by 12Z Friday', null, SPC_ISSUED, EASTERN)).toBe('by 12Z (7 AM EST) Friday');
     });
 

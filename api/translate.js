@@ -709,7 +709,9 @@ const N_CAL_WORDS = `(?:,?\\s+(?:through|until|to|into|and|the|rest|of|this|next
 const NARRATION_RES = [
     // "This marine forecast was issued at 12:01 PM on Wednesday, November 18,
     // 2026, by the National Weather Service office in Houston/Galveston."
-    new RegExp(`^${N_DOC}(?:\\s+from\\s+${N_OFFICE})?,?\\s+(?:was|is|has been)\\s+(?:issued|updated|released|written)${N_META}*\\.$`),
+    // At least one time, date or office: a bare "The forecast has been
+    // updated." is how an UPDATE section says what happened, so it stays.
+    new RegExp(`^${N_DOC}(?:\\s+from\\s+${N_OFFICE})?,?\\s+(?:was|is|has been)\\s+(?:issued|updated|released|written)${N_META}+\\.$`),
     // "Sunday would fall on November 22 and Monday on November 23, based on
     // the issue date of Wednesday, November 18."
     new RegExp(`^${N_WEEKDAY}\\s+(?:(?:would|will)\\s+(?:fall|be)|falls|is)\\s+on\\s+${N_DATE}`

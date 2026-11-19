@@ -649,6 +649,9 @@ describe('sanitizeTranslation — sentences only about the document or the calen
             'The forecast office has updated its outlook to highlight the possibility of a coastal storm affecting the area from Sunday into Monday.',
             'The forecast was updated to add patchy fog.',
             'This update was issued to account for the Flood Watch.',
+            // no time, date or office: how an UPDATE section says what happened
+            'The forecast has been updated.',
+            'The aviation section was updated.',
             'Since today is Wednesday, the work week brings dry weather.',
         ]) {
             const text = `Rain ends Friday. ${sentence} Highs warm Saturday.`;
