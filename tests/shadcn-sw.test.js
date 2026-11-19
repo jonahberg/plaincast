@@ -201,6 +201,21 @@ describe('shadcn service worker', () => {
         expect(out).toEqual({ error: true });
     });
 
+    it('/theme-init.js: network-first, and offline it comes from the precache', async () => {
+        let online = true;
+        const { listeners, caches } = load(async () => {
+            if (!online) throw new TypeError('offline');
+            return res(200, 'fresh theme script');
+        });
+        const req = { method: 'GET', mode: 'no-cors', url: `${ORIGIN}/theme-init.js` };
+        expect((await dispatch(listeners, req)).body).toBe('fresh theme script');
+        const shell = await caches.open(CACHE_NAME);
+        await shell.put('/theme-init.js', res(200, 'precached theme script'));
+        expect((await dispatch(listeners, req)).body).toBe('fresh theme script'); // still the network while online
+        online = false;
+        expect((await dispatch(listeners, req)).body).toBe('precached theme script');
+    });
+
     it('activate deletes the old worker\'s caches (v6, legacy plaincast-v*), keeps its own + NWS', async () => {
         const caches = makeCaches();
         for (const name of ['plaincast-shadcn-v6', 'plaincast-v42', CACHE_NAME, 'plaincast-shadcn-nws-v3']) {

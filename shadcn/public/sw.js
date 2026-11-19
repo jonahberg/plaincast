@@ -122,6 +122,16 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    // The pre-paint theme script: network-first (it is revalidated on every
+    // load), but offline it comes from the precache, so a dark-mode reader
+    // does not get a light page.
+    if (url.origin === location.origin && url.pathname === '/theme-init.js') {
+        event.respondWith(
+            fetch(request).catch(() => caches.match('/theme-init.js', { cacheName: CACHE }).then(hit => hit || Response.error()))
+        );
+        return;
+    }
+
     if (url.hostname === 'api.weather.gov') {
         event.respondWith(
             fetch(request)

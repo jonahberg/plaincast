@@ -245,3 +245,65 @@ describe('theme key migration', () => {
         expect(js).toContain("localStorage.getItem('theme')");
     });
 });
+
+// A document from another deployment asks for /assets/ files that 404 there
+// (hashed names are per build; the old stable names are gone). theme-init.js
+// keeps one stable name, so it carries the reload-once recovery.
+describe('theme-init.js: reload once when the page\'s own assets are missing', () => {
+    const run = async ({ stored = null, now = 1_000_000 } = {}) => {
+        const js = await read('shadcn/public/theme-init.js');
+        const listeners = [];
+        const session = new Map(stored === null ? [] : [['plaincast-asset-reload', String(stored)]]);
+        let reloads = 0;
+        const env = {
+            window: null,
+            localStorage: { getItem: () => null, setItem() {} },
+            sessionStorage: { getItem: k => (session.has(k) ? session.get(k) : null), setItem: (k, v) => session.set(k, String(v)) },
+            matchMedia: () => ({ matches: false }),
+            document: { documentElement: { classList: { add() {} } } },
+            location: { origin: 'https://plaincast.live', reload: () => { reloads++; } },
+            addEventListener: (type, fn, capture) => listeners.push({ type, fn, capture }),
+            Date: { now: () => now },
+            Number, String,
+        };
+        env.window = env;
+        new Function(...Object.keys(env), js)(...Object.values(env));
+        const fire = (target) => listeners.filter(l => l.type === 'error').forEach(l => l.fn({ target }));
+        return { listeners, fire, reloads: () => reloads, session, env };
+    };
+    const script = (src) => ({ tagName: 'SCRIPT', src });
+    const sheet = (href) => ({ tagName: 'LINK', rel: 'stylesheet', href });
+
+    it('listens in the capture phase (element load errors do not bubble)', async () => {
+        const { listeners } = await run();
+        expect(listeners).toEqual([{ type: 'error', fn: expect.any(Function), capture: true }]);
+    });
+    it('reloads once when the app script or stylesheet 404s', async () => {
+        const a = await run();
+        a.fire(script('https://plaincast.live/assets/app.js'));
+        expect(a.reloads()).toBe(1);
+        a.fire(sheet('https://plaincast.live/assets/app-OLDHASH.css')); // same page, moments later
+        expect(a.reloads()).toBe(1);
+        const b = await run();
+        b.fire(sheet('https://plaincast.live/assets/app.css'));
+        expect(b.reloads()).toBe(1);
+    });
+    it('does not loop: a reload that just happened is not repeated, a later one is allowed', async () => {
+        const recent = await run({ stored: 1_000_000 - 5_000 });
+        recent.fire(script('https://plaincast.live/assets/app.js'));
+        expect(recent.reloads()).toBe(0);
+        const later = await run({ stored: 1_000_000 - 120_000 });
+        later.fire(script('https://plaincast.live/assets/app.js'));
+        expect(later.reloads()).toBe(1);
+    });
+    it('ignores everything that is not one of the page\'s own /assets/ tags', async () => {
+        const { fire, reloads, env } = await run();
+        fire(script('https://plaincast.live/_vercel/insights/script.js'));
+        fire(script('https://example.com/assets/app.js'));
+        fire({ tagName: 'IMG', src: 'https://plaincast.live/assets/x.png' });
+        fire({ tagName: 'LINK', rel: 'modulepreload', href: 'https://plaincast.live/assets/vendor.js' });
+        fire(env); // a runtime error on window itself
+        fire(null);
+        expect(reloads()).toBe(0);
+    });
+});
