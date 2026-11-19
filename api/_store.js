@@ -32,7 +32,7 @@
 // have, so every doubt resolves to the live path.
 //
 // Files prefixed with `_` are not treated as endpoints by Vercel.
-import { OFFICE_NAMES } from '../docs/js/offices.js';
+import { OFFICE_NAMES, officeCodeFromIssuing } from '../docs/js/offices.js';
 import { editionKey, pollStateKey, storeRead } from './_shared-cache.js';
 
 // ── Switches (environment, read per request; all default OFF) ─────────
@@ -53,23 +53,10 @@ export function allOffices() {
 // The product listing names the issuing office by its 4-letter ICAO id
 // ("KOTX"); the site uses the 3-letter code. Standard ids drop the leading
 // K; outside the contiguous US the id is not the code plus a prefix.
-// SWAP POINT: docs/js/offices.js is gaining a canonical
-// officeCodeFromIssuing(); replace this body with a call to it.
-const ISSUING_EXCEPTIONS = {
-    TJSJ: 'SJU', // San Juan
-    NSTU: 'PPG', // Pago Pago
-    PAFC: 'AFC', // Anchorage
-    PAFG: 'AFG', // Fairbanks
-    PAJK: 'AJK', // Juneau
-    PHFO: 'HFO', // Honolulu
-    PGUM: 'GUM', // Guam
-};
-
+// The mapping is the canonical one in docs/js/offices.js, generated from
+// real NWS product data (scripts/fetch-office-data.mjs).
 export function officeFromIssuing(issuingOffice) {
-    const id = String(issuingOffice ?? '').trim().toUpperCase();
-    if (ISSUING_EXCEPTIONS[id]) return ISSUING_EXCEPTIONS[id];
-    if (/^K[A-Z]{3}$/.test(id)) return id.slice(1);
-    return null;
+    return officeCodeFromIssuing(issuingOffice);
 }
 
 // ── CDN cache tags ───────────────────────────────────────────────────
