@@ -45,6 +45,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OFFICE_NAMES, OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
+import { isTabularSection } from '../docs/js/tabular.js';
 import { renderOfficePage, escHtml, officeTitle } from '../scripts/build-offices.mjs';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractSections, regexTranslate } from './_afd-sections.js';
@@ -175,11 +176,15 @@ export function minimalOfficeHtml(code, city, markdown) {
 
 // Pick the top narrative sections (document order). Falls back to any
 // substantial section when an office's format has no recognized narrative key.
+// Never a table (docs/js/tabular.js): it is not narrative, its rows would be
+// joined into one line of numbers, and it has no AI translation to show, so
+// a stored one from before tables were excluded can never surface here.
 export function pickSections(sections) {
-    const narrative = sections.filter(s => NARRATIVE_KEYS.has(s.key));
+    const prose = sections.filter(s => !isTabularSection(s.key, s.text));
+    const narrative = prose.filter(s => NARRATIVE_KEYS.has(s.key));
     const pool = narrative.length > 0
         ? narrative
-        : sections.filter(s => String(s.text || '').replace(/\s+/g, ' ').trim().length >= 200);
+        : prose.filter(s => String(s.text || '').replace(/\s+/g, ' ').trim().length >= 200);
     const seen = new Set();
     const out = [];
     for (const s of pool) {

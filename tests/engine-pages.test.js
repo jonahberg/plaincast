@@ -448,3 +448,68 @@ describe('AI text formatting', () => {
             .toEqual(['\\> quoted', '1\\. one', '\\- dash', '**Bold** start', '&lt;b>x&lt;/b> then wrap']);
     });
 });
+
+// Tables are never AI-translated (docs/js/tabular.js). A translation set
+// stored before that rule existed can still hold model text for one; the
+// server-rendered page and its Markdown must never show it, and the table
+// must not cost the other sections their AI text.
+describe('PLAINCAST_AI_FOR_AGENTS=1: a stored translation of a table is never shown', () => {
+    beforeEach(() => setSwitches(['PLAINCAST_AI_FOR_AGENTS']));
+
+    // Real MFL prose and table rows (api.weather.gov, 2026-11-18), under
+    // headers no rule names: no narrative key, so the digest falls back to
+    // "any substantial section", which used to include the 508-char table.
+    const { readFileSync } = require('node:fs');
+    const MFL = JSON.parse(readFileSync(new URL('./fixtures/afd/live-2026-11-18/MFL.json', import.meta.url), 'utf8'));
+    const { extractSections } = require('../api/_afd-sections.js');
+    const real = Object.fromEntries(extractSections(MFL.productText).map(s => [s.key, s.text]));
+    const TEXT = `000\nFXUS62 KMFL 182343\nAFDMFL\n\nArea Forecast Discussion\nNational Weather Service Miami FL\n643 PM EST Wed Nov 18 2026\n\n`
+        + `.FORECAST REASONING...\n${real['LONG TERM']}\n\n&&\n\n`
+        + `.CITY FORECASTS...\n${real['PRELIMINARY POINT TEMPS/POPS']}\n\n&&\n\n$$\n`;
+    const ID = 'mfl-table-1';
+    const STALE = 'Miami sees highs of 81 and lows of 73 STALE-TABLE-PROSE';
+    const preChangeSet = {
+        office: 'MFL', id: ID, issuanceTime: MFL.issuanceTime, productText: TEXT, complete: true,
+        sections: { 'Forecast reasoning': 'Drier air arrives for the **weekend** after one more wet day.', 'City forecasts': STALE },
+    };
+
+    beforeEach(() => {
+        mockItems = [{ id: ID }];
+        mockProducts = { [ID]: { id: ID, productText: TEXT, issuanceTime: MFL.issuanceTime } };
+        backend.seed(translationKey('MFL', ID), preChangeSet);
+    });
+
+    it('HTML: the prose section keeps its labelled AI text; the table and its stale text are not rendered', async () => {
+        const res = await office(undefined, { code: 'MFL' });
+        const main = mainOf(res.body);
+        expect(main.match(/<article class="forecast-section ssr">/g).length).toBe(1);
+        expect(main).toContain('<h2 class="section-title">Forecast Reasoning</h2>');
+        expect(main).toContain('Drier air arrives for the <strong>weekend</strong> after one more wet day.');
+        expect(main).toContain('ssr-ai-label');
+        expect(res.body).not.toContain('STALE-TABLE-PROSE');
+        expect(main).not.toContain('West Kendall');
+        // The app's boot data keeps the prose translation and drops the table's.
+        const boot = JSON.parse(res.body.match(/<script type="application\/json" id="plaincast-boot">([^<]*)<\/script>/)[1]);
+        expect(Object.keys(boot.translations)).toEqual(['Forecast reasoning']);
+        expect(boot.translationsComplete).toBe(true);
+        // The set counts as complete: the normal window, not the "AI pending" one.
+        expect(res.headers['cache-control']).toBe('public, s-maxage=900, stale-while-revalidate=3600');
+    });
+
+    it('Markdown: the same', async () => {
+        const res = await office('text/markdown', { code: 'MFL' });
+        expect(res.body).toContain(PREAMBLE_AI);
+        expect(res.body).toContain('Drier air arrives for the **weekend** after one more wet day.');
+        expect(res.body).not.toContain('STALE-TABLE-PROSE');
+        expect(res.body).not.toContain('West Kendall');
+        expect(res.body.split(/^## /m).length - 1).toBe(1);
+    });
+
+    it('the homepage for that office: the same', async () => {
+        for (const accept of [undefined, 'text/markdown']) {
+            const res = await home(accept, { office: 'MFL' });
+            expect(res.body).not.toContain('STALE-TABLE-PROSE');
+            expect(res.body).toContain('Drier air arrives');
+        }
+    });
+});
