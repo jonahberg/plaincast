@@ -486,7 +486,52 @@ describe('buildSystemPrompt — output-only and weekday-date rules', () => {
         expect(prompt).toMatch(/Never add advice, warnings, calls to action, or reassurance that the forecaster did not write/);
         expect(prompt).toContain('residents should stay alert to changing conditions');
         expect(prompt).toMatch(/If the source itself gives advice or a safety message, keep it/);
-        expect(prompt).toMatch(/every statement on it comes from the National Weather Service/);
+        // Nov 18 2026: the reason is neutral. "Plaincast promises its readers
+        // that every statement on it comes from the National Weather Service"
+        // is the likely cause of the model stating provenance and issue times.
+        expect(prompt).toMatch(/Readers rely on this text containing only what the forecaster wrote/);
+        expect(prompt).not.toMatch(/Plaincast|promise|National Weather Service/i);
+    });
+
+    // Nov 18 2026 (PR #48 measurement): "This aviation forecast, issued
+    // Wednesday evening, November 18, 2026, at 5:28 PM Central time, warns
+    // ...", "Since this forecast was issued on Wednesday, November 18, ...",
+    // "This is a table of ...". Mixed sentences like these can only be
+    // prevented in the prompt.
+    it('starts with the weather and never narrates the document, with the reason', () => {
+        const prompt = buildSystemPrompt({ section: 'Aviation', office: 'HGX', issuanceTime: '2026-11-18T23:36:00+00:00' });
+        expect(prompt).toMatch(/Start with the weather itself/);
+        expect(prompt).toMatch(/Never write about the forecast document: what kind of forecast or section it is, which office wrote it, or when it was issued/);
+        expect(prompt).toMatch(/the reader is already on a page that shows the forecast office, the issue time and the section heading/);
+        // hazards and cited agencies are content, not narration
+        expect(prompt).toMatch(/Watches, warnings and advisories are weather content: state them/);
+        expect(prompt).toMatch(/keep any agency or product the forecaster cites/);
+    });
+
+    it('never explains how a date was worked out, and never describes formatting or tables', () => {
+        const prompt = buildSystemPrompt({ section: 'Messages', office: 'OKX', issuanceTime: '2026-11-18T23:42:00+00:00' });
+        expect(prompt).toMatch(/Never explain how you worked out a day or date/);
+        expect(prompt).toContain('Since this forecast was issued on Wednesday, ...');
+        expect(prompt).toMatch(/inline in the sentence it belongs to, and move on/);
+        expect(prompt).toMatch(/Never describe formatting, abbreviations, codes or table layout/);
+    });
+
+    it('gives the calendar, office and section as reference material after the rules, never to restate', () => {
+        const prompt = buildSystemPrompt({ section: 'Messages', office: 'HGX', issuanceTime: '2026-11-18T23:36:00+00:00' });
+        expect(prompt).not.toContain('Calendar context:');
+        const rules = prompt.indexOf('\nRules:\n');
+        const ref = prompt.indexOf('\nReference for reading the source (background only: never restate any of it in the translation):\n');
+        expect(rules).toBeGreaterThan(-1);
+        expect(ref).toBeGreaterThan(rules);
+        for (const line of [
+            'Section name for context: Messages',
+            'NWS Office: HGX',
+            'AFD issuance time in the local office timezone: Wednesday, November 18, 2026 at 5:36 PM CST',
+            'Local issue date for calendar references: November 18, 2026',
+        ]) {
+            expect(prompt.indexOf(line)).toBeGreaterThan(ref);
+        }
+        expect(prompt).toMatch(/Write the resolved day or date in the sentence, never the reasoning/);
     });
 });
 

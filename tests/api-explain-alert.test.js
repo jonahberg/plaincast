@@ -111,7 +111,9 @@ describe('GET /api/explain-alert', () => {
         expect(aiArgs.system).not.toMatch(/what a person there should actually do/);
         expect(aiArgs.system).toMatch(/Never add advice, warnings, calls to action, or reassurance that the alert does not give/);
         expect(aiArgs.system).toMatch(/If the alert gives no action, do not supply one/);
-        expect(aiArgs.system).toMatch(/every statement on it comes from the National Weather Service/);
+        // the reason is stated neutrally (Nov 18 2026)
+        expect(aiArgs.system).toMatch(/Readers rely on this text containing only what the alert says/);
+        expect(aiArgs.system).not.toMatch(/Plaincast|promise/i);
         expect(res.headers['cache-control']).toContain('s-maxage=1800');
     });
 
