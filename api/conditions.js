@@ -4,6 +4,8 @@ import { CLIMATE_NORMALS } from './_climate-normals.js';
 import { sendError } from './_errors.js';
 
 const NWS = 'https://api.weather.gov';
+// NOAA Aviation Weather Center data API: every METAR, decoded.
+export const AWC_METAR = 'https://aviationweather.gov/api/data/metar';
 const HEADERS = { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' };
 const NULL_PAYLOAD = Object.freeze({ temp: null, normal: null, delta: null });
 
@@ -60,7 +62,12 @@ async function getJson(url) {
 }
 
 // Latest observation first; when it yields no temperature, the newest of the
-// recent observations that does, if it is under FALLBACK_MAX_AGE_MS old.
+// recent observations that does, if it is under FALLBACK_MAX_AGE_MS old; and
+// last, the same station's latest METAR from NOAA's Aviation Weather Center.
+// api.weather.gov carries no observations at all for some stations that do
+// report: NSTU (Pago Pago, the PPG office's station) answered 404 on
+// /observations/latest and an empty /observations list on 2026-11-18, while
+// AWC had its hourly METARs.
 async function readStation(station, now) {
     const latest = await getJson(`${NWS}/stations/${station}/observations/latest`);
     const props = latest?.properties;
@@ -76,6 +83,12 @@ async function readStation(station, now) {
     for (const p of candidates) {
         const tempC = observationTempC(p);
         if (tempC !== null) return { tempC, props: p };
+    }
+    const awc = await getJson(`${AWC_METAR}?ids=${station}&format=json`);
+    const metar = Array.isArray(awc) ? awc.find(m => m?.icaoId === station) : null;
+    if (metar && now - Number(metar.obsTime) * 1000 <= FALLBACK_MAX_AGE_MS) {
+        const tempC = typeof metar.temp === 'number' && Number.isFinite(metar.temp) ? metar.temp : metarTempC(metar.rawOb);
+        if (tempC !== null) return { tempC, props: { textDescription: null } };
     }
     return null;
 }

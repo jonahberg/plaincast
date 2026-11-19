@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { OFFICE_NAMES, OFFICE_STATIONS, OFFICE_TIMEZONES } from '../docs/js/offices.js';
 import { CLIMATE_NORMALS } from '../api/_climate-normals.js';
 
-const { default: handler, metarTempC, observationTempC, monthIn, FALLBACK_MAX_AGE_MS } = await import('../api/conditions.js');
+const { default: handler, metarTempC, observationTempC, monthIn, FALLBACK_MAX_AGE_MS, AWC_METAR } = await import('../api/conditions.js');
 
 // conditions.js calls the global fetch directly (NWS station observations),
 // so we stub globalThis.fetch rather than mock.module. Each test sets `nextObs`
@@ -12,6 +12,7 @@ let obsOk = true;
 let fetchThrows = false;
 let nextObs = null;
 let nextList = { features: [] };
+let nextAwc = [];
 let lastUrl = null;
 const realFetch = globalThis.fetch;
 
@@ -20,11 +21,13 @@ beforeEach(() => {
     fetchThrows = false;
     nextObs = { properties: { temperature: { value: 20 }, textDescription: 'Mostly Cloudy' } };
     nextList = { features: [] };
+    nextAwc = [];
     lastUrl = null;
     globalThis.fetch = async (url) => {
         lastUrl = String(url);
         if (fetchThrows) throw new Error('network down');
         if (String(url).includes('/observations?limit=')) return { ok: obsOk, json: async () => nextList };
+        if (String(url).startsWith(AWC_METAR)) return { ok: obsOk, json: async () => nextAwc };
         return { ok: obsOk, json: async () => nextObs };
     };
 });
@@ -224,6 +227,26 @@ describe('conditions: readings the NWS API nulled (QC "Z")', () => {
         expect(res.body.temp).toBe(50);
         expect(res.body.condition).toBe('Clear');
         expect(lastUrl).toBe('https://api.weather.gov/stations/KJFK/observations?limit=6');
+    });
+
+    it('reads the AWC METAR when api.weather.gov has no observations (NSTU, Pago Pago)', async () => {
+        // Live 2026-11-18: /stations/NSTU/observations/latest 404, empty list.
+        obsOk = true;
+        nextObs = null;
+        nextList = { features: [] };
+        const obsTime = Math.floor(Date.now() / 1000) - 600;
+        nextAwc = [{ icaoId: 'NSTU', obsTime, temp: 30.5, rawOb: 'METAR NSTU 182350Z 13013G18KT 12SM SCT019 31/24 A2986 RMK SLP113 8/100 T03050238 10306 20267 57014' }];
+        const res = createRes();
+        await handler(createReq({ office: 'PPG' }), res);
+        expect(lastUrl).toBe('https://aviationweather.gov/api/data/metar?ids=NSTU&format=json');
+        expect(res.body.temp).toBe(87); // 30.5 C
+        expect(res.body.station).toBe('NSTU');
+        expect(res.body.condition).toBeNull();
+        // ...and not when that METAR is stale
+        nextAwc = [{ icaoId: 'NSTU', obsTime: obsTime - 3 * 3600, temp: 30.5 }];
+        const stale = createRes();
+        await handler(createReq({ office: 'PPG' }), stale);
+        expect(stale.body).toEqual({ temp: null, normal: null, delta: null });
     });
 
     it('does not call a reading older than the fallback window "Now"', async () => {
