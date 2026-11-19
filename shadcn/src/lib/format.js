@@ -25,6 +25,14 @@ export function formatInZone(date, options) {
         .join('');
 }
 
+// The short zone name formatInZone prints for this instant ("PST", "ChST",
+// "SST"), for callers that assemble a label from formatToParts (the server's
+// Zulu annotations, the National Desk clock): the same mapping, one source.
+export function shortZoneName(date, timeZone) {
+    const label = formatInZone(date, { hour: 'numeric', timeZone, timeZoneName: 'short' });
+    return label.slice(label.lastIndexOf(' ') + 1);
+}
+
 export function formatIssueTime(date, tz) {
     try {
         return formatInZone(date, {

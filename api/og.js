@@ -17,6 +17,7 @@ import { ImageResponse } from '@vercel/og';
 import { OFFICE_NAMES, OFFICE_TIMEZONES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { extractLede, regexTranslate, sectionHealth } from './_afd-sections.js';
+import { formatInZone } from '../shadcn/src/lib/format.js';
 
 // ─── Card identity: the shadcn look (DESIGN.md, current) ────────────
 // Same neutral tokens as shadcn/src/index.css (light theme), Geist type.
@@ -90,7 +91,8 @@ export function buildDateline(issuanceTime, office) {
     if (!issued || Number.isNaN(issued.getTime())) return base;
     const timeZone = OFFICE_TIMEZONES[office] || 'UTC';
     const date = issued.toLocaleDateString('en-US', { timeZone, weekday: 'short', month: 'short', day: 'numeric' });
-    const time = issued.toLocaleTimeString('en-US', { timeZone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+    // formatInZone: ChST and SST, as NWS writes them (shadcn/src/lib/format.js).
+    const time = formatInZone(issued, { timeZone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
     return `${base} \u00b7 ${date}, ${time}`.replace(/[\u202f\u00a0]/g, ' ');
 }
 

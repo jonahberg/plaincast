@@ -1,6 +1,7 @@
 // Pure logic for the National Desk. No I/O here — fetchers live in _utils.js,
 // rendering in national-desk.js — so every branch is unit-testable.
 import { alertOfficeCode } from '../docs/js/offices.js';
+import { formatInZone, shortZoneName } from '../shadcn/src/lib/format.js';
 
 // Office code = last 3 chars of the AWIPS identifier (e.g. SVRPUB -> PUB).
 // Verified against the live feed 2026-08-15; senderName is NOT parseable
@@ -389,7 +390,8 @@ export function formatExpiry(iso, tz) {
         if (!iso) return null; // new Date(null) resolves to the epoch, not NaN
         const d = new Date(iso);
         if (Number.isNaN(d.getTime())) return null;
-        const t = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' });
+        // formatInZone: ChST and SST, as NWS writes them (shadcn/src/lib/format.js).
+        const t = formatInZone(d, { hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' });
         return `until ${t}`;
     } catch { return null; }
 }
@@ -444,7 +446,9 @@ export function formatClock(iso, timeZone = DESK_TIME_ZONE) {
             timeZone, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short',
         }).formatToParts(d)) parts[p.type] = p.value;
         if (!parts.hour || !parts.minute || !parts.dayPeriod) return null;
+        // The zone through the shared mapping (ChST, SST, not GMT offsets).
+        const zone = parts.timeZoneName ? shortZoneName(d, timeZone) : '';
         return `${parts.hour}:${parts.minute} ${parts.dayPeriod.toUpperCase()}`
-            + (parts.timeZoneName ? ` ${parts.timeZoneName}` : '');
+            + (zone ? ` ${zone}` : '');
     } catch { return null; }
 }

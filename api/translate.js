@@ -12,6 +12,8 @@ import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 // The client parser, imported so verification matches what browsers send.
 // Pure module (relative imports only); shadcn/package.json is type:module.
 import { parseSections } from '../shadcn/src/lib/afd.js';
+// Zone names as NWS writes them (ChST, SST), the mapping the client uses.
+import { formatInZone, shortZoneName } from '../shadcn/src/lib/format.js';
 
 // Translation cache: keyed on sha256(whitespace-normalized text + canonical
 // section + office), 4-hour TTL
@@ -275,7 +277,7 @@ function getLocalDateParts(issueDate, timeZone) {
 export function getTranslationCalendarContext(office, issuanceTime) {
     const timeZone = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
     const issueDate = getSafeIssueDate(issuanceTime);
-    const localIssueTime = new Intl.DateTimeFormat('en-US', {
+    const localIssueTime = formatInZone(issueDate, {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
@@ -284,7 +286,7 @@ export function getTranslationCalendarContext(office, issuanceTime) {
         minute: '2-digit',
         timeZone,
         timeZoneName: 'short',
-    }).format(issueDate);
+    });
 
     const { year, monthName, day } = getLocalDateParts(issueDate, timeZone);
     const monthIndex = new Date(`${monthName} 1, ${year}`).getMonth();
@@ -360,7 +362,7 @@ function localParts(date, timeZone) {
     return {
         clock: parts.minute === '00' ? parts.hour : `${parts.hour}:${parts.minute}`,
         ampm: (parts.dayPeriod || '').toUpperCase(),
-        tz: parts.timeZoneName,
+        tz: shortZoneName(date, timeZone),
         weekday: parts.weekday,
         dateKey: `${parts.year}-${parts.month}-${parts.day}`,
     };
@@ -576,9 +578,9 @@ export function sectionWrittenTime(text, office, issuanceTime) {
         if (t === null || Number(hh) > 23 || Number(mm) > 59) {
             return null;
         }
-        const local = new Intl.DateTimeFormat('en-US', {
+        const local = formatInZone(new Date(t), {
             timeZone, weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-        }).format(new Date(t)).replace(/[  ]/g, ' ');
+        }).replace(/[  ]/g, ' ');
         return `This section was written: ${local} (${WRITTEN_RELATIVE})`;
     }
     return null;
