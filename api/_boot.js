@@ -15,7 +15,10 @@
 // A `type="application/json"` block is data, not script: browsers never
 // execute it, so the CSP (`script-src 'self'`, no 'unsafe-inline') is
 // unaffected. It is placed outside <main>, just before the app's module
-// script, so main-content extractors and the Markdown twin never see it.
+// script: it is the app's input, not page content, and the Markdown twin
+// does not carry it. That says nothing about whether the page's own text
+// includes AI: with PLAINCAST_AI_FOR_AGENTS=1, api/office-page.js and
+// api/home.js put labelled AI summaries in <main> and in the Markdown.
 //
 // Shape (v1):
 //   { v: 1, office, product: { id, issuanceTime, productText },

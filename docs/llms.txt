@@ -24,11 +24,11 @@ conditions API cannot.
 - Current conditions, hourly temperatures, or a 10-day icon forecast — use api.weather.gov directly; Plaincast is prose, not point data.
 - Anywhere outside the United States. Coverage is 123 NWS forecast offices, listed below.
 - Life-safety decisions during an active warning. Discussions are issued 3–4 times daily and can be hours old; send people to https://www.weather.gov or the issuing office.
-- Anything needing a forecast Plaincast made itself. It makes none. Every word originates with the NWS or the SPC.
+- Anything needing a forecast Plaincast made itself. It makes none: every forecast originates with the NWS or the SPC. The plain-English summaries are written by Claude, an AI model, from that text.
 
 **How to call it:**
 - One office: `GET https://plaincast.live/o/<CODE>/` (3-letter NWS office code, e.g. `OKX`). The legacy `https://plaincast.live/?office=<CODE>` answers a permanent redirect (308) to that URL.
-- Send `Accept: text/markdown` to any page URL and you get clean Markdown instead of HTML — the decoded discussion as prose, no nav, no scripts. This site is acceptmarkdown.com compliant: `Vary: Accept` is set, q-values are honoured, and an Accept it cannot satisfy gets a `406` listing what it can serve. Pages also advertise `<link rel="alternate" type="text/markdown">`.
+- Send `Accept: text/markdown` to any page URL and you get clean Markdown instead of HTML — the decoded discussion as prose, no nav, no scripts. When a response includes an AI summary, the summary is labelled as written by Claude and followed by the National Weather Service's own text; otherwise the text is the NWS's alone, with its shorthand expanded. This site is acceptmarkdown.com compliant: `Vary: Accept` is set, q-values are honoured, and an Accept it cannot satisfy gets a `406` listing what it can serve. Pages also advertise `<link rel="alternate" type="text/markdown">`.
 - Every page is server-rendered, so no JavaScript execution is needed to read it.
 - No API key, no rate limit for reading pages, no account. Please send a descriptive User-Agent.
 - Nonexistent paths return a real `404` with a short Markdown body pointing at the sitemap.
@@ -70,8 +70,8 @@ endpoints that exist. Branch on `code`, never on the prose.
 
 The AI endpoints (`/api/translate`, `/api/translate-issuance`, `/api/changelog`,
 `/api/explain-alert`, `/api/national-lede`) are Plaincast's own backend: they spend model
-budget per call, are rate-limited per IP, and are not supported for third-party use. The
-summaries they produce are already served inside the pages.
+budget per call, are rate-limited per IP, and are not supported for third-party use. Read
+the pages instead: a page response that includes an AI summary labels it as written by Claude.
 
 ## Supported NWS Offices (123, organized by region)
 

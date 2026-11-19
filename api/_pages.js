@@ -7,7 +7,10 @@
 // source — there is no second copy to forget to update.
 //
 // Every factual claim below is checked against the code: the localStorage keys
-// are the ones docs/js/app.js writes, the AI path is api/translate.js, the
+// are the ones docs/js/app.js writes, the AI paths are api/translate.js,
+// api/translate-issuance.js and the scheduled poller (api/cron-refresh.js;
+// labelled AI text in the server-rendered pages behind
+// PLAINCAST_AI_FOR_AGENTS, see api/office-page.js), the
 // IP-geolocation path is api/whereami.js, the analytics scripts are the two
 // <script defer> tags in the page shells.
 //
@@ -42,7 +45,7 @@ export const PAGES = {
                 'Each section is summarized by Anthropic\'s Claude Haiku into readable prose. The model summarizes; it never forecasts, and it is never asked to add information the forecaster did not write.',
                 'The original text is annotated in parallel: 230+ meteorological terms carry hover definitions, 109 abbreviation patterns are expanded, and Zulu times are converted to the office\'s local clock.',
                 'A confidence reading is derived from the forecaster\'s own hedging language — "high confidence" and "models diverge" are counted, not guessed at.',
-                'Every page is readable without JavaScript and without AI: the server renders a decoded plain-text edition first, and the interactive one loads over it.',
+                'Every page is readable without JavaScript: the server renders the edition first, and the interactive one loads over it. Where that server-rendered edition includes an AI summary, it is labelled as written by Claude and followed by the National Weather Service\'s text; otherwise you read the NWS text alone, with its shorthand expanded.',
             ] },
 
             { h: 'Where the data comes from' },
@@ -83,7 +86,7 @@ export const PAGES = {
 
             { h: 'Everything else' },
             { p: 'For anything that is not about the site itself — writing, work, or the other projects — [jonahberg.com](https://jonahberg.com) is the front door.' },
-            { p: 'Two things Plaincast cannot help with. It cannot answer "what is the weather going to do" — read your local edition, or ask the National Weather Service. And it cannot change a forecast: every word on this site is the NWS\'s, and corrections to a forecast belong with the office that issued it.' },
+            { p: 'Two things Plaincast cannot help with. It cannot answer "what is the weather going to do" — read your local edition, or ask the National Weather Service. And it cannot change a forecast: every forecast on this site is the NWS\'s, and corrections to a forecast belong with the office that issued it.' },
         ],
     },
 
@@ -103,7 +106,7 @@ export const PAGES = {
             ] },
 
             { h: 'The Markdown contract' },
-            { p: 'Every page on Plaincast serves two representations from one URL. Send `Accept: text/markdown` and you get the decoded forecast as clean prose — no nav, no scripts, no DOM. This is the fastest way to read Plaincast programmatically, and it needs no endpoint at all: request the page URL you already know.' },
+            { p: 'Every page on Plaincast serves two representations from one URL. Send `Accept: text/markdown` and you get the decoded forecast as clean prose — no nav, no scripts, no DOM. When a response includes an AI summary, the summary is labelled as written by Claude and followed by the National Weather Service\'s own text; otherwise the text is the NWS\'s alone, with its shorthand expanded. This is the fastest way to read Plaincast programmatically, and it needs no endpoint at all: request the page URL you already know.' },
             { pre: 'curl -H "Accept: text/markdown" https://plaincast.live/o/OKX/' },
             { p: 'The site is [acceptmarkdown.com](https://acceptmarkdown.com) compliant: `Vary: Accept` is set on every response, q-values are honoured, and an `Accept` that cannot be satisfied returns `406` listing what is available. Pages also advertise `<link rel="alternate" type="text/markdown">`. Every page is server-rendered, so no JavaScript execution is required either way.' },
             { dl: [
@@ -122,7 +125,7 @@ export const PAGES = {
                 ['GET /api/whereami', 'The nearest covered office for the caller\'s IP, or 204 if none. JSON, never cached.'],
             ] },
             { pre: 'curl https://plaincast.live/api/conditions?office=LOX\n{"temp":72,"normal":75,"delta":-3}' },
-            { p: 'The AI-backed endpoints (`/api/translate`, `/api/translate-issuance`, `/api/changelog`, `/api/explain-alert`, `/api/national-lede`) are this site\'s own backend. They spend model budget per call and are rate-limited per IP, so they are deliberately left out of the spec and are not supported for third-party use. If you want the AI summary, read the page — it is already in there.' },
+            { p: 'The AI-backed endpoints (`/api/translate`, `/api/translate-issuance`, `/api/changelog`, `/api/explain-alert`, `/api/national-lede`) are this site\'s own backend. They spend model budget per call and are rate-limited per IP, so they are deliberately left out of the spec and are not supported for third-party use. Read the pages instead: a page response that includes an AI summary labels it as written by Claude.' },
 
             { h: 'Errors' },
             { p: 'Every `/api/*` failure returns JSON with a stable machine `code`, a human `error` string, a `hint` naming the fix, and a `docs` link. Branch on `code`, never on the prose.' },

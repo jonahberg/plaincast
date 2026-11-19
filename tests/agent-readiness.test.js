@@ -2,7 +2,10 @@ import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PAGE_SLUGS } from '../api/_pages.js';
+import { PAGE_SLUGS, PAGES } from '../api/_pages.js';
+import { AI_LABEL_MD, PREAMBLE_AI, PREAMBLE_NO_AI } from '../api/_edition-markdown.js';
+import { PUBLIC_ENDPOINTS } from '../api/api-not-found.js';
+import { AI_LABEL_HTML } from '../api/office-page.js';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
 import { officeRedirectPattern } from '../scripts/build-offices.mjs';
 
@@ -268,5 +271,47 @@ describe('robots.txt still welcomes agents and points at the sitemap', () => {
 describe('service worker', () => {
     it('precaches / — which is now a function, not a static file', () => {
         expect(read('docs', 'sw.js')).toContain("'/',");
+    });
+});
+
+// The published promises must hold whether PLAINCAST_AI_FOR_AGENTS is on or
+// off. Per response is the truth: a response that includes an AI summary
+// labels it as written by Claude, the NWS text follows; otherwise the text
+// is the NWS's alone, shorthand expanded. Nothing may promise "NWS only".
+describe('published promises are true with the AI-for-agents switch on or off', () => {
+    const pageText = (slug) => JSON.stringify(PAGES[slug].blocks);
+    const spec = JSON.parse(read('docs', 'openapi.json'));
+
+    it('no page, llms.txt or the spec claims the text is NWS-only or AI-free', () => {
+        const all = [llms, JSON.stringify(spec), ...PAGE_SLUGS.map(pageText)].join('\n');
+        for (const claim of ['Every word originates', 'every word on this site', 'without JavaScript and without AI',
+            'already in there', 'already served inside the pages']) {
+            expect(all).not.toContain(claim);
+        }
+    });
+
+    it('/about, /developers, llms.txt and the spec state the per-response labelling', () => {
+        const label = 'labelled as written by Claude';
+        expect(pageText('about')).toContain(label);
+        expect(pageText('developers')).toContain(label);
+        expect(llms).toContain(label);
+        expect(spec.paths['/'].get.description).toContain(label);
+        expect(spec.paths['/o/{code}/'].get.description).toContain(label);
+    });
+
+    it('what the pages promise is what the renderers write', () => {
+        expect(AI_LABEL_MD).toContain('written by Claude');
+        expect(PREAMBLE_AI).toContain('written by Claude');
+        expect(PREAMBLE_NO_AI).toContain('no AI summary');
+        expect(AI_LABEL_HTML).toContain('written by AI (Claude)');
+    });
+
+    it('the scheduled poller is internal: not advertised to agents anywhere', () => {
+        for (const surface of [llms, JSON.stringify(spec), pageText('developers'), JSON.stringify(PUBLIC_ENDPOINTS)]) {
+            expect(surface).not.toContain('cron-refresh');
+        }
+        // robots.txt needs no entry for it: the endpoint refuses any call
+        // without the scheduler's CRON_SECRET (api/cron-refresh.js).
+        expect(read('docs', 'robots.txt')).not.toContain('cron');
     });
 });

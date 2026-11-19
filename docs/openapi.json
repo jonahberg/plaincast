@@ -4,7 +4,7 @@
     "title": "Plaincast",
     "version": "1.0.0",
     "summary": "National Weather Service Area Forecast Discussions, decoded into plain English.",
-    "description": "Plaincast (https://plaincast.live) translates the National Weather Service's Area Forecast Discussion \u2014 the narrative forecast a meteorologist writes 3 to 4 times a day \u2014 into plain English, for all 123 National Weather Service forecast offices that write one (the contiguous US, Alaska, Hawaii, Guam, American Samoa and Puerto Rico).\n\n**No API key, no account, no quota to request.** Everything here is free and read-only.\n\n**Most of Plaincast is pages, not endpoints.** The primary programmatic interface is content negotiation: request any page URL with `Accept: text/markdown` and you get the decoded forecast as clean prose instead of HTML. The site is acceptmarkdown.com compliant. The JSON endpoints below cover only the data that is not a page.\n\n**Not documented here, on purpose:** `/api/translate`, `/api/translate-issuance`, `/api/changelog`, `/api/explain-alert` and `/api/national-lede` are this site's own AI backend. They spend model budget per call, are rate-limited per IP, and are not supported for third-party use. The AI summary they produce is already served inside the pages.\n\nAll forecast data originates with NOAA and is public domain. Plaincast is an independent project and is not affiliated with NOAA or the National Weather Service.",
+    "description": "Plaincast (https://plaincast.live) translates the National Weather Service's Area Forecast Discussion \u2014 the narrative forecast a meteorologist writes 3 to 4 times a day \u2014 into plain English, for all 123 National Weather Service forecast offices that write one (the contiguous US, Alaska, Hawaii, Guam, American Samoa and Puerto Rico).\n\n**No API key, no account, no quota to request.** Everything here is free and read-only.\n\n**Most of Plaincast is pages, not endpoints.** The primary programmatic interface is content negotiation: request any page URL with `Accept: text/markdown` and you get the decoded forecast as clean prose instead of HTML. The site is acceptmarkdown.com compliant. The JSON endpoints below cover only the data that is not a page.\n\n**Not documented here, on purpose:** `/api/translate`, `/api/translate-issuance`, `/api/changelog`, `/api/explain-alert` and `/api/national-lede` are this site's own AI backend. They spend model budget per call, are rate-limited per IP, and are not supported for third-party use. Read the pages instead: a page response that includes an AI summary labels it as written by Claude.\n\nAll forecast data originates with NOAA and is public domain. Plaincast is an independent project and is not affiliated with NOAA or the National Weather Service.",
     "contact": {
       "name": "Jonah Berg",
       "url": "https://jonahberg.com"
@@ -41,7 +41,7 @@
       "get": {
         "operationId": "getHome",
         "summary": "Site overview and the current edition",
-        "description": "Plaincast's homepage. Send `Accept: text/markdown` for the decoded forecast as prose, or anything else for the typeset page. `Vary: Accept` is set on every response.",
+        "description": "Plaincast's homepage: what the site is, then the first sections of the default office's (LOX) current discussion in the National Weather Service's words, shorthand expanded. When a response includes an AI summary of a section, the summary is labelled as written by Claude and comes before that section's NWS text. Send `Accept: text/markdown` for the decoded forecast as prose, or anything else for the typeset page. `Vary: Accept` is set on every response.",
         "tags": [
           "Pages"
         ],
@@ -247,7 +247,7 @@
       "get": {
         "operationId": "getOfficeEdition",
         "summary": "One office's decoded Area Forecast Discussion",
-        "description": "The full discussion for one NWS office, shorthand expanded. Add `?view=changelog` for a paragraph-level diff against the previous issuance. Send `Accept: text/markdown` for the decoded forecast as prose, or anything else for the typeset page. `Vary: Accept` is set on every response.",
+        "description": "One NWS office's current discussion: its narrative sections in the National Weather Service's words, shorthand expanded. When a response includes an AI summary of a section, the summary is labelled as written by Claude and comes before that section's NWS text. Add `?view=changelog` for a paragraph-level diff against the previous issuance. Send `Accept: text/markdown` for the decoded forecast as prose, or anything else for the typeset page. `Vary: Accept` is set on every response.",
         "tags": [
           "Pages"
         ],
