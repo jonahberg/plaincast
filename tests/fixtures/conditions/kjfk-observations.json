@@ -1,0 +1,150 @@
+{
+ "source": "https://api.weather.gov/stations/KJFK/observations?limit=12",
+ "fetched": "2026-11-18",
+ "features": [
+  {
+   "properties": {
+    "timestamp": "2026-11-18T22:51:00+00:00",
+    "textDescription": "Clear",
+    "rawMessage": "KJFK 182251Z 25009KT 10SM CLR 13/02 A3043 RMK SLP303 T01330022",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": 13.3,
+     "qualityControl": "V"
+    }
+   }
+  },
+  {
+   "properties": {
+    "timestamp": "2026-11-18T21:51:00+00:00",
+    "textDescription": "Mostly Clear",
+    "rawMessage": "KJFK 182151Z 23009KT 10SM FEW250 12/04 A3042 RMK SLP301 T01220044",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": null,
+     "qualityControl": "Z"
+    }
+   }
+  },
+  {
+   "properties": {
+    "timestamp": "2026-11-18T20:51:00+00:00",
+    "textDescription": "Mostly Clear",
+    "rawMessage": "KJFK 182051Z 23010KT 10SM FEW250 14/05 A3042 RMK SLP301 T01440050 55008 $",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": 14.4,
+     "qualityControl": "V"
+    }
+   }
+  },
+  {
+   "properties": {
+    "timestamp": "2026-11-18T19:51:00+00:00",
+    "textDescription": "Mostly Clear",
+    "rawMessage": "KJFK 181951Z 23008KT 10SM FEW250 16/03 A3042 RMK SLP300 T01610028 $",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": 16.1,
+     "qualityControl": "V"
+    }
+   }
+  },
+  {
+   "properties": {
+    "timestamp": "2026-11-18T18:51:00+00:00",
+    "textDescription": "",
+    "rawMessage": "KJFK 181851Z 21009KT 10SM FEW250 16/03 A3042 RMK SLP301 T01610028",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": 16.1,
+     "qualityControl": "V"
+    }
+   }
+  },
+  {
+   "properties": {
+    "timestamp": "2026-11-18T15:51:00+00:00",
+    "textDescription": "Mostly Clear",
+    "rawMessage": "KJFK 181551Z VRB04KT 10SM FEW250 13/03 A3049 RMK SLP324 T01330028",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": 13.3,
+     "qualityControl": "V"
+    }
+   }
+  },
+  {
+   "properties": {
+    "timestamp": "2026-11-18T14:51:00+00:00",
+    "textDescription": "Mostly Clear",
+    "rawMessage": "KJFK 181451Z 26003KT 10SM FEW250 12/03 A3050 RMK SLP329 T01220028",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": 12.2,
+     "qualityControl": "V"
+    }
+   }
+  },
+  {
+   "properties": {
+    "timestamp": "2026-11-18T13:51:00+00:00",
+    "textDescription": "Mostly Clear",
+    "rawMessage": "KJFK 181351Z 25005KT 10SM FEW250 11/04 A3050 RMK SLP328 T01060044",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": 10.6,
+     "qualityControl": "V"
+    }
+   }
+  },
+  {
+   "properties": {
+    "timestamp": "2026-11-18T10:51:00+00:00",
+    "textDescription": "",
+    "rawMessage": "KJFK 181051Z 29003KT 10SM FEW250 07/03 A3047 RMK SLP318 T00720033 $",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": 7.2,
+     "qualityControl": "V"
+    }
+   }
+  },
+  {
+   "properties": {
+    "timestamp": "2026-11-18T09:51:00+00:00",
+    "textDescription": "Clear",
+    "rawMessage": "KJFK 180951Z 27005KT 10SM CLR 07/03 A3046 RMK SLP314 T00720033 $",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": 7.2,
+     "qualityControl": "V"
+    }
+   }
+  },
+  {
+   "properties": {
+    "timestamp": "2026-11-18T08:51:00+00:00",
+    "textDescription": "Clear",
+    "rawMessage": "KJFK 180851Z 28008KT 10SM CLR 08/04 A3045 RMK SLP312 T00780039 58005 $",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": 7.8,
+     "qualityControl": "V"
+    }
+   }
+  },
+  {
+   "properties": {
+    "timestamp": "2026-11-18T07:51:00+00:00",
+    "textDescription": "Clear",
+    "rawMessage": "KJFK 180751Z 25006KT 10SM CLR 07/02 A3045 RMK SLP310 T00670039 $",
+    "temperature": {
+     "unitCode": "wmoUnit:degC",
+     "value": 6.7,
+     "qualityControl": "V"
+    }
+   }
+  }
+ ]
+}

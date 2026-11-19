@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { OFFICE_NAMES } from '../docs/js/offices.js';
+import { readFileSync } from 'node:fs';
+import { OFFICE_NAMES, OFFICE_STATIONS, OFFICE_TIMEZONES } from '../docs/js/offices.js';
+import { CLIMATE_NORMALS } from '../api/_climate-normals.js';
 
-const { default: handler } = await import('../api/conditions.js');
+const { default: handler, metarTempC, observationTempC, monthIn, FALLBACK_MAX_AGE_MS } = await import('../api/conditions.js');
 
 // conditions.js calls the global fetch directly (NWS station observations),
 // so we stub globalThis.fetch rather than mock.module. Each test sets `nextObs`
@@ -9,6 +11,7 @@ const { default: handler } = await import('../api/conditions.js');
 let obsOk = true;
 let fetchThrows = false;
 let nextObs = null;
+let nextList = { features: [] };
 let lastUrl = null;
 const realFetch = globalThis.fetch;
 
@@ -16,10 +19,12 @@ beforeEach(() => {
     obsOk = true;
     fetchThrows = false;
     nextObs = { properties: { temperature: { value: 20 }, textDescription: 'Mostly Cloudy' } };
+    nextList = { features: [] };
     lastUrl = null;
     globalThis.fetch = async (url) => {
         lastUrl = String(url);
         if (fetchThrows) throw new Error('network down');
+        if (String(url).includes('/observations?limit=')) return { ok: obsOk, json: async () => nextList };
         return { ok: obsOk, json: async () => nextObs };
     };
 });
@@ -37,9 +42,9 @@ function createRes() {
 }
 const createReq = (query = {}) => ({ method: 'GET', query });
 
-// LOX climate normals, mirrored from api/conditions.js CLIMATE_NORMALS to
-// verify the month lookup + delta math without exporting the private table.
-const LOX_NORMALS = [68, 68, 68, 71, 72, 77, 83, 85, 83, 78, 72, 67];
+// The generated NCEI table (api/_climate-normals.js); the month is the
+// office's own, not the server's.
+const LOX_NORMALS = CLIMATE_NORMALS.LOX;
 
 describe('GET /api/conditions', () => {
     it('rejects an unknown office with 400', async () => {
@@ -81,17 +86,19 @@ describe('GET /api/conditions', () => {
         nextObs = { properties: { temperature: { value: 25 } } }; // 77F
         const res = createRes();
         await handler(createReq({ office: 'LOX' }), res);
-        const expectedNormal = LOX_NORMALS[new Date().getMonth()];
+        const expectedNormal = LOX_NORMALS[monthIn(OFFICE_TIMEZONES.LOX)];
         expect(res.body.normal).toBe(expectedNormal);
         expect(res.body.delta).toBe(77 - expectedNormal);
     });
 
     it('returns null normal/delta for a station office with no climate normals', async () => {
-        // PBZ has a station (KPIT) but no CLIMATE_NORMALS entry.
-        expect(OFFICE_NAMES.PBZ).toBeTruthy();
+        // CTP reads KUNV, which has no NCEI 1991-2020 normal (see the
+        // generated table's header), so it has no CLIMATE_NORMALS entry.
+        expect(OFFICE_STATIONS.CTP).toBe('KUNV');
+        expect(CLIMATE_NORMALS.CTP).toBeUndefined();
         nextObs = { properties: { temperature: { value: 15 } } }; // 59F
         const res = createRes();
-        await handler(createReq({ office: 'PBZ' }), res);
+        await handler(createReq({ office: 'CTP' }), res);
         expect(res.body.temp).toBe(59);
         expect(res.body.normal).toBeNull();
         expect(res.body.delta).toBeNull();
@@ -117,7 +124,7 @@ describe('GET /api/conditions', () => {
         }
     });
 
-    it('degrades to null payload when the observation omits temperature', async () => {
+    it('degrades to null payload when no recent observation has a temperature', async () => {
         nextObs = { properties: { temperature: { value: null }, textDescription: 'Foggy' } };
         const res = createRes();
         await handler(createReq({ office: 'LOX' }), res);
@@ -153,6 +160,100 @@ describe('GET /api/conditions', () => {
         await handler(createReq({ office: 'LOX' }), res);
         expect(res.statusCode).toBe(200);
         expect(res.body).toEqual({ temp: null, normal: null, delta: null });
+    });
+});
+
+// The Nov 18 2026 OKX/HFO "temp: null" bug, replayed on real responses.
+// api.weather.gov nulls a value MADIS has not quality-checked yet (QC "Z")
+// although the METAR in rawMessage carries it.
+const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/conditions/${name}`, import.meta.url), 'utf8'));
+const PHNL = fixture('phnl-observations.json').features.map(f => f.properties);
+const KJFK = fixture('kjfk-observations.json').features.map(f => f.properties);
+
+describe('conditions: readings the NWS API nulled (QC "Z")', () => {
+    it('the METAR parser agrees with every value the API did publish', () => {
+        const published = [...PHNL, ...KJFK].filter(p => typeof p.temperature.value === 'number');
+        expect(published.length).toBeGreaterThan(10);
+        for (const p of published) expect(metarTempC(p.rawMessage)).toBe(p.temperature.value);
+    });
+
+    it('recovers every PHNL and KJFK reading the API nulled', () => {
+        const nulled = [...PHNL, ...KJFK].filter(p => p.temperature.value === null);
+        expect(nulled.length).toBe(11); // 10 at PHNL, 1 at KJFK
+        for (const p of nulled) {
+            expect(p.temperature.qualityControl).toBe('Z');
+            expect(observationTempC(p)).toBeNumber();
+        }
+        expect(observationTempC(PHNL[0])).toBe(27.8); // "28/18 ... T02780178"
+    });
+
+    it('parses the body group when there is no T-group, including below zero', () => {
+        expect(metarTempC('KXYZ 181953Z 06009KT 1/2SM R04/2000FT FG M03/M07 A3010 RMK AO2')).toBe(-3);
+        expect(metarTempC('KXYZ 181953Z 06009KT 10SM CLR 07/ A3010')).toBe(7);
+        expect(metarTempC('KXYZ 181953Z 06009KT 10SM CLR A3010 RMK AO2 T11231167')).toBe(-12.3);
+        expect(metarTempC('')).toBeNull();
+        expect(metarTempC(null)).toBeNull();
+    });
+
+    it('never resurrects a value QC rejected or questioned', () => {
+        for (const qc of ['X', 'B', 'Q']) {
+            expect(observationTempC({ temperature: { value: null, qualityControl: qc }, rawMessage: PHNL[0].rawMessage })).toBeNull();
+        }
+    });
+
+    it('serves Honolulu "Now" from the latest observation\'s own METAR', async () => {
+        nextObs = { properties: PHNL[0] };
+        const res = createRes();
+        await handler(createReq({ office: 'HFO' }), res);
+        expect(res.body.temp).toBe(82); // 27.8 C
+        expect(res.body.station).toBe('PHNL');
+        expect(lastUrl).toBe('https://api.weather.gov/stations/PHNL/observations/latest');
+    });
+
+    it('falls back to the newest recent observation with a reading', async () => {
+        const now = Date.now();
+        const at = (msAgo) => new Date(now - msAgo).toISOString();
+        nextObs = { properties: { timestamp: at(0), temperature: { value: null, qualityControl: 'X' }, rawMessage: '' } };
+        nextList = { features: [
+            { properties: { timestamp: at(0), temperature: { value: null, qualityControl: 'X' }, rawMessage: '' } },
+            { properties: { timestamp: at(30 * 60e3), temperature: { value: 10, qualityControl: 'V' }, textDescription: 'Clear' } },
+            { properties: { timestamp: at(90 * 60e3), temperature: { value: 20, qualityControl: 'V' } } },
+        ] };
+        const res = createRes();
+        await handler(createReq({ office: 'OKX' }), res);
+        expect(res.body.temp).toBe(50);
+        expect(res.body.condition).toBe('Clear');
+        expect(lastUrl).toBe('https://api.weather.gov/stations/KJFK/observations?limit=6');
+    });
+
+    it('does not call a reading older than the fallback window "Now"', async () => {
+        const old = new Date(Date.now() - FALLBACK_MAX_AGE_MS - 60e3).toISOString();
+        nextObs = { properties: { temperature: { value: null, qualityControl: 'X' } } };
+        nextList = { features: [{ properties: { timestamp: old, temperature: { value: 10, qualityControl: 'V' } } }] };
+        const res = createRes();
+        await handler(createReq({ office: 'OKX' }), res);
+        expect(res.body).toEqual({ temp: null, normal: null, delta: null });
+    });
+});
+
+describe('conditions: every office', () => {
+    it('has a station', () => {
+        for (const code of Object.keys(OFFICE_NAMES)) expect(OFFICE_STATIONS[code]).toMatch(/^[A-Z0-9]{4}$/);
+    });
+
+    it('normals are 12 whole-degree months for known offices only', () => {
+        for (const [code, months] of Object.entries(CLIMATE_NORMALS)) {
+            expect(OFFICE_NAMES[code]).toBeTruthy();
+            expect(months.length).toBe(12);
+            for (const t of months) expect(Number.isInteger(t)).toBe(true);
+        }
+    });
+
+    it('picks the month in the office zone (Guam is ahead of UTC at the month edge)', () => {
+        const edge = new Date('2026-11-30T20:00:00Z'); // Dec 1, 06:00 in Guam
+        expect(monthIn('Pacific/Guam', edge)).toBe(11);
+        expect(monthIn('America/Los_Angeles', edge)).toBe(10);
+        expect(monthIn('Not/AZone', edge)).toBe(10);
     });
 });
 
