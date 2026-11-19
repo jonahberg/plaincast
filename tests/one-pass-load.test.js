@@ -274,7 +274,8 @@ describe('App boot path', () => {
         expect(intro).toContain('data-slot="status-row"');
         expect(intro).toMatch(/data-slot="status-row"\s+className=\{cn\('flex h-7 /);
         expect(intro).toContain('href="#section-active-alerts"');
-        expect(intro).toContain('aria-label={label}');
+        // the name leads with the text on screen (WCAG 2.5.3), then the full list
+        expect(intro).toContain('aria-label={alertLinkName(variants[index], label)}');
     });
 });
 

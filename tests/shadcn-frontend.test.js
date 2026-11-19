@@ -11,7 +11,7 @@ import { extractTakeaway, parseSections, splitTakeawayItems } from '../shadcn/sr
 import { alertGroupKey, groupAlerts } from '../shadcn/src/lib/nws.js';
 import { editionName, readingOrNull } from '../shadcn/src/lib/format.js';
 import { OFFICES_WITHOUT_NORMAL } from '../shadcn/src/lib/almanac.js';
-import { alertStatusVariants } from '../shadcn/src/lib/alert-status.js';
+import { alertStatusVariants, alertLinkName } from '../shadcn/src/lib/alert-status.js';
 import { changelogTitle, officeCanonical, officeFeedHref, officeTitle } from '../shadcn/src/lib/seo.js';
 import { officeTitle as ssrOfficeTitle } from '../scripts/build-offices.mjs';
 import { track } from '../shadcn/src/lib/track.js';
@@ -305,5 +305,29 @@ describe('theme-init.js: reload once when the page\'s own assets are missing', (
         fire(env); // a runtime error on window itself
         fire(null);
         expect(reloads()).toBe(0);
+    });
+});
+
+// Lighthouse on production (Nov 18 2026) flagged the condensed alerts line:
+// visible "13 active alerts: Flood Watch +9", accessible name the full list.
+describe('alerts line: the accessible name contains the visible text', () => {
+    const full = '13 active alerts: Flood Watch, Wind Advisory, High Surf Advisory. Jump to them.';
+    it('leads with the condensed text when the full label does not contain it', () => {
+        const name = alertLinkName('13 active alerts: Flood Watch +9', full);
+        expect(name.startsWith('13 active alerts: Flood Watch +9. ')).toBe(true);
+        expect(name).toContain(full);
+    });
+    it('leaves the label alone when it already contains what is shown', () => {
+        expect(alertLinkName('13 active alerts: Flood Watch, Wind Advisory', full)).toBe(full);
+        expect(alertLinkName('Watches and warnings', 'Watches and warnings in this discussion. Jump to them.'))
+            .toBe('Watches and warnings in this discussion. Jump to them.');
+    });
+    it('copes with a missing side', () => {
+        expect(alertLinkName('', full)).toBe(full);
+        expect(alertLinkName('3 active alerts', '')).toBe('3 active alerts');
+    });
+    it('the component names the link from the variant on screen', async () => {
+        const jsx = await read('shadcn/src/components/PageIntro.jsx');
+        expect(jsx).toContain('aria-label={alertLinkName(variants[index], label)}');
     });
 });

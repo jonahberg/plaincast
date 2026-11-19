@@ -67,3 +67,16 @@ export function withAlertsSection(forecastKeys, { liveAlerts, severe }) {
     if (!liveAlerts) return [...forecastKeys];
     return severe ? [ALERTS_KEY, ...forecastKeys] : [...forecastKeys, ALERTS_KEY];
 }
+
+// The link's accessible name must contain its visible text (WCAG 2.5.3,
+// Label in Name), or voice control cannot activate it by what is on screen.
+// The row condenses the visible text to fit ("13 active alerts: Flood Watch
+// +9") while the full label lists every event, so when the label does not
+// already contain the text shown, the name leads with it.
+export function alertLinkName(visible, label) {
+    const shown = String(visible ?? '').trim();
+    const full = String(label ?? '').trim();
+    if (!shown) return full;
+    if (!full || full.includes(shown)) return full || shown;
+    return `${shown}. ${full}`;
+}

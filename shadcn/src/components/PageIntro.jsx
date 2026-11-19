@@ -3,6 +3,7 @@ import { AlertTriangle, Rss } from 'lucide-react';
 
 import { OFFICE_COORDS, OFFICE_NAMES, OFFICE_TIMEZONES } from '@data/offices.js';
 import { confidenceScore, confidenceWord } from '@data/timeline.js';
+import { alertLinkName } from '@/lib/alert-status';
 import { OFFICES_WITHOUT_NORMAL, moonPhase, sunTimes } from '@/lib/almanac';
 import { officeFeedHref } from '@/lib/seo';
 import { cn } from '@/lib/utils';
@@ -182,7 +183,7 @@ function AlertStatus({ row, onJump }) {
             <a
                 ref={refs.anchorRef}
                 href="#section-active-alerts"
-                aria-label={label}
+                aria-label={alertLinkName(variants[index], label)}
                 onClick={(e) => {
                     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
                     e.preventDefault();
