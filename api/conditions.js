@@ -8,6 +8,10 @@ const NWS = 'https://api.weather.gov';
 export const AWC_METAR = 'https://aviationweather.gov/api/data/metar';
 const HEADERS = { 'User-Agent': 'Plaincast/1.0 (plaincast.live)' };
 const NULL_PAYLOAD = Object.freeze({ temp: null, normal: null, delta: null });
+// No reading (none came, a failed read, an impossible value): "Now" and the
+// delta go, the climate normal stays. It never depended on the station, so a
+// brief outage must not drop "Normal high" too (Nov 18 2026).
+const noReading = (normal) => (normal === null ? NULL_PAYLOAD : { temp: null, normal, delta: null });
 
 // How far back a fallback reading may come from and still be called "Now".
 export const FALLBACK_MAX_AGE_MS = 2 * 3600 * 1000;
@@ -99,16 +103,21 @@ export default async function handler(req, res) {
         return sendError(res, 400, 'invalid_office', 'Invalid office');
     }
 
+    // The normal first: the office's table and the month in the office's own
+    // zone (Guam is a day ahead of the server at a month's edge).
+    const now = Date.now();
+    const normals = CLIMATE_NORMALS[office];
+    const normal = normals ? normals[monthIn(OFFICE_TIMEZONES[office], new Date(now))] ?? null : null;
+
     const station = OFFICE_STATIONS[office];
     if (!station) {
-        return res.status(200).json(NULL_PAYLOAD);
+        return res.status(200).json(noReading(normal));
     }
 
     try {
-        const now = Date.now();
         const reading = await readStation(station, now);
         if (!reading) {
-            return res.status(200).json(NULL_PAYLOAD);
+            return res.status(200).json(noReading(normal));
         }
         // Sky phrase (e.g. "Mostly Cloudy", "Light Rain") drives the atmosphere's
         // condition tint on the client. Optional — null when the station omits it.
@@ -117,11 +126,9 @@ export default async function handler(req, res) {
 
         // Sanity check
         if (tempF < -60 || tempF > 140) {
-            return res.status(200).json(NULL_PAYLOAD);
+            return res.status(200).json(noReading(normal));
         }
 
-        const normals = CLIMATE_NORMALS[office];
-        const normal = normals ? normals[monthIn(OFFICE_TIMEZONES[office], new Date(now))] : null;
         const delta = normal !== null ? tempF - normal : null;
 
         res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=1200');
@@ -136,6 +143,6 @@ export default async function handler(req, res) {
         });
     } catch (err) {
         console.error('Conditions error:', err);
-        return res.status(200).json(NULL_PAYLOAD);
+        return res.status(200).json(noReading(normal));
     }
 }

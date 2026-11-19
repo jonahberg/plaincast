@@ -48,6 +48,9 @@ const createReq = (query = {}) => ({ method: 'GET', query });
 // The generated NCEI table (api/_climate-normals.js); the month is the
 // office's own, not the server's.
 const LOX_NORMALS = CLIMATE_NORMALS.LOX;
+// Nov 18 2026: the normal does not depend on the reading. A failed or empty
+// station read keeps "Normal high" (only "Now" and the delta go).
+const loxNoReading = () => ({ temp: null, normal: LOX_NORMALS[monthIn(OFFICE_TIMEZONES.LOX)], delta: null });
 
 describe('GET /api/conditions', () => {
     it('rejects an unknown office with 400', async () => {
@@ -94,6 +97,20 @@ describe('GET /api/conditions', () => {
         expect(res.body.delta).toBe(77 - expectedNormal);
     });
 
+    it('the normal uses the office\'s own month (Guam is a day ahead at month ends)', async () => {
+        fetchThrows = true;
+        const res = createRes();
+        await handler(createReq({ office: 'GUM' }), res);
+        expect(res.body).toEqual({ temp: null, normal: CLIMATE_NORMALS.GUM[monthIn(OFFICE_TIMEZONES.GUM)], delta: null });
+    });
+
+    it('an office with no normal and no reading answers all nulls', async () => {
+        fetchThrows = true;
+        const res = createRes();
+        await handler(createReq({ office: 'CTP' }), res);
+        expect(res.body).toEqual({ temp: null, normal: null, delta: null });
+    });
+
     it('returns null normal/delta for a station office with no climate normals', async () => {
         // CTP reads KUNV, which has no NCEI 1991-2020 normal (see the
         // generated table's header), so it has no CLIMATE_NORMALS entry.
@@ -127,42 +144,42 @@ describe('GET /api/conditions', () => {
         }
     });
 
-    it('degrades to null payload when no recent observation has a temperature', async () => {
+    it('no recent observation has a temperature: no reading, the normal stays', async () => {
         nextObs = { properties: { temperature: { value: null }, textDescription: 'Foggy' } };
         const res = createRes();
         await handler(createReq({ office: 'LOX' }), res);
         expect(res.statusCode).toBe(200);
-        expect(res.body).toEqual({ temp: null, normal: null, delta: null });
+        expect(res.body).toEqual(loxNoReading());
     });
 
-    it('degrades to null payload when the observation has no temperature field', async () => {
+    it('the observation has no temperature field: no reading, the normal stays', async () => {
         nextObs = { properties: {} };
         const res = createRes();
         await handler(createReq({ office: 'LOX' }), res);
-        expect(res.body).toEqual({ temp: null, normal: null, delta: null });
+        expect(res.body).toEqual(loxNoReading());
     });
 
-    it('rejects out-of-range temperatures as null (bad sensor)', async () => {
+    it('rejects out-of-range temperatures as no reading (bad sensor); the normal stays', async () => {
         nextObs = { properties: { temperature: { value: 100 } } }; // 212F, impossible
         const res = createRes();
         await handler(createReq({ office: 'LOX' }), res);
-        expect(res.body).toEqual({ temp: null, normal: null, delta: null });
+        expect(res.body).toEqual(loxNoReading());
     });
 
-    it('degrades to null payload when the upstream responds non-OK', async () => {
+    it('the upstream responds non-OK: no reading, the normal stays', async () => {
         obsOk = false;
         const res = createRes();
         await handler(createReq({ office: 'LOX' }), res);
         expect(res.statusCode).toBe(200);
-        expect(res.body).toEqual({ temp: null, normal: null, delta: null });
+        expect(res.body).toEqual(loxNoReading());
     });
 
-    it('swallows fetch errors and returns the null payload', async () => {
+    it('swallows fetch errors: no reading, the normal stays', async () => {
         fetchThrows = true;
         const res = createRes();
         await handler(createReq({ office: 'LOX' }), res);
         expect(res.statusCode).toBe(200);
-        expect(res.body).toEqual({ temp: null, normal: null, delta: null });
+        expect(res.body).toEqual(loxNoReading());
     });
 });
 
@@ -246,7 +263,7 @@ describe('conditions: readings the NWS API nulled (QC "Z")', () => {
         nextAwc = [{ icaoId: 'NSTU', obsTime: obsTime - 3 * 3600, temp: 30.5 }];
         const stale = createRes();
         await handler(createReq({ office: 'PPG' }), stale);
-        expect(stale.body).toEqual({ temp: null, normal: null, delta: null });
+        expect(stale.body).toEqual({ temp: null, normal: CLIMATE_NORMALS.PPG[monthIn(OFFICE_TIMEZONES.PPG)], delta: null });
     });
 
     it('does not call a reading older than the fallback window "Now"', async () => {
@@ -255,7 +272,7 @@ describe('conditions: readings the NWS API nulled (QC "Z")', () => {
         nextList = { features: [{ properties: { timestamp: old, temperature: { value: 10, qualityControl: 'V' } } }] };
         const res = createRes();
         await handler(createReq({ office: 'OKX' }), res);
-        expect(res.body).toEqual({ temp: null, normal: null, delta: null });
+        expect(res.body).toEqual({ temp: null, normal: CLIMATE_NORMALS.OKX[monthIn(OFFICE_TIMEZONES.OKX)], delta: null });
     });
 });
 

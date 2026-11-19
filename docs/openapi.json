@@ -690,7 +690,7 @@
         "tags": [
           "Data"
         ],
-        "description": "Soft-failing by design: on any upstream problem it returns 200 with null fields rather than an error, because it decorates a page that must still render.",
+        "description": "Soft-failing by design: on any upstream problem it returns 200 with temp and delta null rather than an error, because it decorates a page that must still render. The seasonal normal does not depend on the station reading, so it is still returned (null only for an office with no normal).",
         "parameters": [
           {
             "name": "office",
