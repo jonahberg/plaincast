@@ -28,6 +28,14 @@ export const PATHS = {
 const BEGIN = '// <generated:offices>';
 const END = '// </generated:offices>';
 
+// Display-name order: plain code-point order on lowercase, not
+// localeCompare — the output is byte-compared by tests, and ICU collation
+// can differ between machines.
+export const byName = (a, b) => {
+    const x = a.toLowerCase(), y = b.toLowerCase();
+    return x < y ? -1 : x > y ? 1 : 0;
+};
+
 const q = (s) => `'${String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -78,7 +86,7 @@ export function orderedGroups(resolved) {
             if (seen.has(c)) throw new Error(`${c} is in both ${seen.get(c)} and ${g.label}`);
             seen.set(c, g.label);
         }
-        return { label: g.label, codes: [...g.codes].sort((a, b) => resolved[a].name.localeCompare(resolved[b].name, 'en')) };
+        return { label: g.label, codes: [...g.codes].sort((a, b) => byName(resolved[a].name, resolved[b].name)) };
     });
     const ungrouped = Object.keys(resolved).filter(c => !seen.has(c));
     if (ungrouped.length) throw new Error(`no region group for: ${ungrouped.join(', ')}`);

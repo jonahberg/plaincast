@@ -10,7 +10,7 @@ import {
 } from '../docs/js/offices.js';
 import { OFFICE_GROUPS } from '../shadcn/src/lib/offices-groups.js';
 import { CLIMATE_NORMALS } from '../api/_climate-normals.js';
-import { buildOfficeData } from '../scripts/build-office-data.mjs';
+import { buildOfficeData, byName } from '../scripts/build-office-data.mjs';
 import { LEGACY } from '../scripts/office-curation.mjs';
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
@@ -82,7 +82,7 @@ describe('picker and footer groups', () => {
     it('are sorted by display name inside each group', () => {
         for (const g of OFFICE_GROUPS) {
             const names = g.codes.map(c => OFFICE_NAMES[c]);
-            expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, 'en')));
+            expect(names).toEqual([...names].sort(byName));
         }
     });
 });
