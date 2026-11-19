@@ -3,7 +3,7 @@ import { AlertTriangle, Rss } from 'lucide-react';
 
 import { OFFICE_COORDS, OFFICE_NAMES, OFFICE_TIMEZONES } from '@data/offices.js';
 import { confidenceScore, confidenceWord } from '@data/timeline.js';
-import { moonPhase, sunTimes } from '@/lib/almanac';
+import { OFFICES_WITHOUT_NORMAL, moonPhase, sunTimes } from '@/lib/almanac';
 import { officeFeedHref } from '@/lib/seo';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -53,9 +53,12 @@ function sinceText(iso, tz) {
 // ledger: one hairline-ruled row on desktop, a 3-column grid on phones.
 //
 // When live conditions are expected (the latest edition, online), their two
-// cells are laid out from the first frame — blank while the reading is on its
-// way, a dash if it never comes — so its arrival fills a cell instead of
-// regridding the strip and pushing everything below it.
+// cells are laid out from the first frame, blank while the reading is on its
+// way, so its arrival fills a cell instead of regridding the strip and
+// pushing everything below it. A reading that settles empty drops its cell
+// (an empty cell never shows a dash) and the rest close up; the strip keeps
+// its height, since 4 to 6 cells are two rows on phones and one from sm.
+// An office with no normal high at all never reserves that cell.
 function Almanac({ office, conditions, conditionsExpected }) {
     const tz = OFFICE_TIMEZONES[office];
     const cells = useMemo(() => {
@@ -63,13 +66,14 @@ function Almanac({ office, conditions, conditionsExpected }) {
         // null/undefined mean "no reading" (+null would render as 0°).
         const temp = readingOrNull(conditions?.temp);
         const normal = readingOrNull(conditions?.normal);
-        const reading = (value) => {
-            if (value !== null) return `${value}°`;
-            return conditions ? '—' : ' '; // settled without one : still coming
-        };
         if (conditionsExpected) {
-            out.push({ label: 'Now', value: reading(temp) });
-            out.push({ label: 'Normal high', value: reading(normal) });
+            // A no-break space holds the cell's line box until it fills.
+            const live = (label, value) => {
+                if (value !== null) out.push({ label, value: `${value}°` });
+                else if (!conditions) out.push({ label, value: '\u00a0' });
+            };
+            live('Now', temp);
+            if (!OFFICES_WITHOUT_NORMAL.has(office)) live('Normal high', normal);
         } else {
             if (temp !== null) {
                 out.push({ label: 'Now', value: `${temp}°` });

@@ -10,6 +10,7 @@ import { buildOfficeUrl, parseRoute } from '../shadcn/src/lib/route.js';
 import { extractTakeaway, parseSections, splitTakeawayItems } from '../shadcn/src/lib/afd.js';
 import { alertGroupKey, groupAlerts } from '../shadcn/src/lib/nws.js';
 import { editionName, readingOrNull } from '../shadcn/src/lib/format.js';
+import { OFFICES_WITHOUT_NORMAL } from '../shadcn/src/lib/almanac.js';
 import { changelogTitle, officeCanonical, officeFeedHref, officeTitle } from '../shadcn/src/lib/seo.js';
 import { officeTitle as ssrOfficeTitle } from '../scripts/build-offices.mjs';
 import { track } from '../shadcn/src/lib/track.js';
@@ -129,6 +130,21 @@ describe('/api/conditions readings', () => {
         expect(readingOrNull(0)).toBe(0);
         expect(readingOrNull(81)).toBe(81);
         expect(readingOrNull('72')).toBe(72);
+    });
+
+    it('the strip never reserves a normal-high cell the server can never fill', async () => {
+        const { CLIMATE_NORMALS } = await import('../api/_climate-normals.js');
+        const { OFFICE_NAMES } = await import('../docs/js/offices.js');
+        const missing = Object.keys(OFFICE_NAMES).filter(c => !CLIMATE_NORMALS[c]).sort();
+        expect([...OFFICES_WITHOUT_NORMAL].sort()).toEqual(missing);
+    });
+
+    it('an empty reading drops its cell instead of showing a dash', async () => {
+        const intro = await read('shadcn/src/components/PageIntro.jsx');
+        const almanac = intro.slice(intro.indexOf('function Almanac('), intro.indexOf('function AlertStatus('));
+        expect(almanac).not.toContain("'—'");
+        expect(almanac).toContain("else if (!conditions) out.push({ label, value: '\\u00a0' });");
+        expect(almanac).toContain("if (!OFFICES_WITHOUT_NORMAL.has(office)) live('Normal high', normal);");
     });
 });
 
