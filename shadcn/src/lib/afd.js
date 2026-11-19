@@ -323,7 +323,8 @@ export function annotateSegments(text) {
     return segments;
 }
 
-// Key takeaway: KEY MESSAGES verbatim, else first sentences of the synopsis.
+// Key takeaway: KEY MESSAGES verbatim, else two sentences of the synopsis
+// (synopsisTakeaway below).
 // Key Messages are usually a list — "- a\n\n- b" (LOT) or "1) a\n\n2) b"
 // (OKX) — and collapsing whitespace ran them into one line. Returns
 // { ordered, preamble, items, trailing } for a real list of 2+ items, else
@@ -374,6 +375,48 @@ function takeawayInline(text, tz) {
     return stripAIArtifacts(translateToPlainEnglish(flat, tz).replace(/<\/?p>/g, ''));
 }
 
+// The synopsis fallback (no Key Messages): at most two of the forecaster's
+// own sentences, verbatim and in order. Rule:
+//   - Clean first: the issuance stamp a section opens with ("18/104 PM.")
+//     and "Issued at …" are not sentences. (The stamp used to count as
+//     sentence one, then translateToPlainEnglish deleted it, so offices
+//     like LOX showed a single sentence.) Sentences end at . ! or ? before
+//     a space, so "0.75 inches" stays whole.
+//   - When the opening sentence names no hazard, lead with the first of the
+//     first three sentences that does — a hazard or impact word (storms,
+//     flooding, gusty winds, heavy or mountain snow, high surf, heat, fire,
+//     a watch/warning/advisory, "significant impacts"…) in a sentence that
+//     is not winding it down ("diminishing", "below advisory", "is low",
+//     "no", "not").
+//   - Start one sentence earlier when the hazard sentence leans on the one
+//     before it ("This…", "also", "the second storm") or is the last one;
+//     if that sentence leans back too, keep the opening two.
+//   - A section that opens with an inline "Key Messages:" list keeps the
+//     forecaster's own order.
+// Forked verbatim into docs/js/app.js and tests/helpers.js (parity-locked).
+export function synopsisTakeaway(text) {
+    const HAZARD = /\b(?:thunder\w*|t-?storms?|lightning|tornado\w*|waterspouts?|funnel clouds?|hail\w*|severe|storms?|flood\w*|inundation|(?:heavy|widespread|significant|excessive|torrential|soaking|prolonged) (?:\w+ )?(?:rain\w*|snow\w*|precipitation|showers|downpours)|inch(?:es)? of (?:new )?(?:rain|snow)|atmospheric rivers?|debris flows?|mud ?slides?|land ?slides?|rock ?slides?|burn scars?|avalanche\w*|blizzard\w*|whiteouts?|snow squalls?|(?:mountain|accumulating|lake[- ]effect|pass[- ]level|wet) snow\w*|snow(?:fall)? accumulations?|freeze|freezing (?:rain|drizzle|fog|spray|temperatures)|below freezing|sleet|ice|icy|gusty|gusts?|(?:strong|high|damaging) (?:\w+ )?winds?|damag\w*|(?:extreme|excessive|dangerous|record) heat|heat (?:advisory|warning|risk|index)|heat ?waves?|(?:very|dangerously|extremely) hot|(?:extreme|bitter(?:ly)?|dangerous(?:ly)?) cold|arctic (?:air|blast|outbreak)|wind chills?|frost|record(?:s|-breaking)?|(?:high|large|big|dangerous) (?:\w+ )?(?:surf|swells?|waves|breakers)|(?:hazardous|rough|high|steep|dangerous) seas|rip currents?|sneaker waves?|storm surge|king tides?|high tides?|gales?|hurricane\w*|tropical (?:storms?|depressions?|cyclones?)|typhoons?|dense fog|blowing (?:dust|snow)|dust storms?|haboobs?|smoke|air quality|fire\w*|red flag|warnings?|watch(?:es)?|advisor(?:y|ies)|hazard\w*|dangerous|life[- ]threatening|(?:significant|major|high) impacts?|high[- ]impact|impactful)\b/i;
+    const FADING = /\b(?:diminish\w*|decreas\w*|taper\w*|weaken\w*|subsid\w*|eas(?:e|es|ing)|expir\w*|cancel\w*|below (?:advisory|warning)|no longer|no|not|unlikely|(?:is|are|remains?|stays?) low)\b/i;
+    const LEANS_BACK = /^(?:this|these|that|those|it|its|they|their|additionally|otherwise|however|meanwhile|then|but|and|along with|in addition)\b|^(?:\S+\s+){0,3}of (?:these|those|this|that)\b|\b(?:also|as well)\b|\bthe (?:second|third|latter|former)\b/i;
+    let t = String(text || '')
+        .replace(/^\s*(?:\d{1,2}\/\d{3,4}\s*(?:AM|PM|Z)?\.?\s*)+/i, '')
+        .replace(/^\s*Issued at \d.+?\d{4}\s*/i, '');
+    t = t.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
+    const sentences = t.match(/\S[\s\S]*?[.!?]+(?=\s|$)/g);
+    if (!sentences) return t.substring(0, 200);
+    const names = s => HAZARD.test(s) && !FADING.test(s);
+    let lead = 0;
+    if (!/^key messages?\b/i.test(t) && !names(sentences[0])) {
+        const i = sentences.slice(0, 3).findIndex(names);
+        if (i > 0) {
+            lead = i;
+            if (lead === sentences.length - 1 || LEANS_BACK.test(sentences[lead])) lead--;
+            if (lead > 0 && LEANS_BACK.test(sentences[lead])) lead = 0;
+        }
+    }
+    return sentences.slice(lead, lead + 2).join(' ');
+}
+
 export function extractTakeaway(sections, tz) {
     const messagesSection = sections.find(s => s.key === 'Messages');
     if (messagesSection) {
@@ -391,10 +434,6 @@ export function extractTakeaway(sections, tz) {
         || sections.find(s => s.key === 'Discussion')
         || sections[0];
     if (!synSection) return '';
-    let text = synSection.text.replace(/^Issued at \d.+?\d{4}\s*/i, '');
-    text = text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
-    const sentences = text.match(/[^.!?]+[.!?]+/g);
-    if (!sentences) return text.substring(0, 200);
-    const takeaway = sentences.slice(0, 2).join(' ').trim();
+    const takeaway = synopsisTakeaway(synSection.text);
     return stripAIArtifacts(translateToPlainEnglish(takeaway, tz).replace(/<\/?p>/g, ''));
 }

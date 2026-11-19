@@ -42,7 +42,7 @@ function normalize(body) {
 }
 
 // Functions that MUST stay byte-for-byte (logic-wise) identical across the fork.
-const FORKED = ['parseSections', 'stripAIArtifacts', 'stripNWSArtifacts', 'hasRealAlerts', 'reorderSections', 'escapeHTML'];
+const FORKED = ['parseSections', 'stripAIArtifacts', 'stripNWSArtifacts', 'hasRealAlerts', 'reorderSections', 'escapeHTML', 'synopsisTakeaway'];
 
 describe('helpers.js forks stay in lockstep with docs/js/app.js', () => {
     for (const name of FORKED) {
