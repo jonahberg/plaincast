@@ -7,7 +7,10 @@
 //   lox-classic-synopsis.txt  — LOX (Los Angeles): classic .SYNOPSIS format
 
 import { describe, it, expect, mock } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { stripWmoHeader, extractSections, extractLede, sectionHealth } from '../api/_afd-sections.js';
+import { parseSections as clientParse, extractTakeaway } from '../shadcn/src/lib/afd.js';
+import { parseSections as legacyParse } from './helpers.js';
 
 const OKX = await Bun.file(new URL('./fixtures/afd/okx-what-has-changed.txt', import.meta.url)).text();
 const AKQ = await Bun.file(new URL('./fixtures/afd/akq-key-messages.txt', import.meta.url)).text();
@@ -246,7 +249,7 @@ mock.module('../api/_utils.js', () => ({
     productUrlFromItem: (item) => item?.id || null,
 }));
 
-const { default: feedHandler } = await import('../api/feed.js');
+const { default: feedHandler, stripSectionHeader } = await import('../api/feed.js');
 const { default: ogHandler, buildCardElement, buildDateline, clampTakeaway } = await import('../api/og.js');
 
 function createRes() {
@@ -446,5 +449,68 @@ describe('OG card element tree (pure builder — text content the PNG cannot exp
         const clamped = clampTakeaway(long);
         expect(clamped.length).toBeLessThanOrEqual(240);
         expect(clamped.endsWith('.')).toBe(true);
+    });
+});
+
+// ─── Nov 18 2026: SLC's comma-stamped headers; one lede rule ────────
+// SLC writes the section's time into its header (".KEY MESSAGES, Issued 1120
+// AM MST Wed Nov 18 2026..."). The comma kept every parser from seeing the
+// header, so SLC's Key Messages and Discussion were swallowed and its lede
+// came out as the header itself. And the lede for share cards and RSS now
+// follows the page's takeaway rule (shadcn/src/lib/afd.js takeawaySection +
+// synopsisTakeaway), so a shared link says what the page says.
+describe('comma-stamped headers (real SLC, Nov 18 2026) and the page lede rule', () => {
+    const live = (code) => JSON.parse(readFileSync(new URL(`./fixtures/afd/live-2026-11-18/${code}.json`, import.meta.url), 'utf8'));
+    const SLC = live('SLC').productText;
+
+    it('every parser sees SLC\'s Key Messages and Discussion, without the stamp', () => {
+        expect(extractSections(SLC).map(s => s.key)).toEqual(['KEY MESSAGES', 'DISCUSSION', 'AVIATION', 'WATCHES/WARNINGS/ADVISORIES']);
+        for (const parse of [clientParse, legacyParse]) {
+            const sections = parse(SLC).sections;
+            expect(sections.map(s => s.key)).toEqual(['Messages', 'Discussion', 'Aviation', 'Active Alerts']);
+            expect(sections[0].text).toMatch(/^- A longer duration storm/);
+            expect(sections[1].text).toMatch(/^The 12Z KSLC sounding/);
+        }
+        for (const s of extractSections(SLC)) expect(s.text).not.toMatch(/^,|Issued 1120 AM/);
+    });
+
+    it('only the Issued/Updated form is new: other comma lines are still body text', () => {
+        const product = '.SYNOPSIS...\nA front arrives.\n.Tonight, cold air settles in...\n&&\n';
+        expect(extractSections(product).map(s => s.key)).toEqual(['SYNOPSIS']);
+        expect(extractSections('.DISCUSSION, Updated 300 PM PST Wed Nov 18 2026...\nRain.\n').map(s => s.key)).toEqual(['DISCUSSION']);
+    });
+
+    it('SLC\'s lede is its Key Messages, as on the page (was the header itself)', () => {
+        const lede = extractLede(SLC);
+        expect(lede).toMatch(/^A longer duration storm will come through the area in pieces/);
+        expect(lede).not.toMatch(/KEY MESSAGES|Issued/);
+        expect(extractTakeaway(clientParse(SLC).sections, 'America/Denver')).toContain('A longer duration storm');
+    });
+
+    it('Key Messages come first, as on the page, even when a synopsis exists', () => {
+        const product = '.SYNOPSIS...\nHigh pressure holds. Skies stay clear.\n\n&&\n\n.KEY MESSAGES...\n\n- Gusty winds Friday.\n\n- Rain returns Sunday.\n\n&&\n';
+        expect(extractLede(product)).toBe('Gusty winds Friday. Rain returns Sunday.');
+    });
+
+    it('a synopsis gives the page\'s two sentences, led by the hazard sentence', () => {
+        const product = '.SYNOPSIS...\n18/104 PM.\n\nCool weather continues all week. A strong storm brings heavy rain and gusty winds Thursday. Dry weather returns Friday. Warmer next week.\n\n&&\n';
+        expect(extractLede(product)).toBe('A strong storm brings heavy rain and gusty winds Thursday. Dry weather returns Friday.');
+    });
+
+    it('list markers never reach a card: "- 1. " (CAE), and a list inside a synopsis (AJK)', () => {
+        const cae = '.WHAT HAS CHANGED...\nAviation update for the 18z TAFs.\n\n&&\n\n.KEY MESSAGES...\n- 1. Above normal temperatures through Friday.\n\n- 2. Rain possible this weekend.\n\n&&\n';
+        expect(extractLede(cae)).toBe('Above normal temperatures through Friday. Rain possible this weekend.');
+        const ajk = '.SYNOPSIS...\nKey Messages:\n\n- Quieter weather Thursday.\n\n- Fog develops Wednesday night.\n\n&&\n';
+        expect(extractLede(ajk)).toBe('Key Messages: Quieter weather Thursday. Fog develops Wednesday night.');
+    });
+
+    it('the paragraph fallback drops a section header it opens with', () => {
+        const product = '000\nFXUS61 KOKX 032349\nAFDOKX\n\n.WHAT HAS CHANGED...1) \n\n1) \n\n&&\n';
+        expect(extractLede(product)).not.toMatch(/^\./);
+    });
+
+    it('the RSS delta strips the comma-stamped header too', () => {
+        expect(stripSectionHeader('.KEY MESSAGES, Issued 1120 AM MST Wed Nov 18 2026...- Snow Friday.')).toBe('- Snow Friday.');
+        expect(stripSectionHeader('.SHORT TERM (Today through Saturday)...Rain.')).toBe('Rain.');
     });
 });

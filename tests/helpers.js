@@ -39,8 +39,8 @@ export function parseSections(text) {
         // sections instead of being merged into the previous one. The negative
         // lookahead keeps inline ".KEY MESSAGE 1..." pseudo-headers inside the body.
         // Try with office prefix first (3-letter like LOX, SGX)
-        const headerMatch = line.match(/^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i)
-            || line.match(/^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i);
+        const headerMatch = line.match(/^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/|,\s*(?:Issued|Updated)\b[^.]*))?\s*\.{2,3}/i)
+            || line.match(/^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/|,\s*(?:Issued|Updated)\b[^.]*))?\s*\.{2,3}/i);
         if (headerMatch) {
             if (currentKey) {
                 sections.push({ key: currentKey, text: currentLines.join('\n').trim() });
@@ -125,18 +125,29 @@ export function synopsisTakeaway(text) {
 // Simplified version: the synopsis fallback's sentences (synopsisTakeaway)
 // without running full translation (which would need timezone state).
 // Returns raw text for testing purposes.
-export function extractTakeaway(sections) {
-    // Prefer KEY MESSAGES section when available
-    const messagesSection = sections.find(s => s.key === 'Messages');
-    if (messagesSection) {
-        const text = messagesSection.text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
-        return text;
-    }
-    const synSection = sections.find(s => s.key === 'Synopsis')
+// ─── takeawaySection ─────────────────────────────────────────────────
+// Copied from docs/js/app.js (locked by tests/helpers-parity.test.js).
+// The section the takeaway comes from: Key Messages, else the synopsis, the
+// discussion or the first section. One rule for the page (extractTakeaway)
+// and the server's lede for share cards and RSS (api/_afd-sections.js
+// extractLede, which imports the shadcn copy). Forked verbatim into
+// docs/js/app.js and tests/helpers.js (parity-locked).
+export function takeawaySection(sections) {
+    return sections.find(s => s.key === 'Messages')
+        || sections.find(s => s.key === 'Synopsis')
         || sections.find(s => s.key === 'Discussion')
-        || sections[0];
-    if (!synSection) return '';
-    return synopsisTakeaway(synSection.text);
+        || sections[0]
+        || null;
+}
+
+export function extractTakeaway(sections) {
+    const source = takeawaySection(sections);
+    if (!source) return '';
+    // Prefer KEY MESSAGES section when available
+    if (source.key === 'Messages') {
+        return source.text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
+    }
+    return synopsisTakeaway(source.text);
 }
 
 // ─── stripNWSArtifacts ──────────────────────────────────────────────

@@ -47,8 +47,11 @@ function isMastNoise(p) {
 }
 
 // ".SHORT TERM (Today through Saturday)..." → just the body text after it.
-function stripSectionHeader(p) {
-    return p.replace(/^\.[A-Z][A-Z0-9 /()'&.-]*?\.\.\.\s*/, '').trim();
+// SLC writes the section's time into the header: ".KEY MESSAGES, Issued 1120
+// AM MST Wed Nov 18 2026..." (the parsers accept that form too). Lowercase is
+// allowed after the first letter: the qualifier is often mixed case.
+export function stripSectionHeader(p) {
+    return p.replace(/^\.[A-Z][A-Za-z0-9 /()'&.-]*?(?:,\s*(?:Issued|Updated)\b[^.]*)?\.\.\.\s*/, '').trim();
 }
 
 // Plain-English "what changed" summary from the paragraph-level diff against

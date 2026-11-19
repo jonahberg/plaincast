@@ -45,7 +45,7 @@ function normalize(body) {
 }
 
 const FORKS = [
-    [SHADCN_AFD, 'shadcn/src/lib/afd.js', ['parseSections', 'stripAIArtifacts', 'escapeHTML', 'stripNWSArtifacts', 'hasRealAlerts', 'reorderSections', 'zuluToLocal', 'synopsisTakeaway']],
+    [SHADCN_AFD, 'shadcn/src/lib/afd.js', ['parseSections', 'stripAIArtifacts', 'escapeHTML', 'stripNWSArtifacts', 'hasRealAlerts', 'reorderSections', 'zuluToLocal', 'synopsisTakeaway', 'takeawaySection']],
     [SHADCN_AI, 'shadcn/src/lib/ai.js', ['formatTranslationHTML']],
     [SHADCN_ALMANAC, 'shadcn/src/lib/almanac.js', ['sunTimes', 'moonPhase']],
     [SHADCN_FORMAT, 'shadcn/src/lib/format.js', ['readingOrNull', 'formatInZone']],

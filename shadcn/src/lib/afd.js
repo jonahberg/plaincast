@@ -32,8 +32,8 @@ export function parseSections(text) {
         // sections instead of being merged into the previous one. The negative
         // lookahead keeps inline ".KEY MESSAGE 1..." pseudo-headers inside the body.
         // Try with office prefix first (3-letter like LOX, SGX)
-        const headerMatch = line.match(/^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i)
-            || line.match(/^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/))?\s*\.{2,3}/i);
+        const headerMatch = line.match(/^\.(?!KEY MESSAGE \d)[A-Za-z]{3}\s+([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/|,\s*(?:Issued|Updated)\b[^.]*))?\s*\.{2,3}/i)
+            || line.match(/^\.(?!KEY MESSAGE \d)([A-Za-z0-9\s\/]+?)(?:\s*(?:\([^)]*\)|\/[^/]*\/|,\s*(?:Issued|Updated)\b[^.]*))?\s*\.{2,3}/i);
         if (headerMatch) {
             if (currentKey) {
                 sections.push({ key: currentKey, text: currentLines.join('\n').trim() });
@@ -418,8 +418,23 @@ export function synopsisTakeaway(text) {
     return sentences.slice(lead, lead + 2).join(' ');
 }
 
+// The section the takeaway comes from: Key Messages, else the synopsis, the
+// discussion or the first section. One rule for the page (extractTakeaway)
+// and the server's lede for share cards and RSS (api/_afd-sections.js
+// extractLede, which imports the shadcn copy). Forked verbatim into
+// docs/js/app.js and tests/helpers.js (parity-locked).
+export function takeawaySection(sections) {
+    return sections.find(s => s.key === 'Messages')
+        || sections.find(s => s.key === 'Synopsis')
+        || sections.find(s => s.key === 'Discussion')
+        || sections[0]
+        || null;
+}
+
 export function extractTakeaway(sections, tz) {
-    const messagesSection = sections.find(s => s.key === 'Messages');
+    const source = takeawaySection(sections);
+    if (!source) return '';
+    const messagesSection = source.key === 'Messages' ? source : null;
     if (messagesSection) {
         const list = splitTakeawayItems(messagesSection.text);
         if (list) {
@@ -431,10 +446,6 @@ export function extractTakeaway(sections, tz) {
         }
         return takeawayInline(messagesSection.text, tz);
     }
-    const synSection = sections.find(s => s.key === 'Synopsis')
-        || sections.find(s => s.key === 'Discussion')
-        || sections[0];
-    if (!synSection) return '';
-    const takeaway = synopsisTakeaway(synSection.text);
+    const takeaway = synopsisTakeaway(source.text);
     return stripAIArtifacts(translateToPlainEnglish(takeaway, tz).replace(/<\/?p>/g, ''));
 }
