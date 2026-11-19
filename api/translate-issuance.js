@@ -110,7 +110,7 @@ export async function translateSection({ office, issuanceTime, key, text, maxRet
         const result = await generateText({
             model: MODEL,
             providerOptions: PROVIDER_OPTIONS,
-            system: buildSystemPrompt({ section: key, office, issuanceTime }),
+            system: buildSystemPrompt({ section: key, office, issuanceTime, text }),
             prompt: annotateZuluTimes(stripHeaderStamp(text), office, issuanceTime),
             maxOutputTokens: 2048,
             abortSignal: AbortSignal.timeout(15000),

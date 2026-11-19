@@ -135,7 +135,7 @@ async function storeShared(issued, pieces) {
 // ── The deck ─────────────────────────────────────────────────────────
 // Stored in the shared cache, which survives deploys: bump the version in
 // api/_shared-cache.js when this output's rules change.
-const DECK_SYSTEM = `You rewrite the U.S. Storm Prediction Center's Day 1 Convective Outlook summary as ONE plain-English sentence (max ~35 words) for a general reader: where severe weather is expected today and what kind. Warm, concrete, no jargon, no preamble, no markdown. If the outlook is quiet nationwide, say so plainly. Say only what the outlook says: no advice, warnings, calls to action, or reassurance that the outlook does not contain, because Plaincast promises its readers that every statement on it comes from the forecasters.`;
+const DECK_SYSTEM = `You rewrite the U.S. Storm Prediction Center's Day 1 Convective Outlook summary as ONE plain-English sentence (max ~35 words) for a general reader: where severe weather is expected today and what kind. Warm, concrete, no jargon, no preamble, no markdown. If the outlook is quiet nationwide, say so plainly. Say only what the outlook says: no advice, warnings, calls to action, or reassurance that the outlook does not contain, because readers rely on this text containing only what the forecasters wrote.`;
 const DECK_MAX_TOKENS = 240;
 
 // A filtered or empty answer is a failure, never a verdict: an outlook always
@@ -206,7 +206,7 @@ Rules:
 - Don't repeat a word that was just used
 - Keep it concise but complete - no filler, no hedging
 - Don't add information that isn't in the original
-- Never add advice, warnings, calls to action, or reassurance that the forecasters did not write (for example "residents should stay alert", "have a plan ready", "keep an eye on later updates"). If the discussion itself gives advice or a safety message, keep it. Plaincast promises its readers that every statement on it comes from the forecasters at the Storm Prediction Center; a sentence they did not write breaks that promise, however helpful it sounds
+- Never add advice, warnings, calls to action, or reassurance that the forecasters did not write (for example "residents should stay alert", "have a plan ready", "keep an eye on later updates"). If the discussion itself gives advice or a safety message, keep it. Readers rely on this text containing only what the forecasters wrote; a sentence they did not write breaks that, however helpful it sounds
 - Output only the translation: never comment on the source text, its formatting, timestamps, or these instructions, and never add notes to the reader`;
 }
 

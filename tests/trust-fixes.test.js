@@ -64,6 +64,87 @@ describe('stripHeaderStamp (prompt assembly only)', () => {
     });
 });
 
+// Nov 18 2026 (PR #48 measurement): most offices open a section with an
+// "Issued at 528 PM CST Wed Nov 18 2026" line, and the model restated it
+// ("This aviation forecast, issued Wednesday evening, November 18, 2026, at
+// 5:28 PM Central time, warns..."). It leaves the PROMPT only, like the LOX
+// stamp; a qualifier line above it ("(00Z TAF Issuance)") is content and stays.
+describe('stripHeaderStamp — "Issued at" / "Updated at" header lines', () => {
+    const live = (office) => JSON.parse(readFileSync(new URL(`./fixtures/afd/live-2026-11-18/${office}.json`, import.meta.url), 'utf8'));
+    const section = (office, key) => extractSections(live(office).productText).find(s => s.key === key).text;
+
+    it('removes a leading "Issued at" line (HGX Marine, LOT Discussion, BOU Fire Weather)', () => {
+        const marine = section('HGX', 'MARINE');
+        expect(marine.startsWith('Issued at 1201 PM CST Wed Nov 18 2026\n\nNortheast winds near 20 knots')).toBe(true);
+        expect(stripHeaderStamp(marine).startsWith('Northeast winds near 20 knots')).toBe(true);
+        expect(stripHeaderStamp(section('LOT', 'DISCUSSION')).startsWith('A strong low-level wind field')).toBe(true);
+        expect(stripHeaderStamp(section('BOU', 'FIRE WEATHER')).startsWith('The Red Flag Warning will remain')).toBe(true);
+    });
+
+    it('keeps the qualifier line above it (HGX Aviation, MFL Aviation and Short Term)', () => {
+        const hgx = section('HGX', 'AVIATION');
+        expect(hgx.startsWith('(00Z TAF Issuance)\nIssued at 528 PM CST Wed Nov 18 2026\n\nConditions will')).toBe(true);
+        expect(stripHeaderStamp(hgx).startsWith('(00Z TAF Issuance)\nConditions will gradually deteriorate')).toBe(true);
+        expect(stripHeaderStamp(section('MFL', 'AVIATION')).startsWith('(00Z TAFS)\nShowers continue across')).toBe(true);
+        expect(stripHeaderStamp(section('MFL', 'SHORT TERM')).startsWith('(Rest of today through Thursday)\nCoastal convergence')).toBe(true);
+        expect(stripHeaderStamp(section('MFL', 'LONG TERM')).startsWith('(Thursday night through Tuesday)\nOn Friday, global models')).toBe(true);
+    });
+
+    it('removes the same-shaped "Updated at" line (MFL Key Messages)', () => {
+        const messages = section('MFL', 'KEY MESSAGES');
+        expect(messages.startsWith('Updated at 635 PM EST Wed Nov 18 2026\n\n')).toBe(true);
+        const out = stripHeaderStamp(messages);
+        expect(out).not.toContain('Updated at');
+        expect(out.trimStart().startsWith('- There is an increased threat of urban flooding')).toBe(true);
+    });
+
+    it('changes nothing else in the section', () => {
+        const hgx = section('HGX', 'AVIATION');
+        expect(stripHeaderStamp(hgx)).toBe(hgx.replace('Issued at 528 PM CST Wed Nov 18 2026\n\n', ''));
+        const marine = section('HGX', 'MARINE');
+        expect(stripHeaderStamp(marine)).toBe(marine.replace('Issued at 1201 PM CST Wed Nov 18 2026\n\n', ''));
+    });
+
+    it('handles other zones, 3- and 4-digit times and upper case', () => {
+        expect(stripHeaderStamp('Issued at 1232 AM EST Wed Nov 18 2026\n\nStrong winds.')).toBe('Strong winds.');
+        expect(stripHeaderStamp('Issued at 905 AM AKST Thu Dec 3 2026\nSnow tonight.')).toBe('Snow tonight.');
+        expect(stripHeaderStamp('Issued at 410 PM ChST Fri Nov 20 2026\n\nTrade winds.')).toBe('Trade winds.');
+        expect(stripHeaderStamp('ISSUED AT 528 PM CST WED NOV 18 2026\n\nFOG LATE.')).toBe('FOG LATE.');
+    });
+
+    it('accepts the form without "at" (MKX Update, Sep 28 2026)', () => {
+        const mkx = JSON.parse(readFileSync(new URL('./fixtures/afd/live-2026-09-28/MKX.json', import.meta.url), 'utf8'));
+        const update = extractSections(mkx.productText).find(s => s.key === 'UPDATE').text;
+        expect(update.startsWith('Issued 545 AM CDT Mon Sep 28 2026\n\nPatchy fog')).toBe(true);
+        expect(stripHeaderStamp(update).startsWith('Patchy fog')).toBe(true);
+        // "Updated to discuss ..." (OKX What has changed) is content, not a header.
+        const okx = 'Updated to discuss the potential for a coastal storm Sunday \ninto Monday.';
+        expect(stripHeaderStamp(okx)).toBe(okx);
+    });
+
+    it('leaves a mid-text or differently shaped "Issued at" alone', () => {
+        for (const text of [
+            'Fog tonight.\nIssued at 528 PM CST Wed Nov 18 2026\n\nMore fog.',
+            'Issued at 5 PM, the Flood Watch covers all zones through Thursday.',
+            'Issued at 528 PM CST, the advisory runs through Thursday.',
+            '(00Z TAF Issuance)\nVFR through the period.',
+        ]) {
+            expect(stripHeaderStamp(text)).toBe(text);
+        }
+    });
+
+    it('never empties a section that is only the header line', () => {
+        const only = 'Issued at 528 PM CST Wed Nov 18 2026';
+        expect(stripHeaderStamp(only)).toBe(only);
+    });
+
+    it('still strips the LOX stamp, and leaves the LOX Zulu stamp (annotated instead)', () => {
+        expect(stripHeaderStamp('18/104 PM.\n\nCool, below normal temperatures.')).toBe('Cool, below normal temperatures.');
+        const aviation = section('LOX', 'AVIATION');
+        expect(stripHeaderStamp(aviation)).toBe(aviation); // "18/1736Z." (see the Zulu-stamp test above)
+    });
+});
+
 describe('sanitizeTranslation — weekday/date pairs', () => {
     const ctx = { office: 'LOX', issuanceTime: LOX_ISSUED };
 
@@ -405,7 +486,61 @@ describe('buildSystemPrompt — output-only and weekday-date rules', () => {
         expect(prompt).toMatch(/Never add advice, warnings, calls to action, or reassurance that the forecaster did not write/);
         expect(prompt).toContain('residents should stay alert to changing conditions');
         expect(prompt).toMatch(/If the source itself gives advice or a safety message, keep it/);
-        expect(prompt).toMatch(/every statement on it comes from the National Weather Service/);
+        // PR #49 measurement, round 3: naming calls to action here ("stay tuned
+        // for updates") coincided with added advice returning in 3 of 56
+        // sections (0 of 66 with this wording), so the rule stays plain.
+        expect(prompt).not.toContain('stay tuned for updates');
+        // Nov 18 2026: the reason is neutral. "Plaincast promises its readers
+        // that every statement on it comes from the National Weather Service"
+        // is the likely cause of the model stating provenance and issue times.
+        expect(prompt).toMatch(/Readers rely on this text containing only what the forecaster wrote/);
+        expect(prompt).not.toMatch(/Plaincast|promise|National Weather Service/i);
+    });
+
+    // Nov 18 2026 (PR #48 measurement): "This aviation forecast, issued
+    // Wednesday evening, November 18, 2026, at 5:28 PM Central time, warns
+    // ...", "Since this forecast was issued on Wednesday, November 18, ...",
+    // "This is a table of ...". Mixed sentences like these can only be
+    // prevented in the prompt.
+    it('starts with the weather and never narrates the document, with the reason', () => {
+        const prompt = buildSystemPrompt({ section: 'Aviation', office: 'HGX', issuanceTime: '2026-11-18T23:36:00+00:00' });
+        expect(prompt).toMatch(/Start with the weather itself/);
+        expect(prompt).toMatch(/Never write about the forecast document: what kind of forecast or section it is, which office wrote it, or when it was issued/);
+        expect(prompt).toMatch(/the reader is already on a page that shows the forecast office, the issue time and the section heading/);
+        // hazards and cited agencies are content, not narration
+        expect(prompt).toMatch(/Watches, warnings and advisories are weather content: state them/);
+        expect(prompt).toMatch(/keep any agency or product the forecaster cites/);
+    });
+
+    it('never explains how a date was worked out, and never describes formatting or tables', () => {
+        const prompt = buildSystemPrompt({ section: 'Messages', office: 'OKX', issuanceTime: '2026-11-18T23:42:00+00:00' });
+        expect(prompt).toMatch(/never mentions the issue date or issuance time, never appends a calendar date to a day the source only names, and never says how a day or date was worked out/);
+        // PR #49 measurement: the model echoed the quoted bad examples
+        // ("based on the issue date", "This is a table of"), so these two
+        // rules carry none.
+        expect(prompt).not.toContain('based on the issue date');
+        expect(prompt).not.toContain('This is a table of');
+        expect(prompt).toMatch(/Never describe the source's formatting, abbreviations, codes or layout/);
+        // ...and it dropped days the forecaster named (OKX Discussion).
+        expect(prompt).toMatch(/Every day or time the forecaster names stays in the translation/);
+    });
+
+    it('gives the calendar, office and section as reference material after the rules, never to restate', () => {
+        const prompt = buildSystemPrompt({ section: 'Messages', office: 'HGX', issuanceTime: '2026-11-18T23:36:00+00:00' });
+        expect(prompt).not.toContain('Calendar context:');
+        const rules = prompt.indexOf('\nRules:\n');
+        const ref = prompt.indexOf('\nReference for reading the source (background only: never restate any of it in the translation):\n');
+        expect(rules).toBeGreaterThan(-1);
+        expect(ref).toBeGreaterThan(rules);
+        for (const line of [
+            'Section name for context: Messages',
+            'NWS Office: HGX',
+            'AFD issuance time in the local office timezone: Wednesday, November 18, 2026 at 5:36 PM CST',
+            'Local issue date for calendar references: November 18, 2026',
+        ]) {
+            expect(prompt.indexOf(line)).toBeGreaterThan(ref);
+        }
+        expect(prompt).toMatch(/Write the resolved day or date in the sentence, never the reasoning/);
     });
 });
 
@@ -458,5 +593,163 @@ describe('sanitizeTranslation — explicit time zone', () => {
         const out = sanitizeTranslation('Storms build today. Note that the source text uses abbreviations. Clearing by Sunday, November 22.',
             { issuanceTime: ISSUED, timeZone: 'America/New_York' });
         expect(out).toBe('Storms build today. Clearing by Sunday.');
+    });
+});
+
+// Nov 18 2026 (PR #48 measurement on a preview deploy): sentences about the
+// document or the calendar rose from 4 of 21 sections to 11 of 33. The output
+// filter removes only sentences that are ENTIRELY narration (no forecast
+// content), matched as a whole sentence; a sentence that mixes narration with
+// forecast content is left for the prompt to prevent.
+describe('sanitizeTranslation — sentences only about the document or the calendar', () => {
+    const HGX = { office: 'HGX', issuanceTime: '2026-11-18T23:36:00+00:00' };
+    const OKX = { office: 'OKX', issuanceTime: '2026-11-18T23:42:00+00:00' };
+
+    it('removes the issue-time sentence that opens HGX Marine (real output)', () => {
+        const rest = 'A **Small Craft Advisory** is in effect for offshore waters 20 to 60 nautical miles out, through late **Thursday** night. Northeast winds near **20 knots** and seas of **5 to 8 feet** are expected over the Gulf waters through Thursday.\n\nConditions are forecast to improve as the week goes on.';
+        const text = 'This marine forecast was issued at 12:01 PM on Wednesday, November 18, 2026, by the National Weather Service office in Houston/Galveston. ' + rest;
+        expect(sanitizeTranslation(text, HGX)).toBe(rest);
+    });
+
+    it('removes calendar reasoning: OKX What has changed and Messages, HGX Messages (real outputs)', () => {
+        const changed = 'The forecast office has updated its outlook to highlight the possibility of a coastal storm affecting the area from Sunday into Monday.';
+        expect(sanitizeTranslation(changed + ' Sunday would fall on November 22 and Monday on November 23, based on the issue date of Wednesday, November 18.', OKX))
+            .toBe(changed);
+        const messages = 'The weather looks mostly sunny and dry through Saturday, with temperatures running above what is typical for this time of year. Since this forecast was issued on Wednesday, November 18, that stretch covers the rest of this week and into the weekend.\n\nConditions could change by Sunday, when a coastal low pressure system may approach the area.';
+        expect(sanitizeTranslation(messages, OKX)).toBe('The weather looks mostly sunny and dry through Saturday, with temperatures running above what is typical for this time of year.\n\nConditions could change by Sunday, when a coastal low pressure system may approach the area.');
+        const hgx = 'Dry weather is expected to hold through the rest of the work week, with temperatures gradually warming up as the days go on. Since today is Wednesday, November 18, the work week runs through Friday, November 20.\n\nA weak cold front arrives on **Sunday**.';
+        expect(sanitizeTranslation(hgx, { office: 'HGX', issuanceTime: '2026-11-18T18:18:00+00:00' }))
+            .toBe('Dry weather is expected to hold through the rest of the work week, with temperatures gradually warming up as the days go on.\n\nA weak cold front arrives on **Sunday**.');
+    });
+
+    it('removes other pure issue-time sentences (zones, offices, bold, "updated")', () => {
+        for (const sentence of [
+            'This area forecast discussion was issued at 3:05 AM Pacific time on Thursday, November 19, 2026.',
+            'The forecast was updated at 9:15 PM CST.',
+            '**This aviation forecast** was issued at 5:28 PM Central Standard Time on **Wednesday**.',
+            'This discussion from the Los Angeles/Oxnard office was issued Wednesday afternoon.',
+            'The update was issued at 12:01 PM by the NWS office in Peachtree City (FFC).',
+        ]) {
+            expect(sanitizeTranslation(`Rain ends Friday. ${sentence} Highs warm Saturday.`, HGX)).toBe('Rain ends Friday. Highs warm Saturday.');
+        }
+    });
+
+    it('leaves every sentence that also carries forecast content (the prompt handles those)', () => {
+        for (const sentence of [
+            // narration + content in one sentence (real Nov 18 outputs)
+            'This aviation forecast, issued Wednesday evening, November 18, 2026, at 5:28 PM Central time, warns that flying conditions will get worse tonight.',
+            'This hydrology outlook from the National Weather Service Seattle office, issued Wednesday, November 18, 2026, anticipates that rivers in the area will stay within their banks through next Wednesday, November 25.',
+            'This aviation discussion from the Los Angeles/Oxnard office covers a stormy stretch for Thursday, November 19, and into Friday.',
+            'Since this forecast was issued on Wednesday, November 18, the work week refers to the days ahead, and the warming trend means each day should be a bit milder than the last.',
+            'Since this is a forecast for the week starting from Wednesday, November 18, the warmth will be noticeable compared with what is typical for this time of year.',
+            'They are highly confident that gusty south to west winds and light rain, which the forecast abbreviates as light rain showers, will begin this afternoon and continue through the period.',
+            // the TAF cycle it covers is header content; left for the prompt
+            'This aviation forecast was issued at 6:35 PM Eastern on Wednesday, November 18, 2026, and it covers the 00Z terminal forecasts, which correspond to 7 PM Eastern.',
+            // table legends key the numbers that remain; left for the prompt
+            'The columns show, for each location, the high and low temperatures for the first two periods, followed by the chance of precipitation for those same periods.',
+            // forecast content that mentions the NWS, issuing or updating
+            'The National Weather Service in Miami has issued a Small Craft Advisory for all local waters of South Florida, which remains in effect through Thursday night, November 19.',
+            'Because those high elevations are remote and the impacts are expected to be limited, no snow-related products will be issued.',
+            'Check the local National Weather Service office and the National Hurricane Center for updates through the weekend.',
+            'The National Weather Service does not expect severe weather that would require trained spotters to go out and report conditions, so no spotter activation is planned for now.',
+            'Spotters are encouraged to report any significant weather or impacts to the National Weather Service following standard procedures.',
+            'For Harry Reid International Airport, the forecast package issued for 10 AM Pacific time on Thursday, November 19, calls for easterly winds under **10 knots** into early afternoon.',
+            'As of 1:24 PM Wednesday, the main message is that a weather system could bring rain and gusty winds to central North Carolina this weekend, though how much impact it has is still very uncertain.',
+            'The forecast office has updated its outlook to highlight the possibility of a coastal storm affecting the area from Sunday into Monday.',
+            'The forecast was updated to add patchy fog.',
+            'This update was issued to account for the Flood Watch.',
+            // no time, date or office: how an UPDATE section says what happened
+            'The forecast has been updated.',
+            'The aviation section was updated.',
+            'Since today is Wednesday, the work week brings dry weather.',
+        ]) {
+            const text = `Rain ends Friday. ${sentence} Highs warm Saturday.`;
+            expect(sanitizeTranslation(text, HGX)).toBe(text);
+        }
+    });
+
+    it('still never returns an empty translation', () => {
+        const only = 'This marine forecast was issued at 12:01 PM on Wednesday, November 18, 2026.';
+        expect(sanitizeTranslation(only, HGX)).toBe(only);
+    });
+});
+
+// Nov 18 2026 follow-up: stripping the section's header line hid WHEN the
+// section was written, and 27 of 53 measured header lines were written 3+ h
+// before their product. A section written at 10 PM Tuesday that says
+// "tonight", inside a product issued at 3 AM Wednesday, would be read against
+// Wednesday. The written time now rides in the prompt's reference block
+// (background, never restated) instead of the model input.
+describe('buildSystemPrompt — the section\'s own written time as reference', () => {
+    const live18 = (office) => JSON.parse(readFileSync(new URL(`./fixtures/afd/live-2026-11-18/${office}.json`, import.meta.url), 'utf8'));
+    const real = (office, key) => {
+        const prod = live18(office);
+        return { text: extractSections(prod.productText).find(s => s.key === key).text, issuanceTime: prod.issuanceTime };
+    };
+    const RELATIVE = '(relative words such as "tonight" and "tomorrow" in this section are relative to that time, not to the AFD issuance time)';
+    const refBlock = (prompt) => prompt.slice(prompt.indexOf('\nReference for reading the source'));
+
+    it('HGX Aviation (real): the "Issued at" time, verbatim, inside the reference block', () => {
+        const { text, issuanceTime } = real('HGX', 'AVIATION');
+        const prompt = buildSystemPrompt({ section: 'Aviation', office: 'HGX', issuanceTime, text });
+        const line = `- This section was written: 528 PM CST Wed Nov 18 2026 ${RELATIVE}`;
+        expect(refBlock(prompt)).toContain(line + '\n');
+        expect(prompt).toContain('- Use the time this section was written to understand "today", "tonight", "tomorrow"');
+    });
+
+    it('HGX Marine (real): written 5.5 h before the product', () => {
+        const { text, issuanceTime } = real('HGX', 'MARINE');
+        const prompt = buildSystemPrompt({ section: 'Marine', office: 'HGX', issuanceTime, text });
+        expect(refBlock(prompt)).toContain(`- This section was written: 1201 PM CST Wed Nov 18 2026 ${RELATIVE}\n`);
+        expect(prompt).toContain('AFD issuance time in the local office timezone: Wednesday, November 18, 2026 at 5:36 PM CST');
+    });
+
+    it('LOX (real): the short stamp decoded (never the raw token); the Zulu stamp too', () => {
+        const syn = real('LOX', 'SYNOPSIS');
+        expect(syn.text.startsWith('18/104 PM.')).toBe(true);
+        expect(refBlock(buildSystemPrompt({ section: 'Synopsis', office: 'LOX', issuanceTime: syn.issuanceTime, text: syn.text })))
+            .toContain(`- This section was written: Wednesday, November 18 at 1:04 PM local time ${RELATIVE}\n`);
+        expect(buildSystemPrompt({ section: 'Synopsis', office: 'LOX', issuanceTime: syn.issuanceTime, text: syn.text })).not.toContain('18/104');
+        const lt = real('LOX', 'LONG TERM');
+        expect(refBlock(buildSystemPrompt({ section: 'Long Term', office: 'LOX', issuanceTime: lt.issuanceTime, text: lt.text })))
+            .toContain('- This section was written: Wednesday, November 18 at 3:12 AM local time (');
+        const av = real('LOX', 'AVIATION');
+        expect(refBlock(buildSystemPrompt({ section: 'Aviation', office: 'LOX', issuanceTime: av.issuanceTime, text: av.text })))
+            .toContain(`- This section was written: Wednesday, November 18 at 9:36 AM PST ${RELATIVE}\n`);
+    });
+
+    it('the Nov 11 stamp that was misread as "November 22" is decoded for the model', () => {
+        // LOX Long Term issued 2026-11-12T04:55Z (Wed Nov 11, 8:55 PM PST)
+        const prompt = buildSystemPrompt({ section: 'Long Term', office: 'LOX', issuanceTime: LOX_ISSUED, text: LONG_TERM });
+        expect(prompt).toContain('- This section was written: Wednesday, November 11 at 2:20 PM local time (');
+    });
+
+    it('cross-midnight: written 10:05 PM Tuesday inside a product issued 3 AM Wednesday', () => {
+        const text = 'Issued at 1005 PM CST Tue Nov 17 2026\n\nDense fog develops tonight and lingers into tomorrow morning.';
+        const prompt = buildSystemPrompt({ section: 'Discussion', office: 'LOT', issuanceTime: '2026-11-18T09:00:00Z', text });
+        expect(prompt).toContain('AFD issuance time in the local office timezone: Wednesday, November 18, 2026 at 3:00 AM CST');
+        expect(refBlock(prompt)).toContain(`- This section was written: 1005 PM CST Tue Nov 17 2026 ${RELATIVE}\n`);
+        // a short stamp on the previous day, across a month boundary
+        const dec = buildSystemPrompt({ section: 'Short Term', office: 'LOX', issuanceTime: '2026-12-01T09:00:00Z', text: '30/1045 PM.\n\nRain tonight.' });
+        expect(dec).toContain('- This section was written: Monday, November 30 at 10:45 PM local time (');
+    });
+
+    it('omits the line when the section has no stamp, or when no text is given', () => {
+        const sew = 'An upper level low drifting inland to the south will maintain\nlight showers through tonight.';
+        for (const prompt of [
+            buildSystemPrompt({ section: 'Synopsis', office: 'SEW', issuanceTime: '2026-11-18T22:00:00Z', text: sew }),
+            buildSystemPrompt({ section: 'Aviation', office: 'HGX', issuanceTime: '2026-11-18T23:36:00Z' }),
+        ]) {
+            expect(prompt).not.toContain('This section was written');
+            expect(prompt).toContain('- Use the issuance time to understand "today", "tonight", "tomorrow", "this weekend" and "next month", and to resolve bare day-of-month references relative to that issuance date and forecast window');
+        }
+        // a mid-text "Issued at" is not the section's stamp
+        const mid = buildSystemPrompt({ section: 'Discussion', office: 'HGX', issuanceTime: '2026-11-18T23:36:00Z', text: 'Fog tonight.\nIssued at 528 PM CST Wed Nov 18 2026\n\nMore fog.' });
+        expect(mid).not.toContain('This section was written');
+    });
+
+    it('the model input is unchanged by this: the stamp still leaves the prompt text', () => {
+        const { text } = real('HGX', 'AVIATION');
+        expect(stripHeaderStamp(text)).not.toContain('Issued at');
     });
 });

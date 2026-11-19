@@ -188,7 +188,10 @@ describe('GET /api/changelog', () => {
         // no advice or reassurance the forecaster did not write (Nov 18 2026)
         expect(aiArgs.system).toMatch(/Describe only what the passages say changed/);
         expect(aiArgs.system).toMatch(/never add advice, warnings, calls to action, or reassurance that the forecaster did not write/);
-        expect(aiArgs.system).toMatch(/every statement on it comes from the National Weather Service/);
+        // the reason is stated neutrally (Nov 18 2026): naming the site, the NWS or a
+        // "promise" pushed the section translator to narrate provenance
+        expect(aiArgs.system).toMatch(/readers rely on this text containing only what the forecaster wrote/);
+        expect(aiArgs.system).not.toMatch(/Plaincast|promise/i);
         expect(res.body.since).toBe('2026-03-24T10:25:00+00:00');
         expect(res.body.cached).toBe(false);
     });

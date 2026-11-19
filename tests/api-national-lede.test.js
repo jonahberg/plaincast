@@ -153,7 +153,8 @@ describe('GET /api/national-lede', () => {
         expect(args.system).toMatch(/Storm Prediction Center/);
         // no advice or reassurance the outlook does not give (Nov 18 2026)
         expect(args.system).toMatch(/no advice, warnings, calls to action, or reassurance that the outlook does not contain/);
-        expect(args.system).toMatch(/every statement on it comes from the forecasters/);
+        expect(args.system).toMatch(/readers rely on this text containing only what the forecasters wrote/);
+        expect(args.system).not.toMatch(/Plaincast|promise/i);
         expect(args.prompt).toContain('THERE IS A SLIGHT RISK OF SEVERE THUNDERSTORMS');
         expect(args.prompt).toContain('Thunderstorms with severe wind gusts');
 
@@ -300,7 +301,8 @@ describe('GET /api/national-lede', () => {
         expect(copyArgs.system).toContain('never convert a Zulu time yourself');
         expect(copyArgs.system).toMatch(/Never add advice, warnings, calls to action, or reassurance that the forecasters did not write/);
         expect(copyArgs.system).toMatch(/If the discussion itself gives advice or a safety message, keep it/);
-        expect(copyArgs.system).toMatch(/every statement on it comes from the forecasters/);
+        expect(copyArgs.system).toMatch(/Readers rely on this text containing only what the forecasters wrote/);
+        expect(copyArgs.system).not.toMatch(/Plaincast|promise/i);
         expect(copyArgs.system).toMatch(/Outlook issuance time, US Eastern: .*EDT/);
     });
 

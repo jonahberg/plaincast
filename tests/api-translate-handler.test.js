@@ -753,6 +753,8 @@ describe('POST /api/translate — header stamp + output guard (Nov 11 2026)', ()
         expect(aiArgs.prompt).not.toContain('11/220');
         expect(aiArgs.prompt.startsWith('Sunday should be a pleasant day')).toBe(true);
         expect(aiArgs.system).toContain('Wednesday, November 11, 2026'); // the matched product's calendar
+        // the section's own written time rides in the reference block instead (Nov 18 2026)
+        expect(aiArgs.system).toContain('- This section was written: Wednesday, November 11 at 2:20 PM local time (');
         expect(res.body.translation).not.toContain('November 22');
         expect(res.body.translation).not.toContain('source text');
         expect(res.body.translation).toContain('Sunday should be a pleasant day');
@@ -765,6 +767,25 @@ describe('POST /api/translate — header stamp + output guard (Nov 11 2026)', ()
         expect(again.statusCode).toBe(200);
         expect(again.body.cached).toBe(true);
         expect(again.body.translation).toBe(res.body.translation);
+    });
+
+    // Nov 18 2026: the prompt is built from the SERVER's parse of the matched
+    // section. The cache key is whitespace-normalized, so if the prompt came
+    // from the client's text, a reflowed copy of a real section could put a
+    // different prompt's answer behind the same key.
+    it('builds the prompt from the server section text, not the client reflow of it', async () => {
+        const server = sectionText('Short Term');
+        expect(server).toContain('\n');
+        const reflowed = server.replace(/\s+/g, '  '); // same normalized text, no line structure
+        expect(reflowed).not.toContain('\n');
+        let aiArgs;
+        mockGenerateText = async (args) => { aiArgs = args; return { text: 'Rain arrives **Thursday**.', finishReason: 'stop' }; };
+        const res = createRes();
+        await handler(createReq({ body: { text: reflowed, section: 'Short Term', office: 'LOX', issuanceTime: LOX_NOV11.issuanceTime } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(aiArgs.prompt).toContain('\n');               // the server's line structure, not the client's
+        expect(aiArgs.prompt).not.toMatch(/^\s*\d{1,2}\/\d{3,4}\s*(AM|PM)/i); // stamp stripped from it
+        expect(aiArgs.system).toContain('- This section was written: ');
     });
 
     it('passes clean model output through byte-identical', async () => {

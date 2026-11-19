@@ -178,12 +178,17 @@ const UNTRANSLATED_SECTIONS = new Set(['Active Alerts']);
 
 export function buildSectionIndex(productText) {
     const index = new Map(); // normalized section text -> canonical section key
+    index.sourceText = new Map(); // normalized section text -> the server-parsed section text
     const add = (key, text) => {
         const sectionKey = canonicalSectionKey(key);
         if (UNTRANSLATED_SECTIONS.has(sectionKey)) return;
         const n = normalizeForMatch(text);
         if (n.length < 20 || index.has(n)) return;
         index.set(n, sectionKey);
+        // The parser's own text for that section: the prompt is built from
+        // THIS, never from the client's reflow of it (same normalized key,
+        // so one cache entry can only ever hold one prompt's answer).
+        index.sourceText.set(n, text);
     };
     if (typeof productText !== 'string' || !productText) return index;
     try {
@@ -200,7 +205,7 @@ export function findMatchingSection(text, products) {
     if (n.length < 20) return null;
     for (const product of products) {
         const sectionKey = product.sections?.get(n);
-        if (sectionKey) return { product, sectionKey };
+        if (sectionKey) return { product, sectionKey, text: product.sections.sourceText?.get(n) ?? null };
     }
     return null;
 }
@@ -302,13 +307,26 @@ export function getTranslationCalendarContext(office, issuanceTime) {
 // 68 live AFDs of Sep 28 2026: tokens up to 1 h BEFORE issuance were all past
 // references ("12Z TAFS", "until 11Z" in a 1150Z product — the aviation text
 // is written before the AFD goes out), while those 1-6 h before were mostly
-// future ("06-08Z tonight"). So the search starts 1 h before issuance. When
-// the local calendar date differs from the issuance's, the weekday is added
-// ("00Z (7 PM CDT Mon)"). A range end is the first occurrence at-or-after its
-// start ("20-06Z" crosses midnight). A TAF cycle label names the current or
-// next cycle, which may sit hours either side of issuance ("(12Z TAF
-// Issuance)" in a 1357Z product; "/00Z TAFS/" in a 2030Z one), so it resolves
-// to the NEAREST occurrence instead.
+// future ("06-08Z tonight"). So the search starts 1 h before issuance. A
+// range end is the first occurrence at-or-after its start ("20-06Z" crosses
+// midnight). A TAF cycle label names the current or next cycle, which may sit
+// hours either side of issuance ("(12Z TAF Issuance)" in a 1357Z product;
+// "/00Z TAFS/" in a 2030Z one), so it resolves to the NEAREST occurrence
+// instead.
+//
+// The weekday (Nov 18 2026). That instant gives the right CLOCK time either
+// way, but not always the right DAY: past references look like future ones.
+// LOX, issued 21:42Z Wed: the observation "At 1717Z at KLAX" was labelled
+// "(9:17 AM PST Thu)" and the AI wrote "9:17 AM Thursday". HGX, issued 23:36Z
+// Wed (its Discussion written at 18:01Z): the model runs "06z"/"12z" became
+// "(12 AM CST Thu)"/"(6 AM CST Thu)" and the AI wrote "the 12 AM Thursday run
+// of the GFS". BOU Fire Weather, written 19:39Z, issued 00:02Z: "around 21Z"
+// (that afternoon) became Thursday. So in office mode a weekday is printed
+// only when the TEXT fixes the day: a DD/ prefix, a full weekday name written
+// right after the token ("00Z Friday"; see weekdayPins below), or a TAF cycle
+// label. A bare token gets the clock and zone only ("(9:17 AM PST)"), and the
+// prompt says that with no weekday the day comes from the surrounding text,
+// or is not named. A missing weekday is acceptable; a wrong one is not.
 const ZULU_RE = /(?<![\w.])(?:(\d{1,2})\/)?(\d{4}|\d{1,2})(?:[-\u2013](\d{4}|\d{1,2}))?Z\b(?!\s*\()/gi;
 const ZULU_LOOKBACK_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -334,26 +352,43 @@ function localParts(date, timeZone) {
     };
 }
 
-// Opt-in options (no existing caller passes them, so office callers behave
-// exactly as before):
-//   timeZone     an explicit IANA zone instead of the office's (the National
-//                Desk is national, so it annotates in America/New_York).
-//   weekdayPins  a weekday written right after the token ("by 12Z Friday",
-//                SPC's habit) pins its UTC day, the way a DD/ prefix does.
-//                Without it, "12Z Friday" in a Thursday-night product is
-//                annotated as Thursday morning. The annotation then follows
-//                the weekday and always names the local day:
-//                "12Z Friday (7 AM EST Fri)", "00Z Friday (7 PM EST Thu)".
+// Options:
+//   timeZone      an explicit IANA zone instead of the office's (the National
+//                 Desk is national, so it annotates in America/New_York).
+//   weekdayPins   a weekday written right after the token ("by 12Z Friday",
+//                 SPC's habit) pins its UTC day, the way a DD/ prefix does.
+//                 Without it, "12Z Friday" in a Thursday-night product is
+//                 annotated as Thursday morning. The annotation then follows
+//                 the weekday and always names the local day:
+//                 "12Z Friday (7 AM EST Fri)", "00Z Friday (7 PM EST Thu)".
+//   inferWeekday  a bare token (no DD/, no pin, not a TAF label) is labelled
+//                 with the weekday of its instant when that local date differs
+//                 from the issuance's: the rule that put "Thu" on LOX's 1717Z.
+// Defaults by mode. Office mode (no explicit timeZone: /api/translate and
+// translate-issuance, which pass no options) pins FULL weekday names only
+// ("18Z sat imagery" is satellite, not Saturday), never pins a weekday
+// followed by a part of day ("06Z Friday night" is Friday night local, i.e.
+// Saturday 06Z: the text names the day, the annotation gives the clock), and
+// never infers. Explicit-zone mode (the National Desk) keeps its earlier
+// rules: pins only when asked, inferred weekdays, because its prompt
+// (api/national-lede.js) still says "no weekday means the issuance's day".
 const ZULU_WEEKDAY = 'Sun(?:day)?|Mon(?:day)?|Tue(?:s(?:day)?)?|Wed(?:nesday)?|Thu(?:r(?:s(?:day)?)?)?|Fri(?:day)?|Sat(?:urday)?';
+const ZULU_FULL_WEEKDAY = 'Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday';
 // The trailing lookaheads keep an already-annotated "12Z Friday (...)" whole.
-const ZULU_WEEKDAY_RE = new RegExp(
+const zuluWeekdayRe = (alt) => new RegExp(
     `(?<![\\w.])(?:(\\d{1,2})\\/)?(\\d{4}|\\d{1,2})(?:[-\\u2013](\\d{4}|\\d{1,2}))?Z\\b`
-    + `(?:[ \\t]+(${ZULU_WEEKDAY})\\b(?!\\s*\\())?(?!\\s*\\()(?![ \\t]+(?:${ZULU_WEEKDAY})\\b\\s*\\()`, 'gi');
+    + `(?:[ \\t]+(${alt})\\b(?!\\s*\\())?(?!\\s*\\()(?![ \\t]+(?:${alt})\\b\\s*\\()`, 'gi');
+const ZULU_WEEKDAY_RE = zuluWeekdayRe(ZULU_WEEKDAY);
+const ZULU_FULL_WEEKDAY_RE = zuluWeekdayRe(ZULU_FULL_WEEKDAY);
 const WEEKDAY_PREFIX = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const PART_OF_DAY_AFTER_RE = /^[ \t]+(?:morning|afternoon|evening|night|overnight)\b/i;
 
-export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOverride, weekdayPins = false } = {}) {
+export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOverride, weekdayPins, inferWeekday } = {}) {
     const timeZone = zoneOverride || OFFICE_TIMEZONES[office];
     if (!timeZone || typeof text !== 'string') return text;
+    const officeMode = !zoneOverride;
+    const pins = weekdayPins ?? officeMode;
+    const infer = inferWeekday ?? !officeMode;
     const base = getSafeIssueDate(issuanceTime);
     const issueDateKey = localParts(base, timeZone).dateKey;
     const y = base.getUTCFullYear(), mo = base.getUTCMonth(), d0 = base.getUTCDate();
@@ -383,37 +418,51 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
         for (let i = 0; i < 7 && new Date(t).getUTCDay() !== wd; i++) t += DAY_MS;
         return t;
     };
-    const label = (p, withDay = true) => `${p.clock} ${p.ampm} ${p.tz}`
+    // withDay: the day is known, so print the weekday where the local date
+    // is not the issuance's.
+    const label = (p, withDay) => `${p.clock} ${p.ampm} ${p.tz}`
         + (withDay && p.dateKey !== issueDateKey ? ` ${p.weekday}` : '');
 
-    const re = weekdayPins ? ZULU_WEEKDAY_RE : ZULU_RE;
+    const re = !pins ? ZULU_RE : (officeMode ? ZULU_FULL_WEEKDAY_RE : ZULU_WEEKDAY_RE);
     return text.replace(re, (tok, dd, t1, t2, ...rest) => {
         // ZULU_WEEKDAY_RE has one more capture group (the weekday) than ZULU_RE.
-        const [wdName, offset, whole] = weekdayPins ? rest : [undefined, ...rest];
+        const [wdName, offset, whole] = pins ? rest : [undefined, ...rest];
         const c1 = parseZuluClock(t1);
         const c2 = t2 === undefined ? null : parseZuluClock(t2);
         if (!c1 || (t2 !== undefined && !c2)) return tok;
         const dom = dd === undefined ? null : Number(dd);
         if (dom !== null && (dom < 1 || dom > 31)) return tok;
-        const wd = wdName === undefined ? -1 : WEEKDAY_PREFIX.indexOf(wdName.slice(0, 3).toLowerCase());
+        const after = whole.slice(offset + tok.length);
+        // Office mode: "06Z Friday night" is not a pin; the annotation goes
+        // before the weekday ("06Z (12 AM CST) Friday night").
+        const partOfDay = officeMode && wdName !== undefined && PART_OF_DAY_AFTER_RE.test(after);
+        const wd = wdName === undefined || partOfDay ? -1 : WEEKDAY_PREFIX.indexOf(wdName.slice(0, 3).toLowerCase());
         const pinned = wd !== -1 && dom === null;
-        const tafLabel = /^\s*TAFS?\b/i.test(whole.slice(offset + tok.length));
+        const tafLabel = /^\s*TAFS?\b/i.test(after);
+        // The text fixes the day (DD/, a pinned weekday, a TAF cycle label),
+        // or the caller asked for the inferred weekday (National Desk).
+        const knownDay = dom !== null || pinned || tafLabel || infer;
         const start = (dom !== null ? onDayOfMonth(c1, dom) : null)
             ?? (pinned ? onWeekday(c1, wd) : null)
             ?? (tafLabel ? nearest(c1) : firstAtOrAfter(c1, base.getTime() - ZULU_LOOKBACK_MS));
         const p1 = localParts(new Date(start), timeZone);
-        if (!c2) return `${tok} (${pinned ? `${p1.clock} ${p1.ampm} ${p1.tz} ${p1.weekday}` : label(p1)})`;
-        const p2 = localParts(new Date(firstAtOrAfter(c2, start)), timeZone);
         let local;
-        if (p1.tz === p2.tz && p1.dateKey === p2.dateKey) {
-            const span = p1.ampm === p2.ampm
-                ? `${p1.clock}-${p2.clock} ${p1.ampm}`
-                : `${p1.clock} ${p1.ampm}-${p2.clock} ${p2.ampm}`;
-            local = `${span} ${p1.tz}` + (pinned || p1.dateKey !== issueDateKey ? ` ${p1.weekday}` : '');
+        if (!c2) {
+            local = pinned ? `${p1.clock} ${p1.ampm} ${p1.tz} ${p1.weekday}` : label(p1, knownDay);
         } else {
-            local = `${label(p1)}-${label(p2)}`;
+            const p2 = localParts(new Date(firstAtOrAfter(c2, start)), timeZone);
+            if (p1.tz === p2.tz && p1.dateKey === p2.dateKey) {
+                const span = p1.ampm === p2.ampm
+                    ? `${p1.clock}-${p2.clock} ${p1.ampm}`
+                    : `${p1.clock} ${p1.ampm}-${p2.clock} ${p2.ampm}`;
+                local = `${span} ${p1.tz}` + (pinned || (knownDay && p1.dateKey !== issueDateKey) ? ` ${p1.weekday}` : '');
+            } else {
+                local = `${label(p1, knownDay)}-${label(p2, knownDay)}`;
+            }
         }
-        return `${tok} (${local})`;
+        if (!partOfDay) return `${tok} (${local})`;
+        const zulu = tok.slice(0, tok.length - wdName.length).replace(/[ \t]+$/, '');
+        return `${zulu} (${local})${tok.slice(zulu.length)}`;
     });
 }
 
@@ -427,11 +476,81 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
 // ("12/0454Z.") already gets a correct local time from annotateZuluTimes.
 // Anchored to the start of the text (no m flag): a mid-text "11/220" stays.
 const HEADER_STAMP_RE = /^\s*(?:\d{1,2}\/\d{3,4}\s*(?:AM|PM)\b\.?\s*)+/i;
+// Most offices open a section with "Issued at 528 PM CST Wed Nov 18 2026"
+// (MFL Key Messages: "Updated at 635 PM EST ..."), and the model restated it
+// (HGX Aviation, Nov 18 2026: "This aviation forecast, issued Wednesday
+// evening, November 18, 2026, at 5:28 PM Central time, warns..."). The page
+// already shows the issue time, so the line leaves the PROMPT too. Only that
+// exact header shape at the head of the section ("at" optional: MKX writes
+// "Issued 545 AM CDT Mon Sep 28 2026"), after any qualifier lines such as
+// "(00Z TAF Issuance)" or "(Rest of today through Thursday)", which are
+// content and stay (group 1).
+// Group 2 is the time itself ("528 PM CST Wed Nov 18 2026"), for sectionWrittenTime.
+const ISSUED_LINE_RE = /^(\s*(?:\([^()\n]*\)[ \t]*\r?\n\s*)*)(?:Issued|Updated)(?:[ \t]+at)?[ \t]+(\d{1,4}[ \t]*(?:AM|PM)[ \t]+[A-Z]{2,5}[ \t]+(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)[ \t]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[ \t]+\d{1,2}[ \t]+\d{4})[ \t]*(?:\r?\n\s*|$)/i;
 
 export function stripHeaderStamp(text) {
     if (typeof text !== 'string') return text;
-    const out = text.replace(HEADER_STAMP_RE, '');
+    const out = text.replace(HEADER_STAMP_RE, '').replace(ISSUED_LINE_RE, '$1');
     return out.trim() ? out : text;
+}
+
+// When the section itself was written, for the prompt's reference block
+// (Nov 18 2026). The stamps above leave the model input, but a section is
+// often older than its product (27 of 53 measured header lines were written
+// 3+ h before it): a section written at 10 PM Tuesday that says "tonight",
+// inside a product issued at 3 AM Wednesday, means Tuesday night. Reads the
+// same header shapes stripHeaderStamp removes, plus the LOX Zulu stamp
+// ("18/1736Z.", which stays in the input with its local time). Returns the
+// reference line's text, or null when the section has no stamp. Every part of
+// it comes from a regex-matched stamp (digits, AM/PM, zone, day and month
+// abbreviations), so client-sent text cannot put anything else in the prompt.
+const STAMP_PARTS_RE = /(\d{1,2})\/(\d{3,4})\s*(AM|PM)\b/gi;
+const ZULU_HEADER_STAMP_RE = /^\s*(\d{1,2})\/(\d{2})(\d{2})Z\b/;
+const WRITTEN_RELATIVE = 'relative words such as "tonight" and "tomorrow" in this section are relative to that time, not to the AFD issuance time';
+const LONG_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+export function sectionWrittenTime(text, office, issuanceTime) {
+    if (typeof text !== 'string' || !text) return null;
+    const timeZone = OFFICE_TIMEZONES[office] || 'America/Los_Angeles';
+    const base = getSafeIssueDate(issuanceTime);
+    const [y, m, d] = localParts(base, timeZone).dateKey.split('-').map(Number); // local issue date
+    const stamp = HEADER_STAMP_RE.exec(text);
+    const issued = ISSUED_LINE_RE.exec(stamp ? text.slice(stamp[0].length) : text);
+    if (issued) return `This section was written: ${issued[2].replace(/[ \t]+/g, ' ')} (${WRITTEN_RELATIVE})`;
+    if (stamp) {
+        // "18/104 PM" = the 18th at 1:04 PM local. The latest stamp if several.
+        // Only the decoded reading goes to the model, never the raw token:
+        // on Nov 11 2026 the model read "11/220 PM" as "November 22".
+        const [, dd, hm, ampm] = [...stamp[0].matchAll(STAMP_PARTS_RE)].pop();
+        const dom = Number(dd), h = Number(hm.slice(0, -2)), min = hm.slice(-2);
+        // The issue date's month, or the month before for a day number ahead
+        // of it ("30/1045 PM" in a December 1 product).
+        const t = Date.UTC(y, m - 1 - (dom > d + 1 ? 1 : 0), dom);
+        if (dom < 1 || h < 1 || h > 12 || Number(min) > 59 || new Date(t).getUTCDate() !== dom) {
+            return null; // undecodable stamp: say nothing rather than hand the model a token it can misread
+        }
+        const day = `${WEEKDAYS[new Date(t).getUTCDay()]}, ${LONG_MONTHS[new Date(t).getUTCMonth()]} ${dom}`;
+        return `This section was written: ${day} at ${h}:${min} ${ampm.toUpperCase()} local time (${WRITTEN_RELATIVE})`;
+    }
+    const z = ZULU_HEADER_STAMP_RE.exec(text);
+    if (z) {
+        const [, dd, hh, mm] = z;
+        const dom = Number(dd);
+        let t = null;
+        // The nearest UTC date with that day of month, as annotateZuluTimes reads a DD/ prefix.
+        for (const off of [0, -1, 1, -2, 2, -3, 3]) {
+            const u = Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate() + off, Number(hh), Number(mm));
+            if (new Date(u).getUTCDate() === dom) { t = u; break; }
+        }
+        if (t === null || Number(hh) > 23 || Number(mm) > 59) {
+            return null;
+        }
+        const local = new Intl.DateTimeFormat('en-US', {
+            timeZone, weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+        }).format(new Date(t)).replace(/[  ]/g, ' ');
+        return `This section was written: ${local} (${WRITTEN_RELATIVE})`;
+    }
+    return null;
 }
 
 // ── Output guard ─────────────────────────────────────────────────────
@@ -629,6 +748,52 @@ const ASIDE_RES = [
     /\b[Aa]s an AI\b/,
 ];
 const isAside = (s) => ASIDE_RES.some(re => re.test(s));
+
+// Sentences only about the document or the calendar (Nov 18 2026, PR #48
+// measurement: 11 of 33 sections had one). Each pattern must match a WHOLE
+// sentence (bold removed) built only from narration and metadata: a date, a
+// clock time, an office. Any forecast word makes it fail, so "This aviation
+// forecast, issued Wednesday at 5:28 PM, warns that flying conditions will get
+// worse tonight" stays; the prompt has to prevent that kind.
+const N_WEEKDAY = '(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)';
+const N_PART = '(?:\\s+(?:morning|afternoon|evening|night))?';
+// "Wednesday, November 18, 2026" / "November 18" / "Wednesday evening"
+const N_DATE = `(?:(?:${N_WEEKDAY}${N_PART},?\\s+)?(?:${MONTH_ALT})\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+20\\d{2})?|${N_WEEKDAY}${N_PART})`;
+const N_ZONE = '(?:[A-Z]{1,2}[SD]T|(?:Eastern|Central|Mountain|Pacific|Alaska|Hawaii)(?:\\s+(?:Standard|Daylight))?(?:\\s+[Tt]ime)?)';
+const N_TIME = `(?:\\d{1,2}(?::\\d{2})?\\s*(?:AM|PM|a\\.m\\.|p\\.m\\.)(?:\\s+${N_ZONE})?|noon|midnight)`;
+// Up to six words ("Los Angeles/Oxnard", "Peachtree City (FFC)"); the cap
+// keeps a long run of capitalised words from backtracking quadratically.
+const N_PLACE = "[A-Z][\\w.'-]*(?:[ /-][A-Z][\\w.'-]*){0,5}(?:\\s+\\([A-Z]{3,4}\\))?";
+// "the National Weather Service office in Houston/Galveston", "the NWS
+// office in Peachtree City (FFC)", "the Los Angeles/Oxnard office"
+const N_OFFICE = `(?:the\\s+)?(?:(?:National Weather Service|NWS)(?:\\s+(?:forecast\\s+)?office)?(?:\\s+(?:in|at|for)\\s+${N_PLACE})?|${N_PLACE}\\s+(?:forecast\\s+)?office|(?:forecast\\s+)?office(?:\\s+in\\s+${N_PLACE})?)`;
+const N_META = `(?:,?\\s+(?:(?:at|on|by|from|in|around)\\s+)?(?:${N_TIME}|${N_DATE}|${N_OFFICE}))`;
+const N_DOC = '(?:This|The)\\s+(?:[A-Za-z-]+\\s+){0,3}?(?:forecast|discussion|outlook|update|section|product)(?:\\s+package)?';
+// Calendar words only: "the rest of this week and into the weekend".
+const N_CAL_WORDS = `(?:,?\\s+(?:through|until|to|into|and|the|rest|of|this|next|coming|week|weekend|days?|ahead|${N_DATE}))+`;
+const NARRATION_RES = [
+    // "This marine forecast was issued at 12:01 PM on Wednesday, November 18,
+    // 2026, by the National Weather Service office in Houston/Galveston."
+    // At least one time, date or office: a bare "The forecast has been
+    // updated." is how an UPDATE section says what happened, so it stays.
+    new RegExp(`^${N_DOC}(?:\\s+from\\s+${N_OFFICE})?,?\\s+(?:was|is|has been)\\s+(?:issued|updated|released|written)${N_META}+\\.$`),
+    // "Sunday would fall on November 22 and Monday on November 23, based on
+    // the issue date of Wednesday, November 18."
+    new RegExp(`^${N_WEEKDAY}\\s+(?:(?:would|will)\\s+(?:fall|be)|falls|is)\\s+on\\s+${N_DATE}`
+        + `(?:,?\\s+and\\s+${N_WEEKDAY}(?:\\s+(?:(?:would|will)\\s+(?:fall|be)|falls|is))?\\s+on\\s+${N_DATE})*`
+        + `,?\\s+(?:based on|counting from|going by|given)\\s+the\\s+(?:issue|issuance)\\s+(?:date|time)(?:\\s+of\\s+${N_DATE})?\\.$`),
+    // "Since today is Wednesday, November 18, the work week runs through
+    // Friday, November 20." / "Since this forecast was issued on Wednesday,
+    // November 18, that stretch covers the rest of this week and into the
+    // weekend."
+    new RegExp('^Since\\s+(?:today\\s+is|(?:this|the)\\s+(?:forecast|discussion|update|outlook)\\s+was\\s+issued\\s+on|the\\s+(?:issue|issuance)\\s+date\\s+is)'
+        + `\\s+${N_DATE},\\s+(?:the|this|that)\\s+(?:work\\s*week|week|weekend|stretch|period)\\s+(?:runs|lasts|covers|extends|ends|means|includes|refers\\s+to|is)${N_CAL_WORDS}\\.$`),
+];
+const isNarration = (s) => {
+    const t = s.replace(/\*\*/g, '').trim();
+    return NARRATION_RES.some(re => re.test(t));
+};
+
 // Sentence end: punctuation (+ closing quote/bracket/bold), whitespace, then
 // a capital or digit. Decimals ("0.50") and "a.m. tomorrow" never split.
 const SENTENCE_END_RE = /([.!?]+["'”’)\]*]*)(\s+)(?=["'“‘(*]*[A-Z0-9])/g;
@@ -643,13 +808,14 @@ function stripAsidesFromParagraph(p) {
         last = end + m[2].length;
     }
     sentences.push({ text: q.slice(last), sep: '' });
-    const kept = sentences.filter(s => !isAside(s.text));
+    const kept = sentences.filter(s => !isAside(s.text) && !isNarration(s.text));
     if (q === p && kept.length === sentences.length) return p;
     return kept.map(s => s.text + s.sep).join('').replace(/[ \t]{2,}/g, ' ').trim();
 }
 
+// Returns `text` itself when nothing is removed (no early exit: the
+// narration patterns are whole-sentence, so they cannot pre-test the text).
 function stripAsides(text) {
-    if (!isAside(text)) return text;
     const pieces = text.split(/(\n[ \t]*\n\s*)/); // odd indices: paragraph breaks
     let changed = false;
     for (let i = 0; i < pieces.length; i += 2) {
@@ -680,21 +846,37 @@ export function sanitizeTranslation(text, { office, issuanceTime, timeZone } = {
 // Translate-issuance results are stored in the shared cache, which survives
 // deploys: bump the version in api/_shared-cache.js when this output's rules
 // change.
-export function buildSystemPrompt({ section, office, issuanceTime }) {
+//
+// Nov 18 2026 (PR #48 measurement): sentences about the document itself rose
+// from 4 of 21 sections to 11 of 33 ("This aviation forecast, issued
+// Wednesday evening, November 18, 2026, at 5:28 PM Central time, warns ...";
+// "Since this forecast was issued on Wednesday, November 18, ..."; "This is a
+// table of ..."). Likely causes: the advice rule's reason named the site, the
+// NWS and a "promise" (now neutral), and the calendar sat at the top as
+// "Calendar context" for the model to apply (and restate). The rules now say
+// to start with the weather and never narrate the document, date reasoning
+// or layout; the calendar, office and section follow the rules as reference
+// material. The label lines keep their exact text: tests and
+// translate-issuance tests match on them.
+//
+// `text` (optional): the RAW section text, stamp included. When it carries a
+// header stamp, the reference block says when the section was written
+// (sectionWrittenTime), and relative days are read from that time. Callers
+// that do not pass it get no such line, exactly as before.
+export function buildSystemPrompt({ section, office, issuanceTime, text }) {
     const calendarContext = getTranslationCalendarContext(office, issuanceTime);
+    const written = sectionWrittenTime(text, office, issuanceTime);
+    const relativeDays = written
+        ? '- Use the time this section was written to understand "today", "tonight", "tomorrow", "this weekend" and "next month"; resolve bare day-of-month references relative to the issuance date and forecast window. Write the resolved day or date in the sentence, never the reasoning'
+        : '- Use the issuance time to understand "today", "tonight", "tomorrow", "this weekend" and "next month", and to resolve bare day-of-month references relative to that issuance date and forecast window. Write the resolved day or date in the sentence, never the reasoning';
 
     return `You are a weather translator. Convert NWS Area Forecast Discussion text into clear, natural plain English that anyone can understand.
 
-Calendar context:
-- AFD issuance time in the local office timezone: ${calendarContext.localIssueTime}
-- Office timezone: ${calendarContext.timeZone}
-- Interpret relative dates from that issuance time: "today", "tonight", "tomorrow", "this weekend", "this month", and "next month"
-- Resolve bare day-of-month references relative to that issuance date and forecast window
-- ${calendarContext.monthBoundaryExample}
-- If a day number is still genuinely ambiguous, keep the original day number instead of inventing a month
-
 Rules:
-- Preserve ALL specific details: dates, temperatures, amounts, locations, timing
+- Start with the weather itself. Never write about the forecast document: what kind of forecast or section it is, which office wrote it, or when it was issued (not "This aviation forecast, issued Wednesday at 5:28 PM, warns..." or "This marine forecast was issued by..."), because the reader is already on a page that shows the forecast office, the issue time and the section heading. Watches, warnings and advisories are weather content: state them ("A Small Craft Advisory is in effect through Thursday night"), and keep any agency or product the forecaster cites (for example the National Hurricane Center)
+- Write each day the way the source does: "Sunday into Monday" stays "Sunday into Monday", "tonight" stays "tonight". Where the source gives a bare day number, write the resolved date in its place ("the 19th" becomes "November 19"). Do that silently: the translation never mentions the issue date or issuance time, never appends a calendar date to a day the source only names, and never says how a day or date was worked out
+- Never describe the source's formatting, abbreviations, codes or layout; give the weather they stand for
+- Preserve ALL specific details: days, dates, times, temperatures, amounts, locations. Every day or time the forecaster names stays in the translation ("each night through Friday night, and potentially Saturday night" keeps both nights; "near Cape Hatteras Sunday morning" keeps the place and the morning)
 - Never introduce a different month, year, or season than the source supports
 - Never attach a calendar date (month and day number) to a day of the week unless the source text itself gives that date
 - Explain WHY weather is happening, not just what (connect cause and effect)
@@ -702,19 +884,26 @@ Rules:
 - Do NOT use markdown headers (##, ###), horizontal rules (---), code blocks, or bullet lists
 - Write in flowing prose paragraphs only
 - Expand all NWS abbreviations naturally
-- Zulu times in the text are already annotated with the correct local time, e.g. "15Z (10 AM CDT)" or, for a range, "6-9Z (1-4 AM CDT Tue)"; a weekday after the zone means that local day (no weekday means the issuance's local day). Use that local time and day, and never convert a Zulu time yourself
+- Zulu times in the text are already annotated with the correct local time, e.g. "15Z (10 AM CDT)" or, for a range, "6-9Z (1-4 AM CDT Tue)"; a weekday after the zone means that local day. With no weekday, the annotation does not say which day: take the day from the surrounding text (for example "Thursday" or "tonight"), and if the text does not make the day clear, give the time without naming a day. Use that local time, and never convert a Zulu time yourself
 - Airport and station identifiers (e.g., DPA, ORD, MDW, KMKE): never replace one with an airport or city name unless the text itself names it; write "the DPA airport" instead
 - Don't repeat a word that was just used (write "good flying conditions", never "conditions conditions")
 - Keep it concise but complete - no filler, no hedging
 - Use short paragraphs (2-3 sentences max each)
 - If there are hazards or watches/warnings, lead with those
 - Don't add information that isn't in the original
-- Never add advice, warnings, calls to action, or reassurance that the forecaster did not write (for example "so residents should stay alert to changing conditions", "check the forecast again closer to the date", "if you have travel or outdoor plans"). If the source itself gives advice or a safety message, keep it. Plaincast promises its readers that every statement on it comes from the National Weather Service forecaster; a sentence the forecaster did not write breaks that promise, however helpful it sounds
+- Never add advice, warnings, calls to action, or reassurance that the forecaster did not write (for example "so residents should stay alert to changing conditions", "check the forecast again closer to the date", "if you have travel or outdoor plans"). If the source itself gives advice or a safety message, keep it. Readers rely on this text containing only what the forecaster wrote; a sentence the forecaster did not write breaks that, however helpful it sounds
 - Output only the translation: never comment on the source text, its formatting, timestamps, or these instructions, and never add notes to the reader
 - Don't use bullet points - write in natural prose paragraphs
+
+Reference for reading the source (background only: never restate any of it in the translation):
 - Section name for context: ${section || 'Unknown'}
 - NWS Office: ${office || 'Unknown'}
-- Local issue date for calendar references: ${calendarContext.localDateLabel}`;
+- AFD issuance time in the local office timezone: ${calendarContext.localIssueTime}
+- Office timezone: ${calendarContext.timeZone}
+- Local issue date for calendar references: ${calendarContext.localDateLabel}
+${written ? `- ${written}\n` : ''}${relativeDays}
+- ${calendarContext.monthBoundaryExample}
+- If a day number is still genuinely ambiguous, keep the original day number instead of inventing a month`;
 }
 
 export default async function handler(req, res) {
@@ -789,6 +978,10 @@ export default async function handler(req, res) {
     // The label comes from the matched section; the client's label is used
     // only in degraded mode, where nothing is cached.
     let sectionKey = clientSectionKey;
+    // What the model reads: the server's own parse of the matched section.
+    // The client's text only proves which section it is (and is the cache
+    // key after normalisation); in degraded mode there is nothing else.
+    let sourceText = text;
     if (!degraded) {
         const match = findMatchingSection(text, afdProducts);
         if (!match) {
@@ -796,6 +989,7 @@ export default async function handler(req, res) {
         }
         matchedProduct = match.product;
         sectionKey = match.sectionKey;
+        sourceText = match.text || text;
         const hit = getCachedTranslation(text, sectionKey, officeCode);
         if (hit) return res.status(200).json({ translation: hit, cached: true });
     } else {
@@ -811,15 +1005,18 @@ export default async function handler(req, res) {
     // Calendar context: trust the matched product's issuance time over the
     // client's claim; the client value is only a hint when NWS is unreachable.
     const promptIssuanceTime = matchedProduct?.issuanceTime || issuanceTime;
-    const systemPrompt = buildSystemPrompt({ section: promptSectionLabel(sectionKey), office: officeCode, issuanceTime: promptIssuanceTime });
+    // The section's stamp gives its written time. Read from the server's
+    // text, so a reflowed copy of the same section cannot change the prompt
+    // behind one cache key.
+    const systemPrompt = buildSystemPrompt({ section: promptSectionLabel(sectionKey), office: officeCode, issuanceTime: promptIssuanceTime, text: sourceText });
 
     try {
         const result = await generateText({
             model: MODEL,
             providerOptions: PROVIDER_OPTIONS,
             system: systemPrompt,
-            // The stamp leaves the prompt only; `text` stays exact for the cache key.
-            prompt: annotateZuluTimes(stripHeaderStamp(text), officeCode, promptIssuanceTime),
+            // The stamp leaves the prompt only; the cache key is the normalized text.
+            prompt: annotateZuluTimes(stripHeaderStamp(sourceText), officeCode, promptIssuanceTime),
             maxOutputTokens: degraded ? DEGRADED_MAX_TOKENS : 2048,
             abortSignal: AbortSignal.timeout(15000),
         });
