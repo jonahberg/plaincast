@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { parseSections } from '../shadcn/src/lib/afd.js';
 import { buildSectionIndex, findMatchingSection, canonicalSectionKey } from '../api/translate.js';
+import { isUntranslatable } from '../docs/js/untranslatable.js';
 
 // Parity lock for /api/translate's exact-section verification (Sep 28 2026
 // audit). The React client POSTs `section.text` straight from parseSections()
@@ -29,7 +30,8 @@ const ALL = [...live, ...classic];
 // Exactly what ForecastSection → translateSection → fetchAITranslation sends.
 function clientPosts(productText) {
     return parseSections(productText).sections
-        .filter(s => s.key !== 'Active Alerts') // aiEligible === false
+        // aiEligible === false (shadcn/src/App.jsx): alerts, and the shared rule's tables and short sections
+        .filter(s => s.key !== 'Active Alerts' && !isUntranslatable(s.key, s.text))
         .map(s => JSON.parse(JSON.stringify({ text: s.text, section: s.key })))
         .filter(b => b.text.length >= 20); // shorter bodies 400 before verification
 }

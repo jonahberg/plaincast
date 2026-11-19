@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { FileWarning, RefreshCw, WifiOff, X } from 'lucide-react';
 
 import { OFFICE_NAMES, OFFICE_TIMEZONES } from '@data/offices.js';
+import { isUntranslatable } from '@data/untranslatable.js';
 import { extractTakeaway, hasRealAlerts, parseSections, reorderSections } from '@/lib/afd';
 import {
     fetchAFDList, fetchAlerts, fetchChangelog, fetchConditions, fetchProduct, historyItems,
@@ -573,6 +574,15 @@ export default function App() {
         return { kind: 'none' };
     }, [alerts, alertsStatus, parsedAlertsListed, severe]);
 
+    // Sections the shared rule never sends to the model (tables, sections
+    // under 25 words: docs/js/untranslatable.js, the same rule the server
+    // applies). They are not AI-eligible: no request, no "Summarizing…", no
+    // "via Claude" — the regex-expanded NWS text from the first frame.
+    const untranslatable = useMemo(
+        () => new Set(ready ? state.sections.filter(s => isUntranslatable(s.key, s.text)).map(s => s.key) : []),
+        [ready, state.sections]
+    );
+
     const takeawayHTML = useMemo(
         () => (ready ? extractTakeaway(state.sections, tz) : ''),
         [ready, state.sections, tz]
@@ -841,7 +851,7 @@ export default function App() {
                                         office={office}
                                         productId={state.productId}
                                         issuanceTime={state.issuedAt?.toISOString()}
-                                        aiEligible={section.key !== 'Active Alerts' && !state.offline}
+                                        aiEligible={section.key !== 'Active Alerts' && !state.offline && !untranslatable.has(section.key)}
                                         diff={diffs?.get(section.key) || null}
                                         sectionRef={setSectionRef(section.key)}
                                     />

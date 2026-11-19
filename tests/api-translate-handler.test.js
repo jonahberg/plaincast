@@ -21,9 +21,12 @@ const AFD_SYNOPSIS = 'A dry pattern holds through the weekend with highs in the 
 // buckets to "Unknown").
 const FRESH_COUNT = 120;
 const FRESH_SECTIONS = Array.from({ length: FRESH_COUNT }, (_, i) =>
-    `Fresh section ${i}: dry conditions continue tonight with patchy fog developing along the coast after midnight and clearing by mid morning.`);
+    `Fresh section ${i}: dry conditions continue tonight with patchy fog developing along the coast after midnight and clearing by mid morning, then sunny skies and light winds.`);
 const UPDATE_SECTIONS = Array.from({ length: 5 }, (_, i) =>
-    `Update ${i}: the morning package was refreshed to lower sky cover and raise afternoon highs a degree or two across the valleys.`);
+    `Update ${i}: the morning package was refreshed to lower sky cover and raise afternoon highs a degree or two across the valleys and the coastal plain.`);
+// A real short note (PHI, Nov 18 2026): under the shared 25-word minimum
+// (docs/js/untranslatable.js), so it is never translated.
+const SHORT_NOTE = 'Updated aviation section for the 00Z TAFs. No changes to the forecast.';
 const AFD_PRODUCT_TEXT = `000
 FXUS66 KLOX 241825
 AFDLOX
@@ -34,6 +37,11 @@ AFDLOX
 
 ${FRESH_SECTIONS.map(t => `.SHORT TERM /THROUGH TONIGHT/...\n${t}\n\n&&\n`).join('\n')}
 ${UPDATE_SECTIONS.map(t => `.UPDATE...\n${t}\n\n&&\n`).join('\n')}
+.WHAT HAS CHANGED...
+${SHORT_NOTE}
+
+&&
+
 .AVIATION /18Z TAF THROUGH 18Z WEDNESDAY/...
 VFR conditions expected through the period.
 
@@ -66,6 +74,10 @@ mock.module('../api/_utils.js', () => ({
 }));
 
 const { default: handler } = await import('../api/translate.js');
+
+// Degraded-mode bodies are judged by the shared rule on their own text
+// (docs/js/untranslatable.js), so they need 25+ words to reach the model.
+const DEGRADED_TEXT = 'Unverifiable text that is not in any AFD product at all here today, long enough that the shared rule would send it to the model for a plain English summary.';
 
 function createRes() {
     const res = {
@@ -404,7 +416,7 @@ describe('POST /api/translate — AFD-source verification', () => {
     it('fails open (does not 403) when the AFD source is unreachable', async () => {
         mockAFDThrows = true;
         // Use an office with no cached AFD texts so the (throwing) fetch is hit.
-        const req = createReq({ body: freshBody({ office: 'OKX', text: 'Unverifiable text that is not in any AFD product at all here today.' }) });
+        const req = createReq({ body: freshBody({ office: 'OKX', text: DEGRADED_TEXT }) });
         const res = createRes();
         await handler(req, res);
         expect(res.statusCode).toBe(200);
@@ -570,7 +582,7 @@ describe('POST /api/translate — degraded mode (NWS unreachable)', () => {
             return { text: 'ok', finishReason: 'stop' };
         };
         const res = createRes();
-        await handler(createReq({ body: freshBody({ office: 'BOX', text: 'Some unverifiable forecast text long enough to pass the length validation.' }) }), res);
+        await handler(createReq({ body: freshBody({ office: 'BOX', text: `Some unverifiable forecast text. ${DEGRADED_TEXT}` }) }), res);
         expect(res.statusCode).toBe(200);
         expect(aiArgs.maxOutputTokens).toBeLessThanOrEqual(1024);
     });
@@ -661,7 +673,7 @@ describe('POST /api/translate — degraded mode never feeds the shared cache', (
     it('does not cache an unverified translation (client-supplied issuanceTime) and marks it no-store', async () => {
         let calls = 0;
         mockGenerateText = async () => { calls++; return { text: 'degraded', finishReason: 'stop' }; };
-        const body = freshBody({ office: 'TWC', text: 'Unverifiable degraded text long enough to pass the length validation checks.' });
+        const body = freshBody({ office: 'TWC', text: `Unverifiable degraded text. ${DEGRADED_TEXT}` });
         const first = createRes();
         await handler(createReq({ body }), first);
         expect(first.statusCode).toBe(200);
@@ -687,7 +699,7 @@ describe('POST /api/translate — degraded mode never feeds the shared cache', (
         let last;
         for (let i = 0; i < 6; i++) {
             last = createRes();
-            await handler(createReq({ body: freshBody({ office: 'FGZ', text: `Degraded sendError probe ${i} with enough length to validate.` }), headers: { 'x-forwarded-for': ip } }), last);
+            await handler(createReq({ body: freshBody({ office: 'FGZ', text: `Degraded sendError probe ${i}: ${DEGRADED_TEXT}` }), headers: { 'x-forwarded-for': ip } }), last);
         }
         expect(last.statusCode).toBe(429);
         expect(last.body.code).toBe('rate_limited');
@@ -813,5 +825,37 @@ describe('POST /api/translate — header stamp + output guard (Nov 11 2026)', ()
         expect(aiArgs.prompt.startsWith('Big cooling coming Thursday')).toBe(true);
         expect(res.body.translation).not.toContain('November 22');
         expect(res.body.translation).not.toContain('source text');
+    });
+});
+
+// Nov 18 2026: sections the shared rule never translates (tables, under 25
+// words) are not indexed, so a request for one is refused before any model
+// call, verified or degraded.
+describe('POST /api/translate — the shared untranslatable rule', () => {
+    it('a short section of the current AFD gets the 403, with no model call', async () => {
+        mockAFDThrows = false;
+        let calls = 0;
+        mockGenerateText = async () => { calls++; return { text: 'padded', finishReason: 'stop' }; };
+        const res = createRes();
+        await handler(createReq({ body: { text: SHORT_NOTE, section: 'What has changed', office: 'LOX' } }), res);
+        expect(res.statusCode).toBe(403);
+        expect(res.body.code).toBe('forbidden');
+        expect(calls).toBe(0);
+    });
+
+    it('degraded mode (NWS unreachable) refuses a short text or a table too', async () => {
+        mockAFDThrows = true;
+        let calls = 0;
+        mockGenerateText = async () => { calls++; return { text: 'padded', finishReason: 'stop' }; };
+        const short = createRes();
+        await handler(createReq({ body: { text: SHORT_NOTE, section: 'What has changed', office: 'CTP' } }), short);
+        expect(short.statusCode).toBe(403);
+        expect(short.body.error).toBe('This section is not translated');
+        const table = createRes();
+        const rows = 'TLH  70  50  72  55 /  10   0   0  10\nVLD  71  52  74  56 /  10   0   0  10\nABY  69  49  71  53 /   0   0   0  10';
+        await handler(createReq({ body: { text: rows, section: 'Preliminary point temps/pops', office: 'CTP' } }), table);
+        expect(table.statusCode).toBe(403);
+        expect(calls).toBe(0);
+        mockAFDThrows = false;
     });
 });

@@ -72,7 +72,8 @@ National Weather Service Los Angeles/Oxnard CA
 
 .SYNOPSIS...03/440 AM.
 Low clouds and fog will continue each night and morning with a chc of
-drizzle near the csts through the weekend across the region.
+drizzle near the csts through the weekend across the region. Afternoon sunshine
+returns inland.
 
 &&
 
@@ -86,6 +87,7 @@ normal in the vlys by Saturday afternoon and evening.
 .LONG TERM (Sunday through Wednesday)...
 Models are in good agreement that troughing returns early next week
 bringing a cooling trend and increasing onshore flow across the area.
+Highs fall a few degrees each day.
 
 &&
 

@@ -48,8 +48,8 @@ export const PREAMBLE_NO_AI = 'This is the National Weather Service\'s own discu
     + 'no AI summary, no editing. Discussions are reissued 3 to 4 times a day.';
 export const PREAMBLE_AI = 'This response includes AI-generated text: each section opens with a plain-English summary '
     + 'written by Claude, an AI model, from the National Weather Service\'s text, followed by that text itself '
-    + '(the original, with its shorthand expanded). The original is authoritative. Discussions are reissued '
-    + '3 to 4 times a day.';
+    + '(the original, with its shorthand expanded); a section only a sentence or two long is already plain and '
+    + 'has no summary. The original is authoritative. Discussions are reissued 3 to 4 times a day.';
 export const HOME_NO_AI = 'This edition is the National Weather Service\'s own text with its shorthand expanded; '
     + 'no AI summary is included in this response.';
 export const AI_LABEL_MD = '**AI summary** (written by Claude from the National Weather Service text below):';

@@ -28,7 +28,7 @@
 // `changelog` is present only when the server got a definitive answer for
 // THIS issuance; absent means "unknown, fetch it yourself".
 import { changelogKey, sharedGet, translationKey } from './_shared-cache.js';
-import { tabularDisplayKeys } from './_translatable.js';
+import { untranslatableDisplayKeys } from './_translatable.js';
 import { PROD_SCRIPT_RE } from '../scripts/app-shell.mjs';
 
 export const BOOT_ID = 'plaincast-boot';
@@ -79,18 +79,19 @@ function sameInstant(a, b) {
 
 // The stored translate-issuance payload → { translations, complete }. Only
 // string sections survive, only for the office + id that were asked for, and
-// never one of the edition's tables (`productText` given): tables are not
-// translated, so such an entry predates that rule (docs/js/tabular.js).
+// never one of the edition's never-translated sections (`productText` given:
+// tables and short notes, docs/js/untranslatable.js), whose entry predates
+// that rule.
 export function pickTranslations(res, office, id, productText = null) {
     if (!res || typeof res !== 'object') return { translations: null, complete: false };
     if (res.office && res.office !== office) return { translations: null, complete: false };
     if (res.id && res.id !== id) return { translations: null, complete: false };
     const src = res.sections;
     if (!src || typeof src !== 'object' || Array.isArray(src)) return { translations: null, complete: false };
-    const tables = typeof productText === 'string' ? tabularDisplayKeys(productText) : new Set();
+    const skip = typeof productText === 'string' ? untranslatableDisplayKeys(productText) : new Set();
     const translations = {};
     for (const [key, text] of Object.entries(src)) {
-        if (tables.has(key)) continue;
+        if (skip.has(key)) continue;
         if (typeof text === 'string' && text.trim()) translations[key] = text;
     }
     if (Object.keys(translations).length === 0) return { translations: null, complete: false };

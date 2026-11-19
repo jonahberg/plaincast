@@ -27,6 +27,9 @@ const { translatableSections } = await import('../api/translate-issuance.js');
 const T0 = Date.parse('2026-11-18T12:00:00Z');
 const MIN = 60 * 1000;
 
+// Every section carries one more fixed sentence so it clears the shared
+// 25-word minimum for translation (docs/js/untranslatable.js).
+const TAIL = 'Only minor changes are expected in the next few forecast packages, and confidence remains high.';
 const afd = (code, body) => `000
 FXUS66 K${code} 181100
 AFD${code}
@@ -35,17 +38,17 @@ Area Forecast Discussion
 National Weather Service
 
 .SYNOPSIS...
-${body.synopsis || 'High pressure keeps the region dry and mild through the weekend with light winds.'}
+${body.synopsis || 'High pressure keeps the region dry and mild through the weekend with light winds.'} ${TAIL}
 
 &&
 
 .SHORT TERM...
-${body.short || 'Clear skies tonight with lows in the 40s and patchy valley fog after midnight.'}
+${body.short || 'Clear skies tonight with lows in the 40s and patchy valley fog after midnight.'} ${TAIL}
 
 &&
 
 .LONG TERM...
-${body.long || 'A trough approaches early next week bringing a chance of showers by Tuesday.'}
+${body.long || 'A trough approaches early next week bringing a chance of showers by Tuesday.'} ${TAIL}
 
 $$
 `;

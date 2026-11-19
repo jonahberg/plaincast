@@ -106,7 +106,8 @@ export function buildHomeSsr(code, city, sections, issued, { ai = null, issuance
           `plain English. The discussion is where a forecaster explains their reasoning: which models ` +
           `disagree, what they are watching, and how confident they are. Below is the current edition for ` +
           `${escHtml(city)}: each section opens with a plain-English summary written by AI (Claude), followed ` +
-          `by the forecaster's own text with its shorthand expanded. Every one of the ` +
+          `by the forecaster's own text with its shorthand expanded (a section only a sentence or two long has ` +
+          `no summary). Every one of the ` +
           `<a href="/national/">${offices} forecast offices</a> has its own edition.</p>\n`
         : `        <p class="ssr-standfirst">Plaincast decodes the National Weather Service's Area Forecast ` +
           `Discussion — the real forecast, written 3 to 4 times a day by the meteorologist on shift — into ` +

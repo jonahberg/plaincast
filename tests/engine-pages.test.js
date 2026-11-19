@@ -56,7 +56,8 @@ National Weather Service Los Angeles/Oxnard CA
 
 .SYNOPSIS...03/440 AM.
 Low clouds and fog will continue each night and morning with a chc of
-drizzle near the csts through the weekend across the region.
+drizzle near the csts through the weekend across the region. Afternoon sunshine
+returns inland.
 
 &&
 
@@ -70,6 +71,7 @@ normal in the vlys by Saturday afternoon and evening.
 .LONG TERM (Sunday through Wednesday)...
 Models are in good agreement that troughing returns early next week
 bringing a cooling trend and increasing onshore flow across the area.
+Highs fall a few degrees each day.
 
 &&
 
@@ -424,7 +426,7 @@ describe('aiForSections: the join is exact or nothing', () => {
     // share "Short Term", and the map could hold only one of them).
     it('NEAR TERM beside SHORT TERM joins under its own key, "Near Term"', () => {
         const text = CURR.replace('.LONG TERM (Sunday through Wednesday)...',
-            '.NEAR TERM...\nA second short-term discussion that is long enough to render here today.\n\n&&\n\n.LONG TERM (Sunday through Wednesday)...');
+            '.NEAR TERM...\nA second short-term discussion that is long enough to render here today, with patchy fog\nat the coast tonight and a warm, dry afternoon for the valleys tomorrow.\n\n&&\n\n.LONG TERM (Sunday through Wednesday)...');
         const sections = { ...AI_SECTIONS, 'Near Term': 'A second short-term summary.' };
         const ai = aiForSections(text, completeTi({ productText: text, sections }), 'LOX', CURR_ID);
         expect([...ai.keys()]).toEqual(['SYNOPSIS', 'SHORT TERM', 'NEAR TERM', 'LONG TERM']);
@@ -432,6 +434,20 @@ describe('aiForSections: the join is exact or nothing', () => {
         expect(ai.get('NEAR TERM')).toBe('A second short-term summary.');
         // a map without the Near Term translation is not complete for this page
         expect(aiForSections(text, completeTi({ productText: text }), 'LOX', CURR_ID)).toBe(null);
+    });
+
+    // Nov 18 2026: the shared rule (docs/js/untranslatable.js) never
+    // translates a section under 25 words. Such a section is rendered as the
+    // NWS text and must not take the AI text off every other section.
+    it('a short rendered section (never translated) shows as written; the others keep their AI text', () => {
+        const text = CURR.replace('.LONG TERM (Sunday through Wednesday)...',
+            '.WHAT HAS CHANGED...\nUpdated aviation section for the 00Z TAFs. No changes to the forecast.\n\n&&\n\n.LONG TERM (Sunday through Wednesday)...');
+        const ai = aiForSections(text, completeTi({ productText: text }), 'LOX', CURR_ID);
+        expect([...ai.keys()]).toEqual(['SYNOPSIS', 'SHORT TERM', 'LONG TERM']);
+        expect(ai.has('WHAT HAS CHANGED')).toBe(false);
+        // limit counts rendered sections, the short one included
+        const two = aiForSections(text, completeTi({ productText: text }), 'LOX', CURR_ID, 3);
+        expect([...two.keys()]).toEqual(['SYNOPSIS', 'SHORT TERM']);
     });
 
     it('a rendered section with no translatable twin (too long to translate) → no AI', () => {

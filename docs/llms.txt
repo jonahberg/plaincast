@@ -35,7 +35,7 @@ conditions API cannot.
 
 ## What it does
 - Fetches the latest Area Forecast Discussion from the NWS API for any of 123 supported offices
-- Uses Claude (Haiku) to summarize each section into natural, readable prose
+- Uses Claude (Haiku) to summarize each section into natural, readable prose (tables and sections only a sentence or two long are shown as written, shorthand expanded)
 - Displays the AI summary side-by-side with the original annotated forecast
 - Highlights 230+ meteorological jargon terms with hover/tap tooltip definitions
 - Shows forecaster confidence level based on language analysis

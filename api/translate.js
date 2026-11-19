@@ -7,6 +7,7 @@ import { OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { sendError } from './_errors.js';
 import { displaySections } from './_translatable.js';
+import { HEADER_STAMP_RE, ISSUED_LINE_RE, isUntranslatable, stripHeaderStamp } from '../docs/js/untranslatable.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 // The client parser, imported so verification matches what browsers send.
 // Pure module (relative imports only); shadcn/package.json is type:module.
@@ -177,6 +178,10 @@ function normalizeForMatch(s) {
 // signatures, which extractSections does not), then the server parser, so a
 // section either parser produces verifies. Measured against the live latest
 // AFD of all 68 offices: see tests/translate-section-parity.test.js.
+//
+// A section the shared rule never translates (docs/js/untranslatable.js:
+// tables and sections under 25 words) is not indexed, so a client that still
+// asks for one (an old build) gets the 403 and keeps the regex text.
 const UNTRANSLATED_SECTIONS = new Set(['Active Alerts']);
 
 export function buildSectionIndex(productText) {
@@ -185,6 +190,7 @@ export function buildSectionIndex(productText) {
     const add = (key, text) => {
         const sectionKey = canonicalSectionKey(key);
         if (UNTRANSLATED_SECTIONS.has(sectionKey)) return;
+        if (isUntranslatable(key, text)) return;
         const n = normalizeForMatch(text);
         if (n.length < 20 || index.has(n)) return;
         index.set(n, sectionKey);
@@ -470,33 +476,12 @@ export function annotateZuluTimes(text, office, issuanceTime, { timeZone: zoneOv
     });
 }
 
-// Forecaster header stamp at the top of a section: "11/220 PM." = day 11,
-// 2:20 PM (LOX writes one after every header; "03/428 PM.", "11/459 PM.").
-// The model read "11/22" out of it as a date (LOX Long Term, Nov 11 2026:
-// "Sunday, November 22"; that Sunday was Nov 15), so it leaves the PROMPT
-// only. The cache key and AFD verification keep the exact section text, which
-// is parity-locked to the client parser. Same shape as the lede stripper in
-// _afd-sections.js sectionProse, but AM/PM is required: a Zulu stamp
-// ("12/0454Z.") already gets a correct local time from annotateZuluTimes.
-// Anchored to the start of the text (no m flag): a mid-text "11/220" stays.
-const HEADER_STAMP_RE = /^\s*(?:\d{1,2}\/\d{3,4}\s*(?:AM|PM)\b\.?\s*)+/i;
-// Most offices open a section with "Issued at 528 PM CST Wed Nov 18 2026"
-// (MFL Key Messages: "Updated at 635 PM EST ..."), and the model restated it
-// (HGX Aviation, Nov 18 2026: "This aviation forecast, issued Wednesday
-// evening, November 18, 2026, at 5:28 PM Central time, warns..."). The page
-// already shows the issue time, so the line leaves the PROMPT too. Only that
-// exact header shape at the head of the section ("at" optional: MKX writes
-// "Issued 545 AM CDT Mon Sep 28 2026"), after any qualifier lines such as
-// "(00Z TAF Issuance)" or "(Rest of today through Thursday)", which are
-// content and stay (group 1).
-// Group 2 is the time itself ("528 PM CST Wed Nov 18 2026"), for sectionWrittenTime.
-const ISSUED_LINE_RE = /^(\s*(?:\([^()\n]*\)[ \t]*\r?\n\s*)*)(?:Issued|Updated)(?:[ \t]+at)?[ \t]+(\d{1,4}[ \t]*(?:AM|PM)[ \t]+[A-Z]{2,5}[ \t]+(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)[ \t]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[ \t]+\d{1,2}[ \t]+\d{4})[ \t]*(?:\r?\n\s*|$)/i;
-
-export function stripHeaderStamp(text) {
-    if (typeof text !== 'string') return text;
-    const out = text.replace(HEADER_STAMP_RE, '').replace(ISSUED_LINE_RE, '$1');
-    return out.trim() ? out : text;
-}
+// The section's leading stamp ("11/220 PM.") and "Issued at ..." line leave
+// the PROMPT only (the cache key and AFD verification keep the exact text).
+// The regexes and stripHeaderStamp live in docs/js/untranslatable.js, whose
+// short-section rule counts words without them; re-exported here for the
+// callers that always imported them from this module.
+export { stripHeaderStamp };
 
 // When the section itself was written, for the prompt's reference block
 // (Nov 18 2026). The stamps above leave the model input, but a section is
@@ -1003,6 +988,12 @@ export default async function handler(req, res) {
         }
         if (text.length > DEGRADED_TEXT_MAX) {
             return sendError(res, 400, 'invalid_request', 'Text too long');
+        }
+        // No product to match against: the shared rule judges the client's
+        // own label and text (an old client asking for a table or a short
+        // note gets the same refusal as when NWS is up).
+        if (isUntranslatable(sectionLabel || '', text)) {
+            return sendError(res, 403, 'forbidden', 'This section is not translated');
         }
     }
 

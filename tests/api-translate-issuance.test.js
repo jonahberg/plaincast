@@ -12,15 +12,15 @@ AFDLOX
 Area Forecast Discussion
 National Weather Service Los Angeles/Oxnard CA
 
-.SYNOPSIS...A dry pattern holds through the weekend with highs in the low 80s across the valleys and mountains through Tuesday afternoon.
+.SYNOPSIS...A dry pattern holds through the weekend with highs in the low 80s across the valleys and mountains through Tuesday afternoon, then a slow cooling trend arrives midweek.
 
 &&
 
-.SHORT TERM...Dry conditions continue tonight with patchy fog developing along the coast after midnight and clearing by mid morning across the region.
+.SHORT TERM...Dry conditions continue tonight with patchy fog developing along the coast after midnight and clearing by mid morning across the region, with light winds and calm seas.
 
 &&
 
-.AVIATION...VFR conditions expected through the period at all terminals with light onshore flow during the afternoon hours each day.
+.AVIATION...VFR conditions expected through the period at all terminals with light onshore flow during the afternoon hours each day, and no significant weather is expected.
 
 &&
 
@@ -446,6 +446,7 @@ AFDLOT
 
 .AVIATION /12Z TAFS/...
 Showers expand across the Chicago metro area in the 6-9Z timeframe with MVFR ceilings through 15Z.
+VFR returns by afternoon as the showers move east and the winds turn westerly behind the front.
 
 $$`;
         const prompts = [];

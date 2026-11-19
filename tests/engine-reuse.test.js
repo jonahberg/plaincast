@@ -13,11 +13,11 @@ const AFD = `000
 FXUS66 KLOX 241825
 AFDLOX
 
-.SYNOPSIS...A dry pattern holds through the weekend with highs in the low 80s across the valleys.
+.SYNOPSIS...A dry pattern holds through the weekend with highs in the low 80s across the valleys, then a slow cooling trend arrives by the middle of next week.
 
 &&
 
-.SHORT TERM...Dry conditions continue tonight with patchy fog developing along the coast after midnight.
+.SHORT TERM...Dry conditions continue tonight with patchy fog developing along the coast after midnight, clearing by mid morning with light winds and calm seas through the afternoon.
 
 $$`;
 let mockList = [];

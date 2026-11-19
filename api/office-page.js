@@ -46,6 +46,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OFFICE_NAMES, OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { isTabularSection } from '../docs/js/tabular.js';
+import { isUntranslatable } from '../docs/js/untranslatable.js';
 import { renderOfficePage, escHtml, officeTitle } from '../scripts/build-offices.mjs';
 import { ASSET_PLACEHOLDERS } from '../scripts/app-shell.mjs';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
@@ -325,7 +326,8 @@ export function buildSsrHtml(code, city, productText, issuanceTime, changelogHtm
     // whenever JavaScript runs.
     const note = ai
         ? `        <p class="ssr-note">Each section above opens with a plain-English summary written by AI (Claude) from the ` +
-          `National Weather Service's text, which follows it as the original. The full Plaincast experience — the ` +
+          `National Weather Service's text, which follows it as the original; a section only a sentence or two long ` +
+          `has no summary. The full Plaincast experience — the ` +
           `annotated original, with the <a href="/o/${escHtml(code)}/?view=changelog">forecast changelog</a> — loads ` +
           `automatically with JavaScript.</p>`
         : `        <p class="ssr-note">This is the plain-text edition, decoded without AI so it loads anywhere. ` +
@@ -368,9 +370,12 @@ export function aiSectionBody(aiText, paras) {
 // The stored translation for each server-rendered section, or null when the
 // AI text cannot be shown. Shown only for a COMPLETE set whose value names
 // exactly this office, edition and product text, and in which every one of
-// the first `limit` rendered sections has exactly one translatable
-// counterpart (same display key, same source text) with a non-empty
-// translation. Any doubt → null → the page renders as with the switch off.
+// the first `limit` rendered sections that the shared rule translates
+// (docs/js/untranslatable.js) has exactly one translatable counterpart (same
+// display key, same source text) with a non-empty translation. A section the
+// rule never translates (a short "What has changed" note) is rendered as the
+// NWS text and does not hold the rest back. Any doubt → null → the page
+// renders as with the switch off.
 export function aiForSections(productText, entry, office, id, limit = Infinity) {
     if (!entry || typeof entry !== 'object' || entry.office !== office || entry.id !== id || entry.complete !== true) return null;
     if (typeof entry.productText !== 'string' || entry.productText !== productText) return null;
@@ -378,9 +383,12 @@ export function aiForSections(productText, entry, office, id, limit = Infinity) 
     if (!map || typeof map !== 'object' || Array.isArray(map)) return null;
     const translatable = translatableSections(productText);
     const out = new Map();
+    let rendered = 0;
     for (const s of pickSections(displaySections(productText))) {
-        if (out.size >= limit) break;
+        if (rendered >= limit) break;
         if (sectionParagraphs(s.text).length === 0) continue; // as editionSections
+        rendered++;
+        if (isUntranslatable(s.key, s.text)) continue;
         const d = s.display;
         const twins = translatable.filter(t => t.key === d);
         if (twins.length !== 1 || twins[0].text !== s.text) return null;

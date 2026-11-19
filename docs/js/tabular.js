@@ -6,13 +6,14 @@
 // swaps numbers between highs and lows. A table is already as plain as it
 // gets, so these sections are never sent to the model.
 //
-// One predicate, shared by the server (api/_translatable.js, which both the
-// on-demand endpoint and the poller select sections with; api/office-page.js,
-// which keeps tables out of the server-rendered digest) and the client (which
-// must not ask for AI text for them). Pure, dependency-free, and keyed on
-// (section key, section text) so both sides decide the same way: the key may
-// be the raw header ("PRELIMINARY POINT TEMPS/POPS") or the display key
-// ("Preliminary point temps/pops").
+// Part of the one shared rule for what is never translated
+// (./untranslatable.js isUntranslatable: tables, and sections under 25
+// words), which the server's selection, /api/translate and both clients
+// apply; api/office-page.js also keeps tables out of the server-rendered
+// digest. Pure, dependency-free, and keyed on (section key, section text) so
+// every side decides the same way: the key may be the raw header
+// ("PRELIMINARY POINT TEMPS/POPS") or the display key ("Preliminary point
+// temps/pops").
 //
 // Two independent signals, either one is enough:
 //   1. The canonical name: TEMPS/POPS (with or without "PRELIMINARY POINT"),

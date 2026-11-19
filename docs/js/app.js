@@ -3,6 +3,7 @@ import { GLOSSARY, GLOSSARY_COMPILED } from './glossary.js';
 import { OFFICE_TIMEZONES, OFFICE_COORDS, OFFICE_STATES, OFFICE_SENDER, OFFICE_NAMES, SECTION_NAMES, alertOfficeCode } from './offices.js';
 import { FULL_ABBREVIATIONS } from './abbreviations.js';
 import { computeDiff, renderDiffHTML } from './diff.js';
+import { isUntranslatable } from './untranslatable.js';
 import { confidenceScore, confidenceWord, buildTimelineEntries } from './timeline.js';
 
 let currentOffice = 'LOX';
@@ -1232,13 +1233,18 @@ function render(sections, productContext = {}) {
     const NARRATIVE = ['Synopsis', 'Discussion', 'Short Term', 'Near Term', 'Long Term', 'Update'];
     const ledeKey = (sections.find(s => NARRATIVE.includes(s.key)) || {}).key;
 
-    // Render sections with regex translation first (instant), then upgrade with AI lazily
+    // Render sections with regex translation first (instant), then upgrade with AI lazily.
+    // Tables and sections under 25 words are never sent to the model
+    // (untranslatable.js, the rule the server shares): no request and no
+    // "Summarizing…", just the regex-expanded text.
     sectionsEl.innerHTML = sections.map(s => {
         let plainHtml;
         const hiddenAttr = isEmptyAlerts(s) ? ' style="display:none"' : '';
         const ledeCls = s.key === ledeKey ? ' lede-section' : '';
         if (s.key === 'Active Alerts') {
             plainHtml = formatAlerts(s.text, currentAlerts);
+        } else if (isUntranslatable(s.key, s.text)) {
+            plainHtml = translateToPlainEnglish(s.text, productContext.issuanceTime);
         } else {
             // Show regex translation immediately with AI loading indicator
             const regexHtml = translateToPlainEnglish(s.text, productContext.issuanceTime);
@@ -1274,7 +1280,7 @@ function render(sections, productContext = {}) {
         currentTranslationObserver = null;
     }
 
-    const toTranslate = sections.filter(s => s.key !== 'Active Alerts');
+    const toTranslate = sections.filter(s => s.key !== 'Active Alerts' && !isUntranslatable(s.key, s.text));
 
     async function upgradeSection(s) {
         const sectionId = safeId(s.key);

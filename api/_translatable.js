@@ -5,7 +5,7 @@
 //
 // Files prefixed with `_` are not treated as endpoints by Vercel.
 import { SECTION_NAMES } from '../docs/js/offices.js';
-import { isTabularSection } from '../docs/js/tabular.js';
+import { isUntranslatable } from '../docs/js/untranslatable.js';
 import { sectionDisplayKeys } from '../shadcn/src/lib/afd.js';
 import { extractSections } from './_afd-sections.js';
 
@@ -37,21 +37,24 @@ export function sectionHeadings(sections) {
 }
 
 // Sections that are never AI-translated: alerts render from the live alerts
-// API, tables (docs/js/tabular.js: the model rewrites rows of station
-// numbers as prose and swaps highs with lows) are already as plain as they
-// get, and sub-minimum fragments aren't worth a model call.
+// API, and the shared rule (docs/js/untranslatable.js isUntranslatable, the
+// same one both clients and /api/translate apply) excludes tables (the model
+// rewrites rows of station numbers as prose and swaps highs with lows) and
+// sections under 25 words (already plain; the model padded them or wrote
+// about the document).
 const SKIP_KEYS = new Set(['Active Alerts']);
 const MIN_SECTION_CHARS = 20;
 const MAX_SECTION_CHARS = 10000;
 const MAX_SECTIONS = 10;
 
-// The display keys of an edition's tables. None is ever translated now, so a
-// stored translation under one of these keys predates the rule (and may
-// carry swapped numbers): readers drop it (api/_boot.js; the server-rendered
-// digest never renders a table at all, api/office-page.js pickSections).
-export function tabularDisplayKeys(productText) {
+// The display keys of an edition's never-translated sections (tables, short
+// notes). A stored translation under one of these keys predates the rule (a
+// table's may carry swapped numbers): readers drop it (api/_boot.js; the
+// server-rendered digest never renders a table, api/office-page.js
+// pickSections, and shows short sections without AI, aiForSections).
+export function untranslatableDisplayKeys(productText) {
     return new Set(displaySections(productText)
-        .filter(s => isTabularSection(s.key, s.text))
+        .filter(s => isUntranslatable(s.key, s.text))
         .map(s => s.display));
 }
 
@@ -62,7 +65,7 @@ export function tabularDisplayKeys(productText) {
 // poller alike, so an excluded section can never leave an edition incomplete.
 export function translatableSections(productText) {
     return displaySections(productText)
-        .filter(s => !isTabularSection(s.key, s.text))
+        .filter(s => !isUntranslatable(s.key, s.text))
         .map(s => ({ key: s.display, text: s.text }))
         .filter(s => !SKIP_KEYS.has(s.key))
         .filter(s => s.text.length >= MIN_SECTION_CHARS && s.text.length <= MAX_SECTION_CHARS)

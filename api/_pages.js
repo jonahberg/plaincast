@@ -42,7 +42,7 @@ export const PAGES = {
             { h: 'How it works' },
             { ul: [
                 'The latest discussion is fetched live from the National Weather Service API for any of the 123 forecast offices that write one. Nothing is scraped, and no key is required — it is public data.',
-                'Each section is summarized by Anthropic\'s Claude Haiku into readable prose. The model summarizes; it never forecasts, and it is never asked to add information the forecaster did not write.',
+                'Each section is summarized by Anthropic\'s Claude Haiku into readable prose. The model summarizes; it never forecasts, and it is never asked to add information the forecaster did not write. Tables of numbers and sections only a sentence or two long are already plain, so they are shown as the forecaster wrote them, shorthand expanded.',
                 'The original text is annotated in parallel: 230+ meteorological terms carry hover definitions, 109 abbreviation patterns are expanded, and Zulu times are converted to the office\'s local clock.',
                 'A confidence reading is derived from the forecaster\'s own hedging language — "high confidence" and "models diverge" are counted, not guessed at.',
                 'Every page is readable without JavaScript: the server renders the edition first, and the interactive one loads over it. Where that server-rendered edition includes an AI summary, it is labelled as written by Claude and followed by the National Weather Service\'s text; otherwise you read the NWS text alone, with its shorthand expanded.',
