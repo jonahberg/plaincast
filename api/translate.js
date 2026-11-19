@@ -178,12 +178,17 @@ const UNTRANSLATED_SECTIONS = new Set(['Active Alerts']);
 
 export function buildSectionIndex(productText) {
     const index = new Map(); // normalized section text -> canonical section key
+    index.sourceText = new Map(); // normalized section text -> the server-parsed section text
     const add = (key, text) => {
         const sectionKey = canonicalSectionKey(key);
         if (UNTRANSLATED_SECTIONS.has(sectionKey)) return;
         const n = normalizeForMatch(text);
         if (n.length < 20 || index.has(n)) return;
         index.set(n, sectionKey);
+        // The parser's own text for that section: the prompt is built from
+        // THIS, never from the client's reflow of it (same normalized key,
+        // so one cache entry can only ever hold one prompt's answer).
+        index.sourceText.set(n, text);
     };
     if (typeof productText !== 'string' || !productText) return index;
     try {
@@ -200,7 +205,7 @@ export function findMatchingSection(text, products) {
     if (n.length < 20) return null;
     for (const product of products) {
         const sectionKey = product.sections?.get(n);
-        if (sectionKey) return { product, sectionKey };
+        if (sectionKey) return { product, sectionKey, text: product.sections.sourceText?.get(n) ?? null };
     }
     return null;
 }
@@ -973,6 +978,10 @@ export default async function handler(req, res) {
     // The label comes from the matched section; the client's label is used
     // only in degraded mode, where nothing is cached.
     let sectionKey = clientSectionKey;
+    // What the model reads: the server's own parse of the matched section.
+    // The client's text only proves which section it is (and is the cache
+    // key after normalisation); in degraded mode there is nothing else.
+    let sourceText = text;
     if (!degraded) {
         const match = findMatchingSection(text, afdProducts);
         if (!match) {
@@ -980,6 +989,7 @@ export default async function handler(req, res) {
         }
         matchedProduct = match.product;
         sectionKey = match.sectionKey;
+        sourceText = match.text || text;
         const hit = getCachedTranslation(text, sectionKey, officeCode);
         if (hit) return res.status(200).json({ translation: hit, cached: true });
     } else {
@@ -995,17 +1005,18 @@ export default async function handler(req, res) {
     // Calendar context: trust the matched product's issuance time over the
     // client's claim; the client value is only a hint when NWS is unreachable.
     const promptIssuanceTime = matchedProduct?.issuanceTime || issuanceTime;
-    // The raw text (stamp included) gives the section's written time; the
-    // cache key is that same raw text, so the prompt stays a function of the key.
-    const systemPrompt = buildSystemPrompt({ section: promptSectionLabel(sectionKey), office: officeCode, issuanceTime: promptIssuanceTime, text });
+    // The section's stamp gives its written time. Read from the server's
+    // text, so a reflowed copy of the same section cannot change the prompt
+    // behind one cache key.
+    const systemPrompt = buildSystemPrompt({ section: promptSectionLabel(sectionKey), office: officeCode, issuanceTime: promptIssuanceTime, text: sourceText });
 
     try {
         const result = await generateText({
             model: MODEL,
             providerOptions: PROVIDER_OPTIONS,
             system: systemPrompt,
-            // The stamp leaves the prompt only; `text` stays exact for the cache key.
-            prompt: annotateZuluTimes(stripHeaderStamp(text), officeCode, promptIssuanceTime),
+            // The stamp leaves the prompt only; the cache key is the normalized text.
+            prompt: annotateZuluTimes(stripHeaderStamp(sourceText), officeCode, promptIssuanceTime),
             maxOutputTokens: degraded ? DEGRADED_MAX_TOKENS : 2048,
             abortSignal: AbortSignal.timeout(15000),
         });
