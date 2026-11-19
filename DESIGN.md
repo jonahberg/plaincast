@@ -25,6 +25,10 @@ server-rendered `/national/`, `/about`, `/contact`, `/privacy`, `/developers` an
 - **Reading face: Source Serif 4** (OFL), self-hosted. It lives at
   `docs/fonts/source-serif-4-latin.woff2` (variable, wght 400–700) and is served at
   `/fonts/` under CSP `font-src 'self'`.
+  - The roman is subset by `scripts/subset-reading-font.py` to the CSS `unicode-range`
+    and the features the site uses (browser defaults + `pnum`/`tnum`). A new
+    `font-variant-*` value (small caps, oldstyle figures, fractions) needs that script
+    re-run with the feature added.
   - The roman is preloaded in every shell. The italic is declared but not preloaded.
   - A metric-matched fallback, `'Plaincast Serif Fallback'`, is Georgia tuned with
     `size-adjust` and the ascent/descent overrides. Its set width is within 0.5% of

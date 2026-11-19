@@ -160,7 +160,7 @@ function AlertStatus({ row, onJump }) {
 export function PageIntro({
     office, takeawayHTML, takeawayFromMessages, forecaster, issueLine, fullText, conditions,
     conditionsExpected = false, changelog, changelogPending = false, editions, currentEditionId, onSelectEdition, viewingHistorical,
-    changelogHref, onOpenChangelog, alertRow, onJumpToAlerts,
+    changelogHref, onOpenChangelog, onChangelogIntent, alertRow, onJumpToAlerts,
 }) {
     const tz = OFFICE_TIMEZONES[office];
     const score = confidenceScore(fullText);
@@ -238,6 +238,9 @@ export function PageIntro({
             <a
                 href={changelogHref}
                 onClick={onOpenChangelog}
+                onPointerEnter={onChangelogIntent}
+                onPointerDown={onChangelogIntent}
+                onFocus={onChangelogIntent}
                 className="tap-target font-medium text-brand underline decoration-brand/40 underline-offset-4 hover:decoration-brand"
             >
                 See every revision
