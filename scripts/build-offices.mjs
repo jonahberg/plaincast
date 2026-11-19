@@ -226,15 +226,18 @@ export function renderOpenApiEnums(spec, codes = Object.keys(OFFICE_NAMES)) {
 // vercel.json: the legacy /?office=<CODE> deep link answers 308 to
 // /o/<CODE>/ (Vercel evaluates `redirects` before the filesystem and the
 // rewrites; the request's query string, `office` included, passes through).
-// The `has` value is an exact alternation of the roster, so an unknown,
-// malformed or lowercase code does not match and falls through to
-// api/home.js as before. Anchored explicitly, so it means the same whether
+// The `has` value is an exact alternation of the roster, in any letter case
+// ([Oo][Kk][Xx]: a regex flag is not portable here), so an unknown or
+// malformed code does not match and falls through to api/home.js as before.
+// A lowercase code lands on /o/okx/, which api/office-page.js serves with
+// the canonical /o/OKX/. Anchored explicitly, so it means the same whether
 // or not the platform anchors `has` values itself. Rewritten in place, as
 // text: a JSON round-trip would reformat the whole file.
+const anyCase = (code) => [...code].map(ch => `[${ch}${ch.toLowerCase()}]`).join('');
 export function officeRedirectPattern(codes = Object.keys(OFFICE_NAMES)) {
-    return `^(?<code>${codes.join('|')})$`;
+    return `^(?<code>${codes.map(anyCase).join('|')})$`;
 }
-const OFFICE_REDIRECT_RE = /("key": "office", "value": ")\^\(\?<code>[A-Z|]*\)\$(")/;
+const OFFICE_REDIRECT_RE = /("key": "office", "value": ")\^\(\?<code>[A-Za-z|[\]]*\)\$(")/;
 export function renderVercelRedirect(text, codes = Object.keys(OFFICE_NAMES)) {
     if (!OFFICE_REDIRECT_RE.test(text)) throw new Error('vercel.json: the /?office= redirect\'s `has` value was not found');
     return text.replace(OFFICE_REDIRECT_RE, (_, open, close) => `${open}${officeRedirectPattern(codes)}${close}`);

@@ -55,9 +55,9 @@ const MAX_SECTIONS = 2;
 const FULL_CACHE = 'public, s-maxage=900, stale-while-revalidate=3600';
 
 // `/?office=OKX` is the legacy deep link. vercel.json 308s it to /o/OKX/
-// before this function runs, for every office code in its exact (uppercase)
-// form. What still reaches here — a lowercase or unknown code, or `vercel dev`,
-// which does not evaluate `has` — renders as before: a real office's edition,
+// before this function runs, for every office code in any letter case. What
+// still reaches here — an unknown or malformed code, or `vercel dev`, which
+// does not evaluate `has` — renders as before: a real office's edition,
 // validated against OFFICE_NAMES (the value is echoed into HTML, never
 // trusted), else the default.
 export function resolveOffice(raw) {

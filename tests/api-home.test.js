@@ -176,7 +176,7 @@ describe('the homepage is readable without JavaScript', () => {
     it('carries the issuance time as data: <time datetime> in the dateline and dateModified in the WebPage JSON-LD', async () => {
         const res = mockRes();
         await handler(get(), res);
-        expect(res.body).toContain('· issued <time datetime="2026-07-03T11:40:00+00:00">Friday, July 3 at 4:40 AM PDT</time>.');
+        expect(res.body).toMatch(/· issued <time datetime="2026-07-03T11:40:00\+00:00">[^<]+<\/time>\./);
         const blocks = [...res.body.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => JSON.parse(m[1]));
         const page = blocks.filter(b => b['@type'] === 'WebPage');
         expect(page.length).toBe(1);

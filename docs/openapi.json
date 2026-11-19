@@ -51,7 +51,7 @@
             "in": "query",
             "required": false,
             "deprecated": true,
-            "description": "Legacy deep link. An office code, exactly as listed, answers `308` with `Location: /o/{code}/` (the request's query string is passed through); request `/o/{code}/` directly instead.",
+            "description": "Legacy deep link. A listed office code (any letter case) answers `308` with `Location: /o/{code}/` (the request's query string is passed through); request `/o/{code}/` directly instead.",
             "schema": {
               "type": "string",
               "enum": [

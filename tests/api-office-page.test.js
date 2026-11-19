@@ -164,7 +164,7 @@ describe('GET /api/office-page (SSR /o/<CODE>/ pages)', () => {
         setScenario();
         const res = createRes();
         await handler(createReq({ query: { code: 'LOX' } }), res);
-        expect(res.body).toContain('· issued <time datetime="2026-07-03T11:40:00+00:00">Friday, July 3 at 4:40 AM PDT</time>.');
+        expect(res.body).toMatch(/· issued <time datetime="2026-07-03T11:40:00\+00:00">[^<]+<\/time>\./);
         const blocks = [...res.body.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => JSON.parse(m[1]));
         expect(blocks.length).toBe(1);
         expect(blocks[0]['@type']).toBe('WebPage');

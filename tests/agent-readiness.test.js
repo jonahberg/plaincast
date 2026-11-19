@@ -130,10 +130,13 @@ describe('vercel.json: the legacy /?office=<CODE> redirect', () => {
             }
             expect(follow('office=OKX&view=changelog', anchored)).toBe('/o/OKX/?office=OKX&view=changelog');
             expect(follow('edition=a1b2-c3&office=LOT', anchored)).toBe('/o/LOT/?edition=a1b2-c3&office=LOT');
+            // Any letter case: /o/okx/ is served with the canonical /o/OKX/.
+            expect(follow('office=okx', anchored)).toBe('/o/okx/?office=okx');
+            expect(follow('office=Lox', anchored)).toBe('/o/Lox/?office=Lox');
         });
 
-        it(`lets unknown, malformed and lowercase codes fall through to the homepage (${mode})`, () => {
-            for (const v of ['ZZZ', 'okx', 'OKXX', 'XOKX', 'OK', '', 'OKX/', 'OKX ', '../OKX', 'LOX|OKX']) {
+        it(`lets unknown and malformed codes fall through to the homepage (${mode})`, () => {
+            for (const v of ['ZZZ', 'zzz', 'OKXX', 'XOKX', 'OK', '', 'OKX/', 'OKX ', '../OKX', 'LOX|OKX', '[O]KX']) {
                 expect(follow(`office=${encodeURIComponent(v)}`, anchored)).toBe(null);
             }
             expect(follow('view=changelog', anchored)).toBe(null);
