@@ -28,9 +28,9 @@
 import { createHash } from 'node:crypto';
 
 // Key versions, one per family. Bump when that output's rules change.
-export const TRANSLATION_KEY_VERSION = 'v1'; // api/translate-issuance.js (+ translate.js prompt/sanitizer)
-export const CHANGELOG_KEY_VERSION = 'v1';   // api/changelog.js
-export const LEDE_KEY_VERSION = 'v1';        // api/national-lede.js
+export const TRANSLATION_KEY_VERSION = 'v2'; // api/translate-issuance.js (+ translate.js prompt/sanitizer). v2: date-range sanitizer + no-added-advice prompt rule (Nov 18 2026)
+export const CHANGELOG_KEY_VERSION = 'v2';   // api/changelog.js. v2: no-added-advice prompt rule (Nov 18 2026)
+export const LEDE_KEY_VERSION = 'v2';        // api/national-lede.js (+ translate.js sanitizer). v2: date-range sanitizer + no-added-advice prompt rule (Nov 18 2026)
 
 // TTLs, in seconds (the Runtime Cache's unit).
 export const TRANSLATION_TTL = 7 * 24 * 60 * 60;
@@ -47,14 +47,14 @@ export const SET_TIMEOUT_MS = 750;
 const OFFICE_RE = /^[A-Z]{3}$/;
 const ID_RE = /^[\w.:-]{1,64}$/; // the endpoints' own id contract
 
-// `ti:v1:LOX:<id>`: a complete translate-issuance payload.
+// `ti:v2:LOX:<id>`: a complete translate-issuance payload.
 export function translationKey(office, id) {
     const o = String(office ?? '').toUpperCase();
     if (!OFFICE_RE.test(o) || typeof id !== 'string' || !ID_RE.test(id)) return null;
     return `ti:${TRANSLATION_KEY_VERSION}:${o}:${id}`;
 }
 
-// `cl:v1:LOX:<id>`: the changelog verdict for the pair whose CURRENT
+// `cl:v2:LOX:<id>`: the changelog verdict for the pair whose CURRENT
 // issuance is <id> (that issuance against its predecessor).
 export function changelogKey(office, currentId) {
     const o = String(office ?? '').toUpperCase();
@@ -62,7 +62,7 @@ export function changelogKey(office, currentId) {
     return `cl:${CHANGELOG_KEY_VERSION}:${o}:${currentId}`;
 }
 
-// `lede:v1:<ISO instant>`: the National Desk's AI pieces for one SPC Day 1
+// `lede:v2:<ISO instant>`: the National Desk's AI pieces for one SPC Day 1
 // issuance. The instant is canonicalised so two spellings of the same
 // issuance ("…+00:00" and "…Z") share one entry.
 export function ledeKey(issued) {

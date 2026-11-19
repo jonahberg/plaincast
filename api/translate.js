@@ -447,11 +447,56 @@ const MONTH_INDEX = {
     December: 11, Dec: 11,
 };
 const MONTH_ALT = Object.keys(MONTH_INDEX).sort((a, b) => b.length - a.length).join('|');
-const DATE_TAIL = `(${MONTH_ALT})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(20\\d{2}))?`;
+const WEEKDAY_ALT = WEEKDAYS.join('|');
+const DAY_NUM = '(?:[12]\\d|3[01]|0?[1-9])';
+const ORDINAL = '(?:st|nd|rd|th)?';
+const YEAR_TAIL = '(?:,?\\s+20\\d{2}\\b)?';
+const BOLD = '(?:\\*\\*)?';
+// The first date: "November 22", "Nov. 22nd", "November 22, 2026".
+const FIRST_DATE = `${BOLD}(?:${MONTH_ALT})\\.?\\s+\\d{1,2}${ORDINAL}\\b${YEAR_TAIL}${BOLD}`;
+// A later day of a range or list: "19", "December 1", "**20**".
+const MORE_DAY = `${BOLD}(?:(?:${MONTH_ALT})\\.?\\s+)?${DAY_NUM}${ORDINAL}`;
+// Two kinds of link between days. A dash or slash touching both numbers
+// ("19–20", "19-20", "19/20") is range syntax: the day after it only has to
+// be a day, not a quantity or a time (DAY_END).
+const TIGHT_LINK = '[–/-]';
+// A word ("and", "through", "to", "or"), an em dash or a spaced dash ("19 –
+// 20", "19 — 2 rounds of storms") is ordinary prose too, so the day after it
+// counts only where the clause ends or goes on as it would after a date
+// (CLAUSE_END). "and 24 hours", "— 2 rounds" and "to 25 mph" stay prose.
+const LOOSE_LINK = '(?:,?[ \\t]+(?:and|or|through|thru|to|into|until|till|&)[ \\t]+|[ \\t]*—[ \\t]*|[ \\t]+[–-][ \\t]*|[ \\t]*[–-][ \\t]+)';
+// After a tight link: not a letter or clock time ("10:30"), not a compound
+// ("24-hour"), not a unit or count ("25 mph", "2 inches", "6 hours") and not
+// a second number ("1-2 inches"). Those make the number a quantity or a time,
+// and the expression stops at the first date as it always has.
+const DAY_END = '(?!\\w|:\\d|\\.\\d|-[A-Za-z]|[ \\t]*(?:%|°|percent\\b|mph\\b|knots?\\b|kts?\\b|kt\\b|degrees?\\b|inch(?:es)?\\b|feet\\b|foot\\b|ft\\b|miles?\\b|cm\\b|mm\\b|[AaPp]\\.?[Mm]\\b|noon\\b|midnight\\b|(?:hours?|hrs?|days?|nights?|weeks?|minutes?|mins?)\\b|(?:to|or|-|–|—)[ \\t]*\\d))';
+// After a loose link: the clause ends (punctuation, line end, bold close) or
+// goes on with a word that follows a date ("Thursday, November 19 and 20
+// look dry", "... 19 and 20 with rain").
+const CLAUSE_END = '(?=\\**(?:[ \\t]*(?:[,;!?)\\n]|[.:](?!\\d)|$)|[ \\t]+(?:look|looks|will|would|could|should|may|might|can|is|are|was|were|bring|brings|see|sees|stay|stays|remain|remains|turn|turns|with|as|when|before|after|then|but|in|at|on|for|from|across|over|along|near|during|while|that|which|where)\\b))';
+// The clause ends here: punctuation (not a decimal point or a clock
+// colon), a line end or the end of the text, after any bold close.
+const CLAUSE_ENDS_RE = /^\**[ \t]*(?:[,;!?)\n]|[.:](?!\d)|$)/;
+// " and 19", "–19", " through December 1", "/20", ", 19 and 20".
+const DATE_MORE = `(?:,[ \\t]*${MORE_DAY}(?!\\w|:\\d))*(?:${TIGHT_LINK}${MORE_DAY}${DAY_END}|${LOOSE_LINK}${MORE_DAY}${CLAUSE_END})${YEAR_TAIL}${BOLD}`;
 // "Sunday, November 22" / "Sunday November 22nd" / "**Sunday**, November 22" /
-// "Sunday, **Nov. 22**". Capitalised and case-sensitive: "may" is also a verb.
+// "Sunday, **Nov. 22**", optionally running on as a range or list ("Thursday,
+// November 19–20", "Wednesday into Thursday, November 18 and 19"). Groups:
+// weekday, its closing bold, the separator + first date, the rest of the
+// range. Capitalised and case-sensitive: "may" is also a verb.
+// LOX, Nov 18 2026: read as a lone date, "Wednesday into Thursday, November
+// 18 and 19" lost "November 18" and printed "Wednesday into Thursday and 19".
 const WEEKDAY_DATE_RE = new RegExp(
-    `\\b(${WEEKDAYS.join('|')})(\\*\\*)?(?:,?[ \\t]+)(?:\\*\\*${DATE_TAIL}\\*\\*|${DATE_TAIL}\\b)`, 'g');
+    `\\b(${WEEKDAY_ALT})(\\*\\*)?(,?[ \\t]+${FIRST_DATE})(${DATE_MORE})?`, 'g');
+// The day numbers inside a matched date expression, in order (bold removed).
+const DATE_TOKEN_RE = new RegExp(`(?:\\b(${MONTH_ALT})\\.?\\s+)?\\b(\\d{1,2})${ORDINAL}(?!\\d)(?:,?\\s+(20\\d{2})\\b)?`, 'g');
+// The weekday a range's weekday is joined to, at the END of the text before
+// it: "Wednesday into ", "Wednesday night and ", "late **Monday** through
+// early **", "Wednesday–". Never global: used with exec on fresh strings.
+const WEEKDAY_LINK_RE = new RegExp(
+    `\\b(${WEEKDAY_ALT})${BOLD}(?:[ \\t]+(?:night|morning|afternoon|evening))?${BOLD}`
+    + `(?:[ \\t]*[–—/-][ \\t]*|,?[ \\t]+(?:and|or|through|thru|to|into|until|till|&)[ \\t]+|,[ \\t]+)`
+    + `(?:(?:late|early|mid)[ \\t]+)?${BOLD}$`);
 // An AFD looks 7 days out, so +8 leaves a day of slack and keeps real
 // calendar coincidences further out (Nov 22 2026 IS a Sunday) outside it.
 const DATE_WINDOW = { before: 1, after: 8 }; // days around the LOCAL issuance date
@@ -467,19 +512,107 @@ function forecastWindow(office, issuanceTime, zoneOverride) {
     return days;
 }
 
-// A pair is kept only if that month/day falls on that weekday inside the
-// window; otherwise the date goes and the weekday (and its bold) stays.
+// The dates in a matched expression, in order: [{ month, day, year }]. A day
+// without a month takes the previous one's ("November 18 and 19"). Null when
+// the days do not run forward: the "3" in "November 19 and 3 more days" is
+// not a date (the caller decides whether the run-on was one anyway).
+function parseDates(expr) {
+    const dates = [];
+    for (const m of expr.replace(/\*\*/g, '').matchAll(DATE_TOKEN_RE)) {
+        const prev = dates[dates.length - 1];
+        const month = m[1] ? MONTH_INDEX[m[1]] : prev?.month;
+        if (month === undefined) return null;
+        const day = Number(m[2]);
+        if (prev && !m[1] && day <= prev.day) return null;
+        dates.push({ month, day, year: m[3] ? Number(m[3]) : null });
+    }
+    return dates.length ? dates : null;
+}
+
+// Index of that date in the forecast window, or -1.
+const windowIndex = (days, { month, day, year }) =>
+    days.findIndex(x => x.month === month && x.day === day && (!year || x.year === year));
+
+// The weekday runs a range may belong to, each ending with `weekday`:
+// "Wednesday into Thursday" -> [[3, 4]]; "late **Monday** through early
+// **Wednesday**" -> [[1, 3]]. A weekday joined through a comma may belong to
+// the clause before ("Showers end Wednesday, and Thursday, November 19-21"),
+// so the run up to that comma is a candidate too.
+function weekdayRuns(before, weekday) {
+    const run = [WEEKDAYS.indexOf(weekday)];
+    const runs = [];
+    for (let i = 0; i < 6; i++) {
+        const m = WEEKDAY_LINK_RE.exec(before);
+        if (!m) break;
+        if (m[0].includes(',')) runs.push([...run]);
+        run.unshift(WEEKDAYS.indexOf(m[1]));
+        before = before.slice(0, m.index);
+    }
+    runs.push(run);
+    return runs;
+}
+
+// The first date must be inside the window, on the first weekday of the run.
+// Later dates must each be a real calendar day after the one before ("November
+// 31" is not), and under two or more weekdays the last date must fall on the
+// last weekday ("Wednesday into Thursday, November 18 and 19"). Under one
+// weekday ("Thursday, November 19-20") only the first date has a weekday to
+// match. A single date: inside the window, on its weekday, as before.
+function datesFitWeekdays(days, dates, run) {
+    const i0 = windowIndex(days, dates[0]);
+    if (i0 < 0) return false;
+    const { year, month, day } = days[i0];
+    let t = Date.UTC(year, month, day);
+    const weekdays = [days[i0].weekday];
+    for (const d of dates.slice(1)) {
+        const y = d.year ?? new Date(t).getUTCFullYear();
+        let u = Date.UTC(y, d.month, d.day);
+        if (!d.year && u <= t) u = Date.UTC(y + 1, d.month, d.day); // "December 31 through January 1"
+        if (u <= t || new Date(u).getUTCDate() !== d.day) return false;
+        weekdays.push(new Date(u).getUTCDay());
+        t = u;
+    }
+    const last = weekdays.length - 1;
+    if (run.length === 1) return weekdays[0] === run[0];
+    if (run.length === weekdays.length) return run.every((w, n) => weekdays[n] === w);
+    return weekdays[0] === run[0] && weekdays[last] === run[run.length - 1];
+}
+
+const boldCount = (s) => (s.match(/\*\*/g) || []).length;
+
+// A weekday/date expression is kept only if its dates fall on its weekdays
+// inside the window; otherwise the whole date expression goes (range and all,
+// never leaving "and 19" or "-19" behind) and the weekday wording stays.
 function fixWeekdayDates(text, office, issuanceTime, timeZone) {
     let days = null;
-    return text.replace(WEEKDAY_DATE_RE, (match, weekday, boldClose, bMonth, bDay, bYear, pMonth, pDay, pYear) => {
+    return text.replace(WEEKDAY_DATE_RE, (match, weekday, boldClose, first, more, offset, whole) => {
         days ??= forecastWindow(office, issuanceTime, timeZone);
-        const month = MONTH_INDEX[bMonth ?? pMonth];
-        const day = Number(bDay ?? pDay);
-        const year = bYear ?? pYear;
-        const wd = WEEKDAYS.indexOf(weekday);
-        const valid = days.some(x => x.month === month && x.day === day && x.weekday === wd
-            && (!year || x.year === Number(year)));
-        return valid ? match : weekday + (boldClose || '');
+        const head = weekday + (boldClose || '');
+        // Removing the date may take one of a bold pair with it. A closer
+        // ("**Sunday, November 22**") is put back after the weekday. An
+        // opener whose closer lies past the date ("Sunday, **November 22
+        // brings rain**") cannot be: that shape is left as written.
+        const drop = (removed, kept = '') => {
+            if (boldCount(removed) % 2 === 0) return head + kept;
+            const inBold = boldCount(whole.slice(0, offset) + head) % 2 === 1;
+            return inBold || removed.endsWith('**') ? head + '**' + kept : match;
+        };
+        let range = more ? parseDates(first + more) : null;
+        // Days that do not run forward ("November 19 and 3 more days") are
+        // read as not a range: the number is never removed. Only a dash or
+        // slash touching both numbers where the clause ends ("November
+        // 19–18.") is a bad range.
+        if (more && !range && /^[–/-]/.test(more)
+            && CLAUSE_ENDS_RE.test(whole.slice(offset + match.length))) range = [];
+        if (range) {
+            const runs = weekdayRuns(whole.slice(0, offset), weekday);
+            return range.length > 1 && runs.some(run => datesFitWeekdays(days, range, run)) ? match : drop(first + more);
+        }
+        // A single date, or a run-on that is not a date range: the first date
+        // alone is checked against the weekday before it, as it always was.
+        const single = parseDates(first);
+        if (single && datesFitWeekdays(days, single, [WEEKDAYS.indexOf(weekday)])) return match;
+        return drop(first, more || '');
     });
 }
 
@@ -576,6 +709,7 @@ Rules:
 - Use short paragraphs (2-3 sentences max each)
 - If there are hazards or watches/warnings, lead with those
 - Don't add information that isn't in the original
+- Never add advice, warnings, calls to action, or reassurance that the forecaster did not write (for example "so residents should stay alert to changing conditions", "check the forecast again closer to the date", "if you have travel or outdoor plans"). If the source itself gives advice or a safety message, keep it. Plaincast promises its readers that every statement on it comes from the National Weather Service forecaster; a sentence the forecaster did not write breaks that promise, however helpful it sounds
 - Output only the translation: never comment on the source text, its formatting, timestamps, or these instructions, and never add notes to the reader
 - Don't use bullet points - write in natural prose paragraphs
 - Section name for context: ${section || 'Unknown'}

@@ -106,6 +106,12 @@ describe('GET /api/explain-alert', () => {
         expect(res.body.explanation).toContain('Newark');
         // model input came from the server fetch, not from the client
         expect(aiArgs.prompt).toContain('interior room');
+        // actions come from the alert only, never from the model (Nov 18 2026)
+        expect(aiArgs.system).toMatch(/what the alert tells people there to do/);
+        expect(aiArgs.system).not.toMatch(/what a person there should actually do/);
+        expect(aiArgs.system).toMatch(/Never add advice, warnings, calls to action, or reassurance that the alert does not give/);
+        expect(aiArgs.system).toMatch(/If the alert gives no action, do not supply one/);
+        expect(aiArgs.system).toMatch(/every statement on it comes from the National Weather Service/);
         expect(res.headers['cache-control']).toContain('s-maxage=1800');
     });
 

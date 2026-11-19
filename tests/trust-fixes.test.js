@@ -118,6 +118,216 @@ describe('sanitizeTranslation — weekday/date pairs', () => {
     });
 });
 
+// Nov 18 2026, live on LOX: the checker cut ranges in half. "Wednesday into
+// Thursday, November 18 and 19" lost "November 18" (18 is not a Thursday) and
+// left "Wednesday into Thursday and 19"; "November 18–19" left "Thursday–19".
+// A date expression that runs on as a range or list is one unit now.
+describe('sanitizeTranslation — date ranges and lists', () => {
+    // 1:42 PM PST Wed Nov 18 2026 (Nov 19 is a Thursday). Window: Nov 17..26.
+    const ctx = { office: 'LOX', issuanceTime: '2026-11-18T21:42:00+00:00' };
+    const nov28 = { office: 'LOX', issuanceTime: '2026-11-28T20:00:00Z' }; // Sat Nov 28; Nov 30 is a Monday
+    const dec30 = { office: 'LOX', issuanceTime: '2026-12-30T20:00:00Z' }; // Wed Dec 30; Dec 31 is a Thursday
+    // A day number left hanging after a weekday: "Thursday and 19", "Thursday–19".
+    const ORPHAN_RE = /\b(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\**(?:,?\s+(?:and|or|to|through|into)\s+|\s*[–—/-]\s*)\**\d{1,2}\b/;
+
+    it('keeps the four live LOX strings as written (all consistent with their weekdays)', () => {
+        for (const text of [
+            'thunderstorms from Wednesday into Thursday, November 18 and 19. This storm',
+            '**Wednesday into Thursday, November 18 and 19**.',
+            'thunderstorms Wednesday and Thursday, November 18–19.',
+            'rain on Thursday, November 19.',
+        ]) {
+            expect(sanitizeTranslation(text, ctx)).toBe(text);
+        }
+    });
+
+    it('keeps a range under one weekday when its first date is that weekday', () => {
+        for (const text of [
+            'Thursday, November 19–20 looks wet.',
+            'Thursday, November 19-20 looks wet.',
+            'Thursday, November 19 through 21 looks wet.',
+            'Thursday, November 19 to 20 looks wet.',
+            'Thursday, November 19/20 looks wet.',
+            'Thursday, November 19 and 20 looks wet.',
+            'Thursday, November 19 or 20 looks wet.',
+            'Thursday, Nov. 19–20 looks wet.',
+            'Thursday, November 19th and 20th looks wet.',
+            'Thursday, November 19, 20 and 21 looks wet.',
+            // only the first date has a weekday; a later end is not checked
+            // against the window (Nov 30 is +12 days)
+            'Thursday, November 19 through 30 looks wet.',
+            '**Thursday, November 19–20** looks wet.',
+            '**Thursday**, November 19–20 looks wet.',
+            'Thursday, **November 19–20** looks wet.',
+        ]) {
+            expect(sanitizeTranslation(text, ctx)).toBe(text);
+        }
+    });
+
+    it('keeps a range under two weekdays when the dates line up with both', () => {
+        for (const text of [
+            'Rain Wednesday into Thursday, November 18 and 19.',
+            'Rain Wednesday–Thursday, November 18–19.',
+            'Rain Wednesday night into Thursday, November 18–19.',
+            '**Wednesday** into **Thursday**, November 18 and 19.',
+            // HGX Messages shape (the stored text lost "November 23"): both
+            // weekdays bold, "late"/"early" between them.
+            'Wetter conditions are likely from late **Monday** through early **Wednesday**, November 23 to 25.',
+            'Dry Wednesday, Thursday and Friday, November 18, 19 and 20.',
+        ]) {
+            expect(sanitizeTranslation(text, ctx)).toBe(text);
+        }
+    });
+
+    it('keeps cross-month and cross-year ranges', () => {
+        expect(sanitizeTranslation('Rain Monday, November 30 through December 1.', nov28)).toBe('Rain Monday, November 30 through December 1.');
+        expect(sanitizeTranslation('Rain Monday into Tuesday, November 30 and December 1.', nov28)).toBe('Rain Monday into Tuesday, November 30 and December 1.');
+        expect(sanitizeTranslation('Rain Monday, Nov. 30–Dec. 1.', nov28)).toBe('Rain Monday, Nov. 30–Dec. 1.');
+        expect(sanitizeTranslation('Rain Thursday, December 31 through January 1.', dec30)).toBe('Rain Thursday, December 31 through January 1.');
+        expect(sanitizeTranslation('Rain Thursday, December 31, 2026 through January 1, 2027.', dec30))
+            .toBe('Rain Thursday, December 31, 2026 through January 1, 2027.');
+    });
+
+    it('removes the whole expression when the dates do not match the weekdays', () => {
+        const cases = [
+            // shifted a day against "Wednesday into Thursday"
+            ['thunderstorms from Wednesday into Thursday, November 19 and 20. This storm', 'thunderstorms from Wednesday into Thursday. This storm'],
+            ['Rain Wednesday into Thursday, November 18 and 20.', 'Rain Wednesday into Thursday.'],
+            ['thunderstorms Wednesday and Thursday, November 19–20.', 'thunderstorms Wednesday and Thursday.'],
+            ['Rain late **Monday** through early **Wednesday**, November 22 to 24.', 'Rain late **Monday** through early **Wednesday**.'],
+            // one weekday, wrong first date
+            ['Friday, November 19–20 looks dry.', 'Friday looks dry.'],
+            ['Thursday, November 18-19 looks dry.', 'Thursday looks dry.'],
+            ['Thursday, November 18 through 19 looks dry.', 'Thursday looks dry.'],
+            ['Thursday, November 18/19 looks dry.', 'Thursday looks dry.'],
+            ['Rain Thursday, November 18 and 19, then clearing.', 'Rain Thursday, then clearing.'],
+            // first date outside the -1..+8 day window (Nov 30 for a Nov 18 issuance)
+            ['Rain Monday, November 30 through December 1.', 'Rain Monday.'],
+            // a dash touching two days that run backwards, ending the clause,
+            // is still a (bad) range
+            ['Rain Thursday, November 19–18.', 'Rain Thursday.'],
+            ['Rain Thursday, November 19/18, then dry.', 'Rain Thursday, then dry.'],
+            // spaced dashes are ranges too when the clause ends after the day
+            ['Rain Friday, November 19 – 20.', 'Rain Friday.'],
+            // a weekday joined through a comma: neither reading fits
+            ['Showers end Tuesday, and Thursday, November 18 through 21, stay dry.', 'Showers end Tuesday, and Thursday, stay dry.'],
+        ];
+        for (const [input, want] of cases) {
+            expect(sanitizeTranslation(input, ctx)).toBe(want);
+        }
+        // cross-month and cross-year with the wrong weekday
+        expect(sanitizeTranslation('Rain Tuesday, November 30 through December 1.', nov28)).toBe('Rain Tuesday.');
+        expect(sanitizeTranslation('Rain Friday, December 31 through January 1.', dec30)).toBe('Rain Friday.');
+        // there is no November 31
+        expect(sanitizeTranslation('Rain Monday, November 30–31.', nov28)).toBe('Rain Monday.');
+    });
+
+    it('keeps the bold markers balanced when it removes a range', () => {
+        expect(sanitizeTranslation('**Wednesday into Thursday, November 19 and 20**.', ctx)).toBe('**Wednesday into Thursday**.');
+        expect(sanitizeTranslation('**Friday, November 19–20** looks dry.', ctx)).toBe('**Friday** looks dry.');
+        expect(sanitizeTranslation('**Friday**, November 19–20 looks dry.', ctx)).toBe('**Friday** looks dry.');
+        expect(sanitizeTranslation('Friday, **November 19–20** looks dry.', ctx)).toBe('Friday looks dry.');
+        expect(sanitizeTranslation('**Friday**, **November 19–20** looks dry.', ctx)).toBe('**Friday** looks dry.');
+        expect(sanitizeTranslation('**Friday, November 19** and **20** look dry.', ctx)).toBe('**Friday** look dry.');
+        expect(sanitizeTranslation('Friday, **November 19**–20 looks dry.', ctx)).toBe('Friday looks dry.');
+        // Bold that opens on the date and closes past it cannot be split
+        // cleanly; left as written (the old checker never matched it either).
+        const open = 'Rain Friday, **November 19 and 20 bring storms**.';
+        expect(sanitizeTranslation(open, ctx)).toBe(open);
+    });
+
+    it('never leaves a day-number fragment behind', () => {
+        const inputs = [];
+        for (const pre of ['', 'Wednesday into ', 'Tuesday and ', 'late **Monday** through early ']) {
+            for (const wd of ['Thursday', 'Friday', 'Saturday']) {
+                for (const date of ['November 18 and 19', 'November 18–19', 'November 18-19', 'November 18 through 20',
+                    'November 18 to 19', 'November 18/19', 'November 18 or 19', 'November 27 and 28', 'November 18, 19 and 20']) {
+                    inputs.push(`Rain ${pre}${wd}, ${date}. Dry after.`, `**Rain ${pre}${wd}, ${date}**. Dry after.`);
+                }
+            }
+        }
+        for (const text of inputs) {
+            const out = sanitizeTranslation(text, ctx);
+            expect(out).not.toMatch(ORPHAN_RE);
+            expect((out.match(/\*\*/g) || []).length % 2).toBe(0);
+            expect(sanitizeTranslation(out, ctx)).toBe(out); // idempotent
+        }
+    });
+
+    it('does not take a quantity or a clock time after the date for a second day', () => {
+        // In-window date: nothing to change.
+        for (const text of [
+            'Gusts Friday, November 20 to 25 mph.',
+            'Rain arrives Thursday, November 19 and 1 to 2 inches are possible.',
+            'Showers Thursday, November 19 to 10 PM.',
+            'Rain Thursday, November 19 and 3 more days of showers.',
+            'Rain Thursday, November 19 and 20 percent chances after.',
+        ]) {
+            expect(sanitizeTranslation(text, ctx)).toBe(text);
+        }
+        // Wrong weekday: only the date goes, exactly as before ranges were understood.
+        expect(sanitizeTranslation('Gusts Saturday, November 20 to 25 mph.', ctx)).toBe('Gusts Saturday to 25 mph.');
+        expect(sanitizeTranslation('Rain arrives Friday, November 19 and 1 to 2 inches are possible.', ctx))
+            .toBe('Rain arrives Friday and 1 to 2 inches are possible.');
+        expect(sanitizeTranslation('Showers Friday, November 19 to 10 PM.', ctx)).toBe('Showers Friday to 10 PM.');
+        expect(sanitizeTranslation('Showers Friday, November 19 to 10:30.', ctx)).toBe('Showers Friday to 10:30.');
+        // "and 3" cannot be a later November day than the 19th: not a list.
+        expect(sanitizeTranslation('Rain Friday, November 19 and 3 more days of showers.', ctx)).toBe('Rain Friday and 3 more days of showers.');
+    });
+
+    it('reads a dash or "and" before a count as prose, never deleting the number', () => {
+        // In-window first date: nothing to change.
+        for (const text of [
+            'Rain arrives Thursday, November 19 — 2 rounds of storms are expected.',
+            'Rain Thursday, November 19 - 6 hours of steady rain.',
+            'Rain **Thursday, November 19** — 12-hour totals near an inch.',
+            'Rain Thursday, November 19—24 hours of rain.',
+            'Rain Thursday, November 19 — 24-hour totals near an inch.',
+            'Rain Wednesday into Thursday, November 19 and 24 hours of showers.',
+            'Thursday, November 19 – 20 looks wet.',
+        ]) {
+            expect(sanitizeTranslation(text, ctx)).toBe(text);
+        }
+        // Wrong weekday: only the first date goes; the count stays.
+        expect(sanitizeTranslation('Rain arrives Friday, November 19 — 2 rounds of storms are expected.', ctx))
+            .toBe('Rain arrives Friday — 2 rounds of storms are expected.');
+        expect(sanitizeTranslation('Rain Friday, November 19 — 24 hours of rain.', ctx)).toBe('Rain Friday — 24 hours of rain.');
+        expect(sanitizeTranslation('Rain Friday, November 19 — 24-hour totals near an inch.', ctx)).toBe('Rain Friday — 24-hour totals near an inch.');
+    });
+
+    it('accepts a weekday run joined through a comma, or the run after the comma', () => {
+        for (const text of [
+            'Showers end Wednesday, and Thursday, November 19 through 21, stay dry.',
+            'Dry Wednesday, Thursday and Friday, November 18, 19 and 20.',
+        ]) {
+            expect(sanitizeTranslation(text, ctx)).toBe(text);
+        }
+    });
+
+    it('records the limits: a backwards "and" list or a range before a quantity is read as one date', () => {
+        // Days that do not run forward are read as not a date, so the number
+        // is never removed; with a wrong first date that leaves "and 18".
+        expect(sanitizeTranslation('Rain Thursday, November 19 and 18.', ctx)).toBe('Rain Thursday, November 19 and 18.');
+        expect(sanitizeTranslation('Rain Friday, November 19 and 18.', ctx)).toBe('Rain Friday and 18.');
+        // "20 to 25 mph" reads as a quantity, not as the end of a range.
+        expect(sanitizeTranslation('Gusts Friday, November 19 and 20 to 25 mph.', ctx)).toBe('Gusts Friday and 20 to 25 mph.');
+    });
+
+    it('leaves separate weekday/date pairs and plain prose alone', () => {
+        const text = 'Rain Wednesday, November 18 and Thursday, November 19, then dry Friday, November 20.';
+        expect(sanitizeTranslation(text, ctx)).toBe(text);
+        expect(sanitizeTranslation('Rain Wednesday, November 18 and Friday, November 19.', ctx)).toBe('Rain Wednesday, November 18 and Friday.');
+        const prose = 'Rain **Wednesday** into **Thursday**, with **1 to 2 inches** and gusts to **50 mph** by 10 PM.';
+        expect(sanitizeTranslation(prose, ctx)).toBe(prose);
+    });
+
+    it('drops a range after "today": only weekdays are checked, and today is not one', () => {
+        // Recorded behaviour, not a goal: "today" is not resolved to a weekday,
+        // so the range is read against Thursday alone (18 is not a Thursday).
+        expect(sanitizeTranslation('Rain today into Thursday, November 18 and 19.', ctx)).toBe('Rain today into Thursday.');
+    });
+});
+
 describe('sanitizeTranslation — asides about the source', () => {
     const ctx = { office: 'LOX', issuanceTime: LOX_ISSUED };
 
@@ -183,6 +393,19 @@ describe('buildSystemPrompt — output-only and weekday-date rules', () => {
         // the existing rules survive
         expect(prompt).toMatch(/Never introduce a different month, year, or season than the source supports/i);
         expect(prompt).toMatch(/Don't add information that isn't in the original/i);
+    });
+
+    // LOX Synopsis, Nov 18 2026: the source said "There is a risk of
+    // significant impacts, including a flooding and the potential for wind
+    // related issues"; the model added "so residents should stay alert to
+    // changing conditions". No regex can tell that from a forecaster's own
+    // advice, so the rule lives in the prompt (measured on a preview deploy).
+    it('forbids advice the forecaster did not write, keeps advice they did, and says why', () => {
+        const prompt = buildSystemPrompt({ section: 'Synopsis', office: 'LOX', issuanceTime: LOX_ISSUED });
+        expect(prompt).toMatch(/Never add advice, warnings, calls to action, or reassurance that the forecaster did not write/);
+        expect(prompt).toContain('residents should stay alert to changing conditions');
+        expect(prompt).toMatch(/If the source itself gives advice or a safety message, keep it/);
+        expect(prompt).toMatch(/every statement on it comes from the National Weather Service/);
     });
 });
 
