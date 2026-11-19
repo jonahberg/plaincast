@@ -1,12 +1,18 @@
 // Vercel cron function (vercel.json `crons`, every 5 minutes, production
-// only): the edition poller. Safe to run with every switch off: it then only
-// polls api.weather.gov and keeps the edition store (api/_store.js) current.
+// only): the edition poller. It does nothing at all (no store, no NWS) unless
+// PLAINCAST_POLLER=1 or a feature switch that needs it is on, so merging the
+// engine changes nothing. With PLAINCAST_POLLER alone it only polls
+// api.weather.gov and keeps the edition store (api/_store.js) current.
+// Rollout: POLLER (watch the summaries), then STORE_RENDER, then
+// PRETRANSLATE, then AI_FOR_AGENTS.
 //
 // One run, in order:
 //   1. Lease. One run at a time, and at most one run per MIN_RUN_INTERVAL_MS
 //      whoever calls (Vercel's scheduler, or a person on a preview, where a
 //      missing CRON_SECRET is allowed): extra calls cost one store read.
-//      Production refuses every call until CRON_SECRET is set.
+//      Production refuses every call until CRON_SECRET is set. The lease is
+//      re-read before every state save and model-call reservation; a run
+//      that lost it to a racing one stops.
 //   2. Poll. The AFDs issued since the last heartbeat minus a margin (the
 //      7-day list on a cold start and every FULL_RECONCILE_MS). The state
 //      records the newest product per office; the HEARTBEAT is written only
@@ -25,7 +31,9 @@
 //      and the least likely to be superseded before it is read), through the
 //      same core as /api/translate-issuance, plus the changelog sentence.
 //      Spend controls: section reuse, PLAINCAST_PRETRANSLATE_PER_RUN
-//      issuances per run (default 6), 2 at a time, a start-time budget well
+//      model-call tasks per run (default 6: an issuance's translation or a
+//      changelog sentence; each call one request, no SDK retries), issuances
+//      2 at a time, a start-time budget well
 //      inside maxDuration, PLAINCAST_PRETRANSLATE_DAILY_MAX model calls per
 //      UTC day (default 3000) reserved in the store BEFORE each call (no
 //      counter, no call), and MAX_ATTEMPTS per edition. A cap ends the phase
