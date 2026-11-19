@@ -326,7 +326,7 @@ describe('footer office index on phones', () => {
         expect(footer).toContain('<Accordion type="single" collapsible className="mt-2 border-t sm:hidden">');
         expect(footer).toContain('<AccordionTrigger className="min-h-11 ');
         expect(footer).toContain('<ul className="grid grid-cols-2 ');
-        expect(footer).toContain('className="flex min-h-11 items-center"');
+        expect(footer).toContain('className="flex min-h-11 items-center py-1"');
     });
 
     it('keeps the multi-column grid from sm up', () => {
