@@ -7,8 +7,9 @@
 //
 // The goldens in tests/fixtures/engine-golden/ were rendered by origin/main
 // (25363cf) BEFORE the engine existed, from the fixed fixtures below. Bodies
-// are stored relative to the page shell (see `normalize`), so a later,
-// legitimate change to the shell or the office index does not break them;
+// are stored relative to the page shell (see `normalize`) and compared with
+// the office count masked (`countFree`; it comes from OFFICE_NAMES), so a
+// later, legitimate change to the shell or the office list does not break them;
 // everything the handlers themselves write (the SSR digest, the boot block,
 // the Markdown, every header) is compared exactly.
 //
