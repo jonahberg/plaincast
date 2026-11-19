@@ -48,8 +48,8 @@ Synopsis, Discussion, Short Term, Long Term, Aviation, Marine, Beaches, Fire Wea
 ### ⚠️ Active Alerts
 Current watches, warnings, and advisories laid out as a hairline-ruled ledger with emoji-free severity marks (filled for warnings, hatched for watches, hollow outline for advisories, dashed for statements). Rows expand inline, and when enough alerts carry start/end times an optional "On the clock" timetable plots them against the hours ahead.
 
-### 🏢 68 NWS Offices
-Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington DC, Pittsburgh, Buffalo, Raleigh, Charleston), Southeast (Atlanta, Miami, Jacksonville, Tampa Bay, Birmingham, Nashville, Morristown, Jackson), Midwest (Chicago, Detroit, Indianapolis, Cleveland, Cincinnati, Milwaukee, Grand Rapids, St. Louis, Kansas City, Des Moines), Northern Plains (Minneapolis, Duluth, Sioux Falls, Bismarck, Omaha, Grand Forks), South Central (Dallas/Fort Worth, Houston, San Antonio, Oklahoma City, Tulsa, Little Rock, New Orleans, Shreveport, Lake Charles), Rockies (Denver, Pueblo, Grand Junction, Salt Lake City, Boise, Billings, Missoula, Riverton), Southwest (Phoenix, Las Vegas, Tucson, Flagstaff, Albuquerque, El Paso), Pacific (Los Angeles, San Diego, San Francisco, Sacramento, Central CA, Eureka, Seattle, Portland, Medford, Spokane), and Alaska/Hawaii (Anchorage, Fairbanks, Honolulu).
+### 🏢 All 123 NWS Forecast Offices
+Every National Weather Service office that writes an Area Forecast Discussion: the contiguous US by region, plus Alaska (Anchorage, Fairbanks, Juneau), Hawaii (Honolulu), Guam, American Samoa (Pago Pago) and Puerto Rico (San Juan). The roster, time zones, stations and climate normals are fetched from NOAA/NWS by `scripts/fetch-office-data.mjs` and `scripts/fetch-climate-normals.mjs`; the full list by region is in [docs/llms.txt](docs/llms.txt).
 
 ---
 
@@ -62,7 +62,7 @@ Covering all US regions: Northeast (New York, Boston, Philadelphia, Washington D
 │    ├─ styles.css        (all CSS)               │
 │    ├─ js/app.js         (main app logic)        │
 │    ├─ js/glossary.js    (230+ term glossary)    │
-│    ├─ js/offices.js     (68 office data)        │
+│    ├─ js/offices.js     (123 office data)       │
 │    ├─ js/abbreviations.js (shared NWS abbrevs)  │
 │    ├─ js/diff.js        (forecast diff engine)  │
 │    ├─ sw.js             (service worker)        │

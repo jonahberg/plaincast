@@ -19,11 +19,18 @@
 // under api/, underscore-prefixed so Vercel does not treat it as an endpoint,
 // and ship it through includeFiles. docs/index.html remains the file humans
 // edit and the local-dev homepage; this is its committed twin.
+//
+// The same office roster also drives three hand-written files, whose office
+// LISTS (only) this script regenerates:
+//   api/_national-shell.html  the National Desk's office index
+//   docs/llms.txt             the "## Supported NWS Offices" section
+//   docs/openapi.json         every `office` enum
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { OFFICE_NAMES } from '../docs/js/offices.js';
-import { buildAppShell } from './app-shell.mjs';
+import { OFFICE_GROUPS } from '../shadcn/src/lib/offices-groups.js';
+import { buildAppShell, injectOfficeIndex, officeIndexCodes } from './app-shell.mjs';
 import { officeTitle } from '../shadcn/src/lib/seo.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,6 +39,9 @@ const API = join(__dirname, '..', 'api');
 
 // The bundled homepage shell — byte-identical to docs/index.html.
 export const HOME_SHELL = join(API, '_home-shell.html');
+export const NATIONAL_SHELL = join(API, '_national-shell.html');
+export const LLMS_TXT = join(DOCS, 'llms.txt');
+export const OPENAPI = join(DOCS, 'openapi.json');
 
 // Exact strings from docs/index.html that vary per office.
 const TITLE_TEMPLATE = 'Plaincast - What the forecast actually says';
@@ -155,9 +165,46 @@ ${urls.join('\n')}
 `;
 }
 
+// docs/llms.txt: the office section, from its heading up to the next "## ".
+const LLMS_SECTION_RE = /## Supported NWS Offices[^\n]*\n[\s\S]*?(?=\n## )/;
+export function renderLlmsOffices(llms) {
+    const n = Object.keys(OFFICE_NAMES).length;
+    const groups = OFFICE_GROUPS.map(g =>
+        `**${g.label}:** ${g.codes.map(c => `${OFFICE_NAMES[c]} (${c})`).join(', ')}`);
+    const section = [
+        `## Supported NWS Offices (${n}, organized by region)`,
+        '',
+        `Each office has a dedicated page at https://plaincast.live/o/<CODE>/ — substitute the 3-letter code below (e.g. https://plaincast.live/o/LOX/ for Los Angeles). All ${n} are listed in https://plaincast.live/sitemap.xml.`,
+        '',
+        groups.join('\n\n'),
+        '',
+    ].join('\n');
+    if (!LLMS_SECTION_RE.test(llms)) throw new Error('docs/llms.txt: "## Supported NWS Offices" section not found');
+    return llms.replace(LLMS_SECTION_RE, () => section);
+}
+
+// docs/openapi.json: every enum whose items are 3-letter office codes, kept
+// in the file's own formatting (indentation, \u escapes) — a JSON round-trip
+// would rewrite the whole file.
+const OFFICE_ENUM_RE = /("enum": \[\n)([ \t]*)"[A-Z]{3}",?\n(?:[ \t]*"[A-Z]{3}",?\n)*([ \t]*\])/g;
+export function renderOpenApiEnums(spec, codes = Object.keys(OFFICE_NAMES)) {
+    let count = 0;
+    const out = spec.replace(OFFICE_ENUM_RE, (_, open, indent, close) => {
+        count++;
+        return `${open}${codes.map((c, i) => `${indent}"${c}"${i < codes.length - 1 ? ',' : ''}`).join('\n')}\n${close}`;
+    });
+    if (!count) throw new Error('docs/openapi.json: no office enum found');
+    return out;
+}
+
 export function buildAll() {
     const template = buildAppShell();
     const codes = Object.keys(OFFICE_NAMES);
+    // The picker order (region groups) must be exactly the roster.
+    const indexCodes = officeIndexCodes();
+    if (indexCodes.length !== codes.length || indexCodes.some((c, i) => c !== codes[i])) {
+        throw new Error('OFFICE_GROUPS and OFFICE_NAMES disagree; run bun scripts/build-office-data.mjs');
+    }
     for (const code of codes) {
         const dir = join(DOCS, 'o', code);
         mkdirSync(dir, { recursive: true });
@@ -166,6 +213,9 @@ export function buildAll() {
     writeFileSync(join(DOCS, 'sitemap.xml'), renderSitemap(codes));
     // The functions' copy of the homepage shell (see the header note).
     writeFileSync(HOME_SHELL, template);
+    writeFileSync(NATIONAL_SHELL, injectOfficeIndex(readFileSync(NATIONAL_SHELL, 'utf8')));
+    writeFileSync(LLMS_TXT, renderLlmsOffices(readFileSync(LLMS_TXT, 'utf8')));
+    writeFileSync(OPENAPI, renderOpenApiEnums(readFileSync(OPENAPI, 'utf8')));
     return codes.length;
 }
 

@@ -7,7 +7,7 @@ import { renderCardPng } from '../api/og.js';
 
 const png = await renderCardPng({
     city: 'What the forecast actually says',
-    dateline: 'Area Forecast Discussions from all 68 NWS offices',
+    dateline: 'Area Forecast Discussions from all 123 NWS offices',
     takeaway: 'The reasoning behind your forecast, from the meteorologists who wrote it, translated into plain English.',
 });
 writeFileSync(new URL('../docs/og-image.png', import.meta.url), png);

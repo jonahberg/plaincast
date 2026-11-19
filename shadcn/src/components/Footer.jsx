@@ -27,12 +27,12 @@ function OfficeLink({ code, office, className = '' }) {
 }
 
 // The React app removes the server-rendered #ssr-root on mount, and with it
-// the 68-office index + National Desk link that crawlers and no-JS readers
+// the full office index + National Desk link that crawlers and no-JS readers
 // get. This footer restores them as real <a href> links (internal linking and
 // a way around the site that doesn't depend on the picker).
 //
 // Phones get the index as a collapsed accordion — one 44px row per region,
-// opening to a two-column list of 44px rows — instead of 68 16px-tall links.
+// opening to a two-column list of 44px rows — instead of 123 16px-tall links.
 // From `sm` up it stays the multi-column grid. (The server-rendered index in
 // #ssr-root is separate and unchanged.)
 export function Footer({ office, rawUrl }) {

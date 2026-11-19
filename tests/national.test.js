@@ -490,7 +490,7 @@ describe('national fetchers', () => {
 // string-replaces the #desk-loading marker with SSR content and, on any error,
 // serves these exact bytes. These assertions pin the marker contract (drift
 // here silently degrades the live page to the shell forever) and the shell's
-// standalone value — a typeset index linking all 68 local desks.
+// standalone value — a typeset index linking every local desk.
 //
 // The shell lives at api/_national-shell.html, NOT under docs/. Unlike the
 // per-office pages it has no reason to exist in the static root: nothing links

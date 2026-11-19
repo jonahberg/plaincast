@@ -38,7 +38,7 @@ export const PAGES = {
 
             { h: 'How it works' },
             { ul: [
-                'The latest discussion is fetched live from the National Weather Service API for any of 68 forecast offices. Nothing is scraped, and no key is required — it is public data.',
+                'The latest discussion is fetched live from the National Weather Service API for any of the 123 forecast offices that write one. Nothing is scraped, and no key is required — it is public data.',
                 'Each section is summarized by Anthropic\'s Claude Haiku into readable prose. The model summarizes; it never forecasts, and it is never asked to add information the forecaster did not write.',
                 'The original text is annotated in parallel: 230+ meteorological terms carry hover definitions, 109 abbreviation patterns are expanded, and Zulu times are converted to the office\'s local clock.',
                 'A confidence reading is derived from the forecaster\'s own hedging language — "high confidence" and "models diverge" are counted, not guessed at.',
@@ -79,7 +79,7 @@ export const PAGES = {
             { p: 'Security contact and policy are published at [/.well-known/security.txt](/.well-known/security.txt), per [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116). Please report vulnerabilities there rather than in a public issue thread.' },
 
             { h: 'Ask for a forecast office' },
-            { p: 'Plaincast covers 68 of the National Weather Service\'s forecast offices — the ones covering the largest share of the population. If yours is missing, open an issue naming the three-letter office code and it will be considered for the next batch. Every covered office is listed in [/llms.txt](/llms.txt) and [/sitemap.xml](/sitemap.xml).' },
+            { p: 'Plaincast covers all 123 of the National Weather Service\'s forecast offices that write an Area Forecast Discussion, from Caribou to Pago Pago. If one is missing or misnamed, open an issue naming the three-letter office code. Every covered office is listed in [/llms.txt](/llms.txt) and [/sitemap.xml](/sitemap.xml).' },
 
             { h: 'Everything else' },
             { p: 'For anything that is not about the site itself — writing, work, or the other projects — [jonahberg.com](https://jonahberg.com) is the front door.' },

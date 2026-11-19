@@ -11,6 +11,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { OFFICE_NAMES } from '../docs/js/offices.js';
+import { OFFICE_GROUPS } from '../shadcn/src/lib/offices-groups.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const APP_SHELL_SOURCE = join(__dirname, '..', 'shadcn', 'index.html');
@@ -24,6 +26,28 @@ const PROD_HEAD =
 // Exported: api/_boot.js inserts the boot data block right before it.
 export const PROD_SCRIPT = '<script type="module" crossorigin src="/assets/app.js"></script>';
 
+// The office index (<ul class="office-index-list …">) is GENERATED: every
+// office in picker order (OFFICE_GROUPS), as "City (CODE)" links. Whatever the
+// source file lists between the <ul> and </ul> is replaced, so the committed
+// shells always carry the whole roster even when shadcn/index.html's own
+// hand-written list is stale. Each <li> keeps the indent of the source's
+// first one (or the <ul>'s, when the list is empty).
+const OFFICE_INDEX_RE = /^([ \t]*)(<ul class="office-index-list[^"]*">)\n([\s\S]*?)^([ \t]*)<\/ul>/m;
+const escHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+export function officeIndexCodes() {
+    return OFFICE_GROUPS.flatMap(g => g.codes);
+}
+
+export function injectOfficeIndex(html, codes = officeIndexCodes()) {
+    const m = html.match(OFFICE_INDEX_RE);
+    if (!m) throw new Error('app-shell: <ul class="office-index-list"> … </ul> not found');
+    const [whole, ulIndent, open, items, closeIndent] = m;
+    const liIndent = items.match(/^([ \t]*)<li>/m)?.[1] ?? ulIndent;
+    const lis = codes.map(c => `${liIndent}<li><a href="/o/${c}/">${escHtml(OFFICE_NAMES[c])} (${c})</a></li>`);
+    return html.replace(whole, () => `${ulIndent}${open}\n${lis.join('\n')}\n${closeIndent}</ul>`);
+}
+
 export function buildAppShell(source = readFileSync(APP_SHELL_SOURCE, 'utf8')) {
     if (!source.includes(DEV_SCRIPT)) {
         throw new Error(`app-shell: dev script marker missing from shadcn/index.html (${DEV_SCRIPT})`);
@@ -31,7 +55,7 @@ export function buildAppShell(source = readFileSync(APP_SHELL_SOURCE, 'utf8')) {
     if (!source.includes(CSS_MARKER)) {
         throw new Error(`app-shell: css marker missing from shadcn/index.html (${CSS_MARKER})`);
     }
-    return source
+    return injectOfficeIndex(source
         .replace(CSS_MARKER, PROD_HEAD)
-        .replace(DEV_SCRIPT, PROD_SCRIPT);
+        .replace(DEV_SCRIPT, PROD_SCRIPT));
 }

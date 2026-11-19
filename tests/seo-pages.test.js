@@ -109,7 +109,7 @@ describe('per-office OG share cards', () => {
 describe('footer office index (internal links to all /o/ pages)', () => {
     it('the template links every office exactly once, as City (CODE)', () => {
         const links = [...template.matchAll(/<li><a href="\/o\/([A-Z]{3})\/"[^>]*>([^<]+) \((\1)\)<\/a><\/li>/g)];
-        expect(links.length).toBe(codes.length); // 68
+        expect(links.length).toBe(codes.length);
         const byCode = new Map(links.map(m => [m[1], m[2]]));
         expect([...byCode.keys()].sort()).toEqual([...codes].sort());
         for (const code of codes) {
@@ -117,7 +117,7 @@ describe('footer office index (internal links to all /o/ pages)', () => {
         }
     });
 
-    it('rendered office pages keep all 68 links and mark their own with aria-current', () => {
+    it('rendered office pages keep every office link and mark their own with aria-current', () => {
         const html = renderOfficePage(template, 'LOX', OFFICE_NAMES.LOX);
         const hrefs = [...html.matchAll(/<li><a href="\/o\/([A-Z]{3})\/"/g)].map(m => m[1]);
         expect(hrefs.length).toBe(codes.length);

@@ -37,7 +37,7 @@
 // status 200, short CDN window. Everything else is SOFT: national totals and
 // the Day 2/Day 3 outlooks each degrade to their own cell's absence, never
 // to a worse page. The shell is a complete page on its own — masthead,
-// colophon, and a typeset index of all 68 local editions — so the worst case
+// colophon, and a typeset index of every local edition — so the worst case
 // is a good page, never an error.
 
 import { readFileSync } from 'node:fs';

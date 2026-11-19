@@ -15,6 +15,7 @@ import {
 } from '../shadcn/src/lib/ai.js';
 import { ALERTS_KEY, alertStatusSummary, withAlertsSection } from '../shadcn/src/lib/alert-status.js';
 import { serializeBoot } from '../api/_boot.js';
+import { OFFICE_NAMES } from '../docs/js/offices.js';
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
@@ -326,10 +327,15 @@ describe('footer office index on phones', () => {
     });
 
     it('leaves the server-rendered office index alone (crawlers read it)', () => {
-        for (const p of ['shadcn/index.html', 'api/_home-shell.html', 'docs/o/LOT/index.html']) {
+        const LIST = '<ul class="office-index-list mt-4 list-none columns-2 gap-6 text-sm leading-6 sm:columns-3">';
+        // The source keeps the list's markup; its items are regenerated from
+        // OFFICE_NAMES by scripts/app-shell.mjs, so the SERVED shells carry
+        // every office.
+        expect(read('shadcn/index.html')).toContain(LIST);
+        for (const p of ['api/_home-shell.html', 'docs/o/LOT/index.html']) {
             const html = read(p);
-            expect(html).toContain('<ul class="office-index-list mt-4 list-none columns-2 gap-6 text-sm leading-6 sm:columns-3">');
-            expect(html.match(/<li><a href="\/o\/[A-Z]{3}\/"/g).length).toBe(68);
+            expect(html).toContain(LIST);
+            expect(html.match(/<li><a href="\/o\/[A-Z]{3}\/"/g).length).toBe(Object.keys(OFFICE_NAMES).length);
         }
     });
 });

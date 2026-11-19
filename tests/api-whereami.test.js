@@ -41,8 +41,8 @@ describe('whereami', () => {
         expect(res.body).toEqual({ office: 'LOT', city: 'Chicago' });
         expect(res.headers['cache-control']).toBe('no-store');
     });
-    test('uncovered gridId -> 204', async () => {
-        globalThis.fetch = async () => new Response(JSON.stringify({ properties: { gridId: 'CYS' } }), { status: 200 });
+    test('unknown office code -> 204', async () => {
+        globalThis.fetch = async () => new Response(JSON.stringify({ properties: { gridId: 'ZZZ', cwa: 'ZZZ' } }), { status: 200 });
         const res = mockRes();
         await handler({ method: 'GET', headers: { 'x-vercel-ip-latitude': '41.1', 'x-vercel-ip-longitude': '-104.8' } }, res);
         expect(res.code).toBe(204);

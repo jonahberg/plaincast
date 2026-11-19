@@ -20,7 +20,7 @@ export const SPEC_URL = 'https://plaincast.live/openapi.json';
 // Stable, lowercase_snake machine codes. These are a contract: rename one and
 // an agent's branch on it silently stops matching. Add, never repurpose.
 export const CODES = {
-    invalid_office: 'The office code is missing or is not one of the 68 Plaincast covers.',
+    invalid_office: 'The office code is missing or is not an NWS forecast office Plaincast covers.',
     invalid_id: 'The id parameter is missing or malformed.',
     invalid_request: 'The request body or query string could not be parsed.',
     method_not_allowed: 'This endpoint does not accept that HTTP method.',
@@ -36,7 +36,7 @@ export const CODES = {
 };
 
 const OFFICE_HINT = 'Pass ?office=<CODE> with a 3-letter NWS office code, e.g. ?office=LOX. '
-    + 'All 68 codes are listed at https://plaincast.live/llms.txt';
+    + 'All 123 codes are listed at https://plaincast.live/llms.txt';
 
 // Default hints per code. A caller may override with a more specific one.
 const HINTS = {

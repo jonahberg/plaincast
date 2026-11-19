@@ -44,7 +44,7 @@ describe('OpenAPI spec', () => {
         }
     });
 
-    it('lists all 68 office codes, straight from OFFICE_NAMES', () => {
+    it('lists every office code, straight from OFFICE_NAMES', () => {
         const codes = Object.keys(OFFICE_NAMES);
         const enums = JSON.stringify(spec).match(/"enum":\["[A-Z]{3}"[^\]]*\]/g) || [];
         expect(enums.length).toBeGreaterThan(0);

@@ -290,12 +290,11 @@ describe('GET /api/feed with Key Message format AFDs', () => {
     });
 
     it('AKQ-style Key Message product: description comes from KEY MESSAGES', async () => {
-        // AKQ itself is not one of Plaincast's 68 offices; serve its product
-        // (the first office migrated to the Key Message format) under a
-        // valid office code to exercise the format through the handler.
-        setProduct('PHI', AKQ, 'feed-akq-1');
+        // AKQ (Wakefield) was the first office migrated to the Key Message
+        // format, and is a covered office in its own right.
+        setProduct('AKQ', AKQ, 'feed-akq-1');
         const res = createRes();
-        await feedHandler(createReq({ query: { office: 'PHI' } }), res);
+        await feedHandler(createReq({ query: { office: 'AKQ' } }), res);
         expect(res.statusCode).toBe(200);
         const descs = itemDescriptions(res.body);
         expect(descs[0]).toMatch(/prolonged and widespread heat wave/);

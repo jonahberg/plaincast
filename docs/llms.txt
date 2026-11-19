@@ -22,7 +22,7 @@ conditions API cannot.
 
 **Poor fits (do not use it for these):**
 - Current conditions, hourly temperatures, or a 10-day icon forecast — use api.weather.gov directly; Plaincast is prose, not point data.
-- Anywhere outside the United States. Coverage is 68 NWS forecast offices, listed below.
+- Anywhere outside the United States. Coverage is 123 NWS forecast offices, listed below.
 - Life-safety decisions during an active warning. Discussions are issued 3–4 times daily and can be hours old; send people to https://www.weather.gov or the issuing office.
 - Anything needing a forecast Plaincast made itself. It makes none. Every word originates with the NWS or the SPC.
 
@@ -34,7 +34,7 @@ conditions API cannot.
 - Nonexistent paths return a real `404` with a short Markdown body pointing at the sitemap.
 
 ## What it does
-- Fetches the latest Area Forecast Discussion from the NWS API for any of 68 supported offices
+- Fetches the latest Area Forecast Discussion from the NWS API for any of 123 supported offices
 - Uses Claude (Haiku) to summarize each section into natural, readable prose
 - Displays the AI summary side-by-side with the original annotated forecast
 - Highlights 230+ meteorological jargon terms with hover/tap tooltip definitions
@@ -73,27 +73,29 @@ The AI endpoints (`/api/translate`, `/api/translate-issuance`, `/api/changelog`,
 budget per call, are rate-limited per IP, and are not supported for third-party use. The
 summaries they produce are already served inside the pages.
 
-## Supported NWS Offices (68, organized by region)
+## Supported NWS Offices (123, organized by region)
 
-Each office has a dedicated page at https://plaincast.live/o/<CODE>/ — substitute the 3-letter code below (e.g. https://plaincast.live/o/LOX/ for Los Angeles). All 68 are listed in https://plaincast.live/sitemap.xml.
+Each office has a dedicated page at https://plaincast.live/o/<CODE>/ — substitute the 3-letter code below (e.g. https://plaincast.live/o/LOX/ for Los Angeles). All 123 are listed in https://plaincast.live/sitemap.xml.
 
-**Northeast:** New York (OKX), Boston (BOX), Philadelphia (PHI), Washington DC (LWX), Pittsburgh (PBZ), Buffalo (BUF), Raleigh (RAH), Charleston SC (CHS)
+**Northeast:** Albany (ALY), Binghamton (BGM), Blacksburg (RNK), Boston (BOX), Buffalo (BUF), Burlington (BTV), Caribou (CAR), Charleston SC (CHS), Charleston WV (RLX), Columbia (CAE), Greenville-Spartanburg (GSP), New York (OKX), Newport/Morehead City (MHX), Philadelphia (PHI), Pittsburgh (PBZ), Portland ME (GYX), Raleigh (RAH), State College (CTP), Wakefield (AKQ), Washington DC (LWX), Wilmington NC (ILM)
 
-**Southeast:** Atlanta (FFC), Miami (MFL), Jacksonville (JAX), Tampa Bay (TBW), Birmingham (BMX), Nashville (OHX), Morristown (MRX), Jackson MS (JAN)
+**Southeast:** Atlanta (FFC), Birmingham (BMX), Huntsville (HUN), Jackson MS (JAN), Jacksonville (JAX), Key West (KEY), Melbourne (MLB), Memphis (MEG), Miami (MFL), Mobile/Pensacola (MOB), Morristown (MRX), Nashville (OHX), Tallahassee (TAE), Tampa Bay (TBW)
 
-**Midwest:** Chicago (LOT), Detroit (DTX), Indianapolis (IND), Cleveland (CLE), Cincinnati (ILN), Milwaukee (MKX), Grand Rapids (GRR), St. Louis (LSX), Kansas City (EAX), Des Moines (DMX)
+**Midwest:** Central Illinois (ILX), Chicago (LOT), Cincinnati (ILN), Cleveland (CLE), Des Moines (DMX), Detroit (DTX), Gaylord (APX), Grand Rapids (GRR), Green Bay (GRB), Indianapolis (IND), Jackson KY (JKL), Kansas City (EAX), La Crosse (ARX), Louisville (LMK), Marquette (MQT), Milwaukee (MKX), Northern Indiana (IWX), Paducah (PAH), Quad Cities (DVN), Springfield (SGF), St. Louis (LSX)
 
-**Northern Plains:** Minneapolis/Twin Cities (MPX), Duluth (DLH), Sioux Falls (FSD), Bismarck (BIS), Omaha (OAX), Grand Forks (FGF)
+**Northern Plains:** Aberdeen (ABR), Bismarck (BIS), Duluth (DLH), Grand Forks (FGF), Hastings (GID), Minneapolis (MPX), North Platte (LBF), Omaha (OAX), Rapid City (UNR), Sioux Falls (FSD)
 
-**South Central:** Dallas/Fort Worth (FWD), Houston (HGX), San Antonio (EWX), Oklahoma City (OUN), Tulsa (TSA), Little Rock (LZK), New Orleans (LIX), Shreveport (SHV), Lake Charles (LCH)
+**South Central:** Amarillo (AMA), Brownsville (BRO), Corpus Christi (CRP), Dallas/Fort Worth (FWD), Dodge City (DDC), Goodland (GLD), Houston (HGX), Lake Charles (LCH), Little Rock (LZK), Lubbock (LUB), Midland/Odessa (MAF), New Orleans (LIX), Oklahoma City (OUN), San Angelo (SJT), San Antonio (EWX), Shreveport (SHV), Topeka (TOP), Tulsa (TSA), Wichita (ICT)
 
-**Rockies & Mountain West:** Denver (BOU), Pueblo (PUB), Grand Junction (GJT), Salt Lake City (SLC), Boise (BOI), Billings (BYZ), Missoula (MSO), Riverton (RIW)
+**Rockies & Mountain West:** Billings (BYZ), Boise (BOI), Cheyenne (CYS), Denver (BOU), Elko (LKN), Glasgow (GGW), Grand Junction (GJT), Great Falls (TFX), Missoula (MSO), Pocatello (PIH), Pueblo (PUB), Reno (REV), Riverton (RIW), Salt Lake City (SLC)
 
-**Southwest:** Phoenix (PSR), Las Vegas (VEF), Tucson (TWC), Flagstaff (FGZ), Albuquerque (ABQ), El Paso (EPZ)
+**Southwest:** Albuquerque (ABQ), El Paso (EPZ), Flagstaff (FGZ), Las Vegas (VEF), Phoenix (PSR), Tucson (TWC)
 
-**Pacific:** Los Angeles (LOX), San Diego (SGX), San Francisco (MTR), Sacramento (STO), Central California/Hanford (HNX), Eureka (EKA), Seattle (SEW), Portland (PQR), Medford (MFR), Spokane (OTX)
+**Pacific:** Central California (HNX), Eureka (EKA), Los Angeles (LOX), Medford (MFR), Pendleton (PDT), Portland (PQR), Sacramento (STO), San Diego (SGX), San Francisco (MTR), Seattle (SEW), Spokane (OTX)
 
-**Alaska & Pacific Islands:** Anchorage (AFC), Fairbanks (AFG), Honolulu (HFO)
+**Alaska & Pacific Islands:** Anchorage (AFC), Fairbanks (AFG), Guam (GUM), Honolulu (HFO), Juneau (AJK), Pago Pago (PPG)
+
+**Caribbean:** San Juan (SJU)
 
 ## Technical Details
 - Single-file vanilla HTML/CSS/JS app (~2,700 lines)
