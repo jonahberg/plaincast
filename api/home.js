@@ -25,6 +25,8 @@
 
 import { OFFICE_NAMES, OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { escHtml } from '../scripts/build-offices.mjs';
+// ChST / SST where Intl prints "GMT+10" / "GMT-11" (Guam, American Samoa).
+import { formatInZone } from '../shadcn/src/lib/format.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { regexTranslate } from './_afd-sections.js';
 import {
@@ -73,7 +75,7 @@ function formatIssued(iso, tz) {
     try {
         const d = new Date(iso);
         if (Number.isNaN(d.getTime())) return null;
-        return d.toLocaleString('en-US', {
+        return formatInZone(d, {
             weekday: 'long', month: 'long', day: 'numeric',
             hour: 'numeric', minute: '2-digit',
             timeZone: tz, timeZoneName: 'short',

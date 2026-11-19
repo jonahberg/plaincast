@@ -1,4 +1,4 @@
-import { CloudSun, Github, Keyboard, LocateFixed, Moon, Share2, Sun } from 'lucide-react';
+import { CloudSun, Github, Keyboard, LocateFixed, Moon, Newspaper, Share2, Sun } from 'lucide-react';
 import { useRef } from 'react';
 
 import { OFFICE_NAMES } from '@data/offices.js';
@@ -73,13 +73,18 @@ export function Header({
 
     return (
         <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            {/* Aligned to the 46rem reading column. 320–375px budget:
-                icon-only wordmark, a flexible picker, and only
-                locate/share/theme — shortcuts + GitHub return at sm (the
-                footer carries the GitHub link at every width). The picker
-                flexes to whatever the column leaves (capped at 14rem); at md+,
-                where the site nav joins the row, the icon buttons tighten to
-                32px so the longest office names still fit it. */}
+            {/* Aligned to the 46rem reading column. Phone budget: icon-only
+                wordmark, the National Desk as an icon in the site nav's slot,
+                a flexible picker (the office name only; the h1 below carries
+                the code), and locate/share/theme. Share steps out below
+                375px, where four 44px targets would leave the picker no room;
+                shortcuts + GitHub return at sm (the footer carries the GitHub
+                link at every width). The picker flexes to whatever the column
+                leaves (capped at 14rem); at md+, where the text nav replaces
+                the icon, the icon buttons tighten to 32px so the longest
+                office names still fit it. On a touch screen the last icon's
+                target runs into the gutter, as the wordmark's does on the
+                left, so both glyphs sit on the column edge. */}
             <div className="mx-auto flex h-14 max-w-reading items-center gap-2 px-4 sm:px-6">
                 <a href="/" className="flex shrink-0 items-center gap-2 font-semibold pointer-coarse:-ml-3 pointer-coarse:min-h-11 pointer-coarse:px-3" aria-label="Plaincast home">
                     <CloudSun className="size-5" aria-hidden="true" />
@@ -88,9 +93,22 @@ export function Header({
 
                 <Separator orientation="vertical" className="hidden !h-5 sm:block" />
 
-                {/* Same site nav as the server-rendered pages' header (api/_page-shell.html).
-                    md+ only: below that the picker needs the room, and the footer
-                    carries the National Desk link at every width. */}
+                {/* Same site nav as the server-rendered pages' header
+                    (api/_page-shell.html), as text from md. Below md the
+                    picker needs the room, so the National Desk is the icon
+                    link just before this (and the footer link at every
+                    width); the wordmark is the way to the forecast. */}
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" asChild className="md:hidden pointer-coarse:size-11">
+                            <a href="/national/" aria-label="The National Desk: where the weather is today">
+                                <Newspaper />
+                            </a>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>The National Desk</TooltipContent>
+                </Tooltip>
+
                 <nav aria-label="Site" className="hidden shrink-0 items-center gap-1 md:flex">
                     <a href="/" aria-current="page" className="inline-flex h-8 items-center whitespace-nowrap rounded-md pointer-coarse:h-11 bg-accent px-2.5 text-sm font-medium text-foreground">
                         Forecast
@@ -104,10 +122,16 @@ export function Header({
                     <SelectTrigger
                         ref={selectRef}
                         size="sm"
-                        className="w-auto min-w-0 flex-1 sm:max-w-56 md:px-2.5 pointer-coarse:data-[size=sm]:h-11"
+                        className="w-auto min-w-0 flex-1 *:data-[slot=select-value]:min-w-0 max-sm:gap-1.5 max-sm:px-2.5 sm:max-w-56 md:px-2.5 pointer-coarse:data-[size=sm]:h-11"
                         aria-label="NWS forecast office"
                     >
-                        <SelectValue placeholder="Choose an office" />
+                        {/* One line, ending in an ellipsis when the name is
+                            longer than the room (never clipped mid-letter). */}
+                        <SelectValue placeholder="Choose an office">
+                            <span className="min-w-0 truncate">
+                                {OFFICE_NAMES[office]}<span className="hidden sm:inline"> ({office})</span>
+                            </span>
+                        </SelectValue>
                     </SelectTrigger>
                     <SelectContent
                         onCloseAutoFocus={(e) => {
@@ -129,7 +153,7 @@ export function Header({
                     </SelectContent>
                 </Select>
 
-                <div className="ml-auto flex shrink-0 items-center gap-0.5 md:gap-0">
+                <div className="ml-auto flex shrink-0 items-center gap-0.5 md:gap-0 pointer-coarse:-mr-3 pointer-coarse:gap-0">
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button
@@ -144,7 +168,7 @@ export function Header({
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button
-                                variant="ghost" size="icon" onClick={share} aria-label="Share forecast link" className="md:size-8 pointer-coarse:size-11"
+                                variant="ghost" size="icon" onClick={share} aria-label="Share forecast link" className="max-[374px]:hidden md:size-8 pointer-coarse:size-11"
                                 onPointerEnter={prefetchToasts} onPointerDown={prefetchToasts} onFocus={prefetchToasts}
                             >
                                 <Share2 />

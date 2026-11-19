@@ -96,10 +96,35 @@ export function parseSections(text) {
     return { sections, forecaster };
 }
 
+// ─── synopsisTakeaway ───────────────────────────────────────────────
+// Copied from docs/js/app.js (locked by tests/helpers-parity.test.js).
+export function synopsisTakeaway(text) {
+    const HAZARD = /\b(?:thunder\w*|t-?storms?|lightning|tornado\w*|waterspouts?|funnel clouds?|hail\w*|severe|storms?|flood\w*|inundation|(?:heavy|widespread|significant|excessive|torrential|soaking|prolonged) (?:\w+ )?(?:rain\w*|snow\w*|precipitation|showers|downpours)|inch(?:es)? of (?:new )?(?:rain|snow)|atmospheric rivers?|debris flows?|mud ?slides?|land ?slides?|rock ?slides?|burn scars?|avalanche\w*|blizzard\w*|whiteouts?|snow squalls?|(?:mountain|accumulating|lake[- ]effect|pass[- ]level|wet) snow\w*|snow(?:fall)? accumulations?|freeze|freezing (?:rain|drizzle|fog|spray|temperatures)|below freezing|sleet|ice|icy|gusty|gusts?|(?:strong|high|damaging) (?:\w+ )?winds?|damag\w*|(?:extreme|excessive|dangerous|record) heat|heat (?:advisory|warning|risk|index)|heat ?waves?|(?:very|dangerously|extremely) hot|(?:extreme|bitter(?:ly)?|dangerous(?:ly)?) cold|arctic (?:air|blast|outbreak)|wind chills?|frost|record(?:s|-breaking)?|(?:high|large|big|dangerous) (?:\w+ )?(?:surf|swells?|waves|breakers)|(?:hazardous|rough|high|steep|dangerous) seas|rip currents?|sneaker waves?|storm surge|king tides?|high tides?|gales?|hurricane\w*|tropical (?:storms?|depressions?|cyclones?)|typhoons?|dense fog|blowing (?:dust|snow)|dust storms?|haboobs?|smoke|air quality|fire\w*|red flag|warnings?|watch(?:es)?|advisor(?:y|ies)|hazard\w*|dangerous|life[- ]threatening|(?:significant|major|high) impacts?|high[- ]impact|impactful)\b/i;
+    const FADING = /\b(?:diminish\w*|decreas\w*|taper\w*|weaken\w*|subsid\w*|eas(?:e|es|ing)|expir\w*|cancel\w*|below (?:advisory|warning)|no longer|no|not|unlikely|(?:is|are|remains?|stays?) low)\b/i;
+    const LEANS_BACK = /^(?:this|these|that|those|it|its|they|their|additionally|otherwise|however|meanwhile|then|but|and|along with|in addition)\b|^(?:\S+\s+){0,3}of (?:these|those|this|that)\b|\b(?:also|as well)\b|\bthe (?:second|third|latter|former)\b/i;
+    let t = String(text || '')
+        .replace(/^\s*(?:\d{1,2}\/\d{3,4}\s*(?:AM|PM|Z)?\.?\s*)+/i, '')
+        .replace(/^\s*Issued at \d.+?\d{4}\s*/i, '');
+    t = t.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
+    const sentences = t.match(/\S[\s\S]*?[.!?]+(?=\s|$)/g);
+    if (!sentences) return t.substring(0, 200);
+    const names = s => HAZARD.test(s) && !FADING.test(s);
+    let lead = 0;
+    if (!/^key messages?\b/i.test(t) && !names(sentences[0])) {
+        const i = sentences.slice(0, 3).findIndex(names);
+        if (i > 0) {
+            lead = i;
+            if (lead === sentences.length - 1 || LEANS_BACK.test(sentences[lead])) lead--;
+            if (lead > 0 && LEANS_BACK.test(sentences[lead])) lead = 0;
+        }
+    }
+    return sentences.slice(lead, lead + 2).join(' ');
+}
+
 // ─── extractTakeaway ────────────────────────────────────────────────
-// Simplified version: returns the first 1-2 sentences of the synopsis
-// section (or first section) without running full translation (which
-// would need timezone state). Returns raw text for testing purposes.
+// Simplified version: the synopsis fallback's sentences (synopsisTakeaway)
+// without running full translation (which would need timezone state).
+// Returns raw text for testing purposes.
 export function extractTakeaway(sections) {
     // Prefer KEY MESSAGES section when available
     const messagesSection = sections.find(s => s.key === 'Messages');
@@ -111,12 +136,7 @@ export function extractTakeaway(sections) {
         || sections.find(s => s.key === 'Discussion')
         || sections[0];
     if (!synSection) return '';
-    // Strip leading "Issued at..." timestamps
-    let text = synSection.text.replace(/^Issued at \d.+?\d{4}\s*/i, '');
-    text = text.replace(/\.{2,}/g, '. ').replace(/\s+/g, ' ').trim();
-    const sentences = text.match(/[^.!?]+[.!?]+/g);
-    if (!sentences) return text.substring(0, 200);
-    return sentences.slice(0, 2).join(' ').trim();
+    return synopsisTakeaway(synSection.text);
 }
 
 // ─── stripNWSArtifacts ──────────────────────────────────────────────

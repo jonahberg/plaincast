@@ -2,6 +2,12 @@
 // Code-identical ports from docs/js/app.js (locked by
 // tests/shadcn-parity.test.js).
 
+// Offices /api/conditions never has a normal high for (no verified 1991–2020
+// normal at their station; api/_climate-normals.js lists why). The strip
+// never reserves that cell for them. Pinned to the server table by
+// tests/almanac-strip.test.js.
+export const OFFICES_WITHOUT_NORMAL = new Set(['CTP', 'MQT', 'RNK']);
+
 // Sunrise/sunset via the SunCalc algorithm (Vladimir Agafonkin, BSD-2).
 export function sunTimes(lat, lng, date) {
     const rad = Math.PI / 180, dayMs = 86400000, J1970 = 2440588, J2000 = 2451545;

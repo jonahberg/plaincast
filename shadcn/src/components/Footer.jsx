@@ -21,7 +21,11 @@ function OfficeLink({ code, office, className = '' }) {
             className={`${code === office ? 'font-medium text-foreground' : LINK} ${className}`}
             aria-current={code === office ? 'page' : undefined}
         >
-            {OFFICE_NAMES[code]} ({code})
+            {/* A no-break space: a wrapped name never leaves its code alone
+                on the next line ("Greenville-Spartanburg" / "(GSP)"). A
+                slash may break instead ("Mobile/" / "Pensacola (MOB)"). */}
+            {OFFICE_NAMES[code].split('/').flatMap((part, i) => (i ? ['/', <wbr key={i} />, part] : [part]))}
+            {'\u00a0'}({code})
         </a>
     );
 }
@@ -40,7 +44,7 @@ export function Footer({ office, rawUrl }) {
         <footer className="border-t">
             <div className="mx-auto max-w-reading px-4 py-8 text-sm text-muted-foreground sm:px-6">
                 <nav aria-label="All Plaincast forecast offices">
-                    <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <h2 className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
                         The forecast, office by office
                     </h2>
                     <p className="mt-2">
@@ -59,7 +63,7 @@ export function Footer({ office, rawUrl }) {
                                     <ul className="grid grid-cols-2 gap-x-4 text-[13px] leading-5">
                                         {group.codes.map(code => (
                                             <li key={code} className="min-w-0">
-                                                <OfficeLink code={code} office={office} className="flex min-h-11 items-center" />
+                                                <OfficeLink code={code} office={office} className="flex min-h-11 items-center py-1" />
                                             </li>
                                         ))}
                                     </ul>

@@ -48,6 +48,18 @@ export function alertStatusSummary(alerts, { names = 2 } = {}) {
     return { count, events, shown, more, text, label };
 }
 
+// The status line's text at decreasing lengths, for whatever room the row
+// has: two event names, one, then the count alone. Whole names only, each
+// with an accurate "+N", so the line condenses instead of cutting a word.
+export function alertStatusVariants(alerts) {
+    const out = [];
+    for (const names of [2, 1, 0]) {
+        const s = alertStatusSummary(alerts, { names });
+        if (s && !out.includes(s.text)) out.push(s.text);
+    }
+    return out;
+}
+
 // The page's section order (and so the section nav's): forecast sections in
 // their reading order, then live alerts — or alerts first while a severe
 // warning is live.

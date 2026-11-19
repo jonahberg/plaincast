@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Rss } from 'lucide-react';
 
 import { OFFICE_COORDS, OFFICE_NAMES, OFFICE_TIMEZONES } from '@data/offices.js';
 import { confidenceScore, confidenceWord } from '@data/timeline.js';
-import { moonPhase, sunTimes } from '@/lib/almanac';
+import { OFFICES_WITHOUT_NORMAL, moonPhase, sunTimes } from '@/lib/almanac';
 import { officeFeedHref } from '@/lib/seo';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -53,9 +53,12 @@ function sinceText(iso, tz) {
 // ledger: one hairline-ruled row on desktop, a 3-column grid on phones.
 //
 // When live conditions are expected (the latest edition, online), their two
-// cells are laid out from the first frame — blank while the reading is on its
-// way, a dash if it never comes — so its arrival fills a cell instead of
-// regridding the strip and pushing everything below it.
+// cells are laid out from the first frame, blank while the reading is on its
+// way, so its arrival fills a cell instead of regridding the strip and
+// pushing everything below it. A reading that settles empty drops its cell
+// (an empty cell never shows a dash) and the rest close up; the strip keeps
+// its height, since 4 to 6 cells are two rows on phones and one from sm.
+// An office with no normal high at all never reserves that cell.
 function Almanac({ office, conditions, conditionsExpected }) {
     const tz = OFFICE_TIMEZONES[office];
     const cells = useMemo(() => {
@@ -63,13 +66,14 @@ function Almanac({ office, conditions, conditionsExpected }) {
         // null/undefined mean "no reading" (+null would render as 0°).
         const temp = readingOrNull(conditions?.temp);
         const normal = readingOrNull(conditions?.normal);
-        const reading = (value) => {
-            if (value !== null) return `${value}°`;
-            return conditions ? '—' : ' '; // settled without one : still coming
-        };
         if (conditionsExpected) {
-            out.push({ label: 'Now', value: reading(temp) });
-            out.push({ label: 'Normal high', value: reading(normal) });
+            // A no-break space holds the cell's line box until it fills.
+            const live = (label, value) => {
+                if (value !== null) out.push({ label, value: `${value}°` });
+                else if (!conditions) out.push({ label, value: '\u00a0' });
+            };
+            live('Now', temp);
+            if (!OFFICES_WITHOUT_NORMAL.has(office)) live('Normal high', normal);
         } else {
             if (temp !== null) {
                 out.push({ label: 'Now', value: `${temp}°` });
@@ -125,40 +129,103 @@ function Almanac({ office, conditions, conditionsExpected }) {
     );
 }
 
+// The longest of `variants` that fits the room `boxRef` has on its one
+// line, chosen before the frame paints and again whenever the row resizes.
+// `measureRef` holds every variant, invisible and out of flow; `textRef` is
+// the visible text, so the room is the box minus what sits before the text.
+function useFittingVariant(variants, { boxRef, anchorRef, textRef, measureRef }) {
+    const [index, setIndex] = useState(0);
+    const key = variants.join('\n');
+    useLayoutEffect(() => {
+        const box = boxRef.current;
+        if (!box || !variants.length) return undefined;
+        const fit = () => {
+            const anchor = anchorRef.current;
+            const text = textRef.current;
+            const measure = measureRef.current;
+            if (!anchor || !text || !measure) return;
+            const room = box.clientWidth - (text.getBoundingClientRect().left - anchor.getBoundingClientRect().left);
+            const widths = [...measure.children].map(el => el.getBoundingClientRect().width);
+            const i = widths.findIndex(w => w <= room + 0.5);
+            setIndex(i < 0 ? widths.length - 1 : i);
+        };
+        fit();
+        if (!('ResizeObserver' in window)) return undefined;
+        const observer = new ResizeObserver(fit);
+        observer.observe(box);
+        return () => observer.disconnect();
+    }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+    return Math.max(0, Math.min(index, variants.length - 1));
+}
+
 // The alert half of the status row. Nothing while the alerts feed is pending
 // (or unreadable); a muted "No active alerts" once it settles empty; with
-// alerts, one line that links to the Active Alerts section — the count, then
-// the most severe event names, truncated so it never wraps.
+// alerts, one line that links to the Active Alerts section: the count, then
+// the most severe event names. The row is one fixed-height line, so the text
+// condenses to fit (two names, one name, then the count alone, always with
+// an accurate "+N") and never wraps or cuts a word.
 function AlertStatus({ row, onJump }) {
+    const refs = { boxRef: useRef(null), anchorRef: useRef(null), textRef: useRef(null), measureRef: useRef(null) };
+    const live = row?.kind === 'live' && row.summary;
+    const variants = live
+        ? (row.variants?.length ? row.variants : [row.summary.text])
+        : ['Watches and warnings in this discussion', 'Watches and warnings'];
+    const linked = Boolean(row) && (row.kind === 'live' || row.kind === 'listed');
+    const index = useFittingVariant(linked ? variants : [], refs);
     if (!row || row.kind === 'pending' || row.kind === 'unavailable') return null;
     if (row.kind === 'none') {
         return <span className="min-w-0 truncate">No active alerts</span>;
     }
-    const live = row.kind === 'live' && row.summary;
-    const text = live ? row.summary.text : 'Watches and warnings in this discussion';
     const label = live ? row.summary.label : 'Watches and warnings in this discussion. Jump to them.';
     return (
-        <a
-            href="#section-active-alerts"
-            aria-label={label}
-            onClick={(e) => {
-                if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-                e.preventDefault();
-                onJump?.();
-            }}
-            className={cn(
-                'tap-target inline-flex min-w-0 items-center gap-1.5 rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                live && row.severe ? 'text-destructive' : 'text-foreground'
-            )}
-        >
-            <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 truncate">{text}</span>
-        </a>
+        <span ref={refs.boxRef} className="flex min-w-0 flex-1">
+            <a
+                ref={refs.anchorRef}
+                href="#section-active-alerts"
+                aria-label={label}
+                onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                    e.preventDefault();
+                    onJump?.();
+                }}
+                className={cn(
+                    'tap-target relative inline-flex min-w-0 items-center gap-1.5 rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                    live && row.severe ? 'text-destructive' : 'text-foreground'
+                )}
+            >
+                <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
+                <span ref={refs.textRef} className="min-w-0 truncate">{variants[index]}</span>
+                {/* Zero-size and clipped, so the longest variant can never
+                    widen the page; its children keep their natural widths. */}
+                <span aria-hidden="true" className="pointer-events-none invisible absolute top-0 left-0 size-0 overflow-hidden">
+                    <span ref={refs.measureRef} className="flex w-max flex-col whitespace-nowrap">
+                        {variants.map(v => <span key={v} className="w-max">{v}</span>)}
+                    </span>
+                </span>
+            </a>
+        </span>
+    );
+}
+
+// "Issued Wednesday, November 18 at 1:42 PM PST (1 hour ago)". The clock and
+// the relative time each stay whole, so a narrow row wraps between them,
+// never inside "(1 hour ago)" or "1:42 PM PST".
+function IssuedAt({ at, ago }) {
+    // An engine that formats without " at " keeps the date breakable;
+    // only the relative time is held together then.
+    const cut = at.lastIndexOf(' at ');
+    const day = cut > 0 ? at.slice(0, cut + 4) : at;
+    const clock = cut > 0 ? at.slice(cut + 4) : '';
+    return (
+        <span>
+            Issued {day}{clock && <span className="whitespace-nowrap">{clock}</span>}
+            {ago && <>{' '}<span className="whitespace-nowrap">({ago})</span></>}
+        </span>
     );
 }
 
 export function PageIntro({
-    office, takeawayHTML, takeawayFromMessages, forecaster, issueLine, fullText, conditions,
+    office, takeawayHTML, takeawayFromMessages, forecaster, issued, fullText, conditions,
     conditionsExpected = false, changelog, changelogPending = false, editions, currentEditionId, onSelectEdition, viewingHistorical,
     changelogHref, onOpenChangelog, onChangelogIntent, alertRow, onJumpToAlerts,
 }) {
@@ -173,7 +240,7 @@ export function PageIntro({
 
     // The meta line: one wrapping row of sans facts, `·`-separated.
     const meta = [];
-    if (issueLine) meta.push(<span key="issued">{issueLine}</span>);
+    if (issued) meta.push(<IssuedAt key="issued" at={issued.at} ago={issued.ago} />);
     if (forecaster) meta.push(<span key="forecaster">Forecaster: {forecaster}</span>);
     if (label) {
         meta.push(
