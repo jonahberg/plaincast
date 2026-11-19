@@ -183,7 +183,11 @@ acceptmarkdown.com test vectors live in `tests/negotiate.test.js`.
 - `bun test tests/` — run all tests
 - `cd shadcn && bun run dev` — frontend dev server. The SSR digest, the trust
   pages, the AI endpoints and Markdown negotiation are functions, so they need
-  `vercel dev` from the repo root.
+  `vercel dev` from the repo root. Locally those server-rendered pages name the
+  committed shell's PLACEHOLDER assets (`/assets/app.js`, `app.css`,
+  `vendor.js`), which do not exist: hashed names exist only after
+  scripts/prepare-deploy.mjs runs in a build, so check the server HTML there,
+  and the app itself with the Vite dev server.
 - `cd shadcn && bun run build` — production build (Vercel runs this plus
   scripts/prepare-deploy.mjs; run that only in a scratch copy, it rewrites
   api/_home-shell.html). `vite preview` serves Vite's own dist/index.html,

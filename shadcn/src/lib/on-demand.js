@@ -8,9 +8,10 @@ import { useEffect, useState } from 'react';
 // onDemand(load) returns get(): the first call starts the import, later
 // calls share it, and get.peek() is the module once it has arrived. A failed
 // load is NOT remembered (React.lazy would rethrow it forever), so the next
-// call tries again. The service worker serves /assets/* network-first with a
-// cache fallback: offline, a chunk read once before still loads; one never
-// read fails, and every caller treats that as "this extra is unavailable".
+// call tries again. The service worker serves /assets/* cache-first (the
+// names are content-hashed, and install precaches this build's chunks), so a
+// chunk loads offline; one the worker does not hold fails offline, and every
+// caller treats that as "this extra is unavailable".
 export function onDemand(load) {
     let promise = null;
     let mod = null;

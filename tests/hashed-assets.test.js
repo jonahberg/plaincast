@@ -53,14 +53,16 @@ const FILES = new Set(precacheAssets(MANIFEST));
 const inDist = (u) => FILES.has(u);
 
 describe('vite build config', () => {
-    it('emits content-hashed entry, chunks and CSS plus a manifest', async () => {
-        const cfg = (await import('../shadcn/vite.config.js')).default;
-        const out = cfg.build.rollupOptions.output;
-        expect(cfg.build.manifest).toBe(true);
-        expect(out.entryFileNames).toBe('assets/app-[hash].js');
-        expect(out.chunkFileNames).toBe('assets/[name]-[hash].js');
-        expect(out.assetFileNames({ names: ['index.css'] })).toBe('assets/app-[hash].css');
-        expect(out.assetFileNames({ names: ['logo.svg'] })).toBe('assets/[name]-[hash][extname]');
+    // Source text, not an import: CI runs this suite before shadcn/ installs
+    // vite (.github/workflows/test.yml), and importing the config needs it.
+    const SRC = read('shadcn/vite.config.js');
+    it('emits content-hashed entry, chunks and CSS plus a manifest', () => {
+        expect(SRC).toContain('manifest: true');
+        expect(SRC).toContain("entryFileNames: 'assets/app-[hash].js'");
+        expect(SRC).toContain("chunkFileNames: 'assets/[name]-[hash].js'");
+        expect(SRC).toContain("'assets/app-[hash].css'");
+        expect(SRC).toContain("'assets/[name]-[hash][extname]'");
+        expect(SRC).not.toMatch(/entryFileNames: 'assets\/app\.js'|'assets\/app\.css'/);
     });
 });
 
