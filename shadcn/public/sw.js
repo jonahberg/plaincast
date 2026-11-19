@@ -25,7 +25,7 @@
 //                  have since expired; the app drops those client-side
 //                  (dropExpiredAlerts in src/lib/nws.js), so an offline
 //                  reader never sees an expired Warning as live.
-const CACHE = 'plaincast-shadcn-v7';
+const CACHE = 'plaincast-shadcn-v8';
 const NWS_CACHE = 'plaincast-shadcn-nws-v3';
 const NWS_MAX = 60;
 // This build's hashed /assets/* files: the entry, its CSS, vendor and the
