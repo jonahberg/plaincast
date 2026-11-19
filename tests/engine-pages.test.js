@@ -420,9 +420,17 @@ describe('aiForSections: the join is exact or nothing', () => {
         expect(ai.get('NEAR TERM')).toBe(AI_SECTIONS['Short Term']);
     });
 
-    it('two sections sharing a display key → no AI (the map holds only one of them)', () => {
+    // Nov 18 2026: a NEAR TERM beside a SHORT TERM is "Near Term" (it used to
+    // share "Short Term", and the map could hold only one of them).
+    it('NEAR TERM beside SHORT TERM joins under its own key, "Near Term"', () => {
         const text = CURR.replace('.LONG TERM (Sunday through Wednesday)...',
             '.NEAR TERM...\nA second short-term discussion that is long enough to render here today.\n\n&&\n\n.LONG TERM (Sunday through Wednesday)...');
+        const sections = { ...AI_SECTIONS, 'Near Term': 'A second short-term summary.' };
+        const ai = aiForSections(text, completeTi({ productText: text, sections }), 'LOX', CURR_ID);
+        expect([...ai.keys()]).toEqual(['SYNOPSIS', 'SHORT TERM', 'NEAR TERM', 'LONG TERM']);
+        expect(ai.get('SHORT TERM')).toBe(AI_SECTIONS['Short Term']);
+        expect(ai.get('NEAR TERM')).toBe('A second short-term summary.');
+        // a map without the Near Term translation is not complete for this page
         expect(aiForSections(text, completeTi({ productText: text }), 'LOX', CURR_ID)).toBe(null);
     });
 

@@ -80,7 +80,8 @@ function issuedText(issued, issuedIso) {
 }
 
 // One decoded AFD, as Markdown. `sections` is the already-picked,
-// already-paragraphed shape the SSR HTML uses: [{ key, paras: [string], ai? }].
+// already-paragraphed shape the SSR HTML uses: [{ key, name?, paras: [string],
+// ai? }] (`name`: the heading, distinct within the product).
 // `aiIncluded` and `issuedIso` are passed only with PLAINCAST_AI_FOR_AGENTS=1.
 export function renderEditionMarkdown({
     code, city, sections, issued, changelogNote, canonical, moreHref, aiIncluded = false, issuedIso = null,
@@ -99,7 +100,7 @@ export function renderEditionMarkdown({
 
     for (const s of sections) {
         lines.push('');
-        lines.push(`## ${safeHeading(s.key)}`);
+        lines.push(`## ${safeHeading(s.name || s.key)}`);
         lines.push('');
         lines.push(...sectionLines(aiIncluded ? s : { ...s, ai: null }));
     }
@@ -169,7 +170,7 @@ export function renderHomeMarkdown({ code, city, sections, issued, edition, aiIn
         }
         for (const s of sections) {
             lines.push('');
-            lines.push(`### ${safeHeading(s.key)}`);
+            lines.push(`### ${safeHeading(s.name || s.key)}`);
             lines.push('');
             lines.push(...sectionLines(aiIncluded === true ? s : { ...s, ai: null }));
         }

@@ -6,7 +6,7 @@ import { generateText } from 'ai';
 import { OFFICE_TIMEZONES, SECTION_NAMES } from '../docs/js/offices.js';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { sendError } from './_errors.js';
-import { extractSections } from './_afd-sections.js';
+import { displaySections } from './_translatable.js';
 import { MODEL, PROVIDER_OPTIONS } from './_model.js';
 // The client parser, imported so verification matches what browsers send.
 // Pure module (relative imports only); shadcn/package.json is type:module.
@@ -34,8 +34,11 @@ function cacheKey(text, sectionKey, office) {
 // caching. The prompt gets the canonical label too (promptSectionLabel), never
 // the raw one: the raw label isn't in the cache key, so letting it steer the
 // output would let one caller poison the entry every reader shares.
+// "Near Term" is a display name too: a NEAR TERM beside a SHORT TERM keeps its
+// own key (shadcn/src/lib/afd.js sectionDisplayKeys), and its label must not
+// fold back into "Short Term".
 const DISPLAY_SECTIONS = new Map(
-    Object.values(SECTION_NAMES).map(v => [v.toUpperCase(), v])
+    [...Object.values(SECTION_NAMES), 'Near Term'].map(v => [v.toUpperCase(), v])
 );
 export function canonicalSectionKey(label) {
     if (typeof label !== 'string' || !label.trim()) return 'OTHER';
@@ -194,7 +197,8 @@ export function buildSectionIndex(productText) {
     try {
         for (const s of parseSections(productText).sections) add(s.key, s.text);
     } catch { /* fall through to the server parser */ }
-    for (const s of extractSections(productText)) add(s.key, s.text);
+    // The server parser's sections under the same per-product display keys.
+    for (const s of displaySections(productText)) add(s.display, s.text);
     return index;
 }
 

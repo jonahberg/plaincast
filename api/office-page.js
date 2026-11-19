@@ -49,7 +49,7 @@ import { isTabularSection } from '../docs/js/tabular.js';
 import { renderOfficePage, escHtml, officeTitle } from '../scripts/build-offices.mjs';
 import { ASSET_PLACEHOLDERS } from '../scripts/app-shell.mjs';
 import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
-import { extractSections, regexTranslate } from './_afd-sections.js';
+import { regexTranslate } from './_afd-sections.js';
 import { renderEditionMarkdown } from './_edition-markdown.js';
 import {
     sendNegotiated, send406, selectRepresentation, acceptHeader, HTML, MARKDOWN,
@@ -57,7 +57,7 @@ import {
 import { sendError } from './_errors.js';
 import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot, SHORT_CACHE } from './_boot.js';
 import { AI_FOR_AGENTS, STORE_RENDER, officeTag, readRenderableEdition, switchOn } from './_store.js';
-import { displayKey, translatableSections } from './_translatable.js';
+import { displaySections, sectionHeadings, translatableSections } from './_translatable.js';
 import { aiParagraphs } from './_ai-text.js';
 // ChST / SST where Intl prints "GMT+10" / "GMT-11" (Guam, American Samoa).
 import { formatInZone } from '../shadcn/src/lib/format.js';
@@ -257,12 +257,16 @@ function formatIssued(iso, tz) {
 // sections, cleaned into paragraphs. Shape: [{ key, paras: [string] }].
 // One source of truth, so the HTML page and its Markdown twin can never
 // disagree about which sections an edition contains.
+// `name` is the section's heading: distinct within the product (a NEAR TERM
+// beside a SHORT TERM is "Near Term", as in the app; _translatable.js).
 export function editionSections(productText) {
+    const all = displaySections(productText);
+    const headings = sectionHeadings(all);
     const out = [];
-    for (const s of pickSections(extractSections(productText))) {
+    for (const s of pickSections(all.map((x, i) => ({ ...x, name: headings[i] })))) {
         const paras = sectionParagraphs(s.text);
         if (paras.length === 0) continue;
-        out.push({ key: s.key, paras });
+        out.push({ key: s.key, name: s.name, paras });
     }
     return out;
 }
@@ -289,7 +293,7 @@ export function buildSsrHtml(code, city, productText, issuanceTime, changelogHtm
     const ai = opts?.ai || null;
     const articles = [];
     for (const s of editionSections(productText)) {
-        const name = SECTION_NAMES[s.key] || titleCase(s.key);
+        const name = s.name || SECTION_NAMES[s.key] || titleCase(s.key);
         const nws = s.paras.map(p => `            <p>${escHtml(regexTranslate(p))}</p>`).join('\n');
         const aiText = ai ? ai.get(s.key) : null;
         if (aiText) {
@@ -374,10 +378,10 @@ export function aiForSections(productText, entry, office, id, limit = Infinity) 
     if (!map || typeof map !== 'object' || Array.isArray(map)) return null;
     const translatable = translatableSections(productText);
     const out = new Map();
-    for (const s of pickSections(extractSections(productText))) {
+    for (const s of pickSections(displaySections(productText))) {
         if (out.size >= limit) break;
         if (sectionParagraphs(s.text).length === 0) continue; // as editionSections
-        const d = displayKey(s.key);
+        const d = s.display;
         const twins = translatable.filter(t => t.key === d);
         if (twins.length !== 1 || twins[0].text !== s.text) return null;
         const text = map[d];

@@ -121,7 +121,7 @@ export function buildHomeSsr(code, city, sections, issued, { ai = null, issuance
         : `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}).</p>\n`;
 
     const articles = sections.map(s => {
-        const name = escHtml(SECTION_NAMES[s.key] || titleCase(s.key));
+        const name = escHtml(s.name || SECTION_NAMES[s.key] || titleCase(s.key));
         const aiText = ai ? ai.get(s.key) : null;
         const body = aiText
             ? aiSectionBody(aiText, s.paras)

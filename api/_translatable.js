@@ -6,12 +6,34 @@
 // Files prefixed with `_` are not treated as endpoints by Vercel.
 import { SECTION_NAMES } from '../docs/js/offices.js';
 import { isTabularSection } from '../docs/js/tabular.js';
+import { sectionDisplayKeys } from '../shadcn/src/lib/afd.js';
 import { extractSections } from './_afd-sections.js';
 
-// Mirror the client parser's section keying (SECTION_NAMES map, else Title Case)
-// so returned keys line up with what app.js renders.
+// One raw header's display name on its own (SECTION_NAMES map, else sentence
+// case). Within a product, use displaySections: two sections never share a
+// key there (NEAR TERM is "Near Term" beside a SHORT TERM).
 export function displayKey(rawKey) {
     return SECTION_NAMES[rawKey] || rawKey.charAt(0) + rawKey.slice(1).toLowerCase();
+}
+
+// extractSections with each section's display key (`display`), assigned per
+// product by the client's own rule (shadcn/src/lib/afd.js
+// sectionDisplayKeys, a pure module), so the keys line up with what the app
+// renders and asks for.
+export function displaySections(productText) {
+    const sections = extractSections(productText);
+    const keys = sectionDisplayKeys(sections.map(s => s.key));
+    return sections.map((s, i) => ({ ...s, display: keys[i] }));
+}
+
+// The server pages' heading for each section of a product: the heading they
+// have always printed (SECTION_NAMES, else Title Case), unless the product
+// renamed the section to keep it distinct ("Near Term").
+export function sectionHeadings(sections) {
+    const titleCase = (k) => String(k).toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());
+    return sections.map(s => (s.display && s.display !== displayKey(s.key)
+        ? s.display
+        : SECTION_NAMES[s.key] || titleCase(s.key)));
 }
 
 // Sections that are never AI-translated: alerts render from the live alerts
@@ -28,9 +50,9 @@ const MAX_SECTIONS = 10;
 // carry swapped numbers): readers drop it (api/_boot.js; the server-rendered
 // digest never renders a table at all, api/office-page.js pickSections).
 export function tabularDisplayKeys(productText) {
-    return new Set(extractSections(productText)
+    return new Set(displaySections(productText)
         .filter(s => isTabularSection(s.key, s.text))
-        .map(s => displayKey(s.key)));
+        .map(s => s.display));
 }
 
 // The sections of one product that get a model call, in document order:
@@ -39,9 +61,9 @@ export function tabularDisplayKeys(productText) {
 // translation per section listed here), for the on-demand endpoint and the
 // poller alike, so an excluded section can never leave an edition incomplete.
 export function translatableSections(productText) {
-    return extractSections(productText)
+    return displaySections(productText)
         .filter(s => !isTabularSection(s.key, s.text))
-        .map(s => ({ key: displayKey(s.key), text: s.text }))
+        .map(s => ({ key: s.display, text: s.text }))
         .filter(s => !SKIP_KEYS.has(s.key))
         .filter(s => s.text.length >= MIN_SECTION_CHARS && s.text.length <= MAX_SECTION_CHARS)
         .slice(0, MAX_SECTIONS);

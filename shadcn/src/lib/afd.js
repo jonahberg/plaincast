@@ -17,6 +17,36 @@ import { FULL_ABBREVIATIONS } from '../../../docs/js/abbreviations.js';
 import { SECTION_NAMES } from '../../../docs/js/offices.js';
 import { formatInZone } from './format.js';
 
+// Display keys for one product's section headers, in order, never two alike.
+// A key is the SECTION_NAMES name, else the header in sentence case. Where
+// sections would share one (JAX, OUN and HUN on Nov 18 2026: NEAR TERM and
+// SHORT TERM are both "Short Term", so the edition's translation set could
+// never be complete and one section's AI text was lost), the section the name
+// belongs to keeps it (SHORT TERM keeps "Short Term"; else the first) and each
+// other takes its own header in title case ("Near Term"), then an ordinal
+// ("Aviation (2)"). A product without a repeat keeps exactly the keys it had,
+// so stored translations keyed by them still match. The server imports the
+// shadcn copy (api/_translatable.js); forked verbatim into docs/js/app.js and
+// tests/helpers.js (parity-locked).
+export function sectionDisplayKeys(rawKeys) {
+    const name = (raw) => SECTION_NAMES[raw] || raw.charAt(0) + raw.slice(1).toLowerCase();
+    const title = (raw) => raw.toLowerCase().replace(/(^|[\s\/(-])([a-z])/g, (m, before, c) => before + c.toUpperCase());
+    const keys = rawKeys.map(name);
+    const owner = new Map();
+    keys.forEach((key, i) => {
+        const prev = owner.get(key);
+        if (prev === undefined || (title(rawKeys[prev]) !== key && title(rawKeys[i]) === key)) owner.set(key, i);
+    });
+    const used = new Set(owner.keys());
+    return keys.map((key, i) => {
+        if (owner.get(key) === i) return key;
+        let own = title(rawKeys[i]);
+        for (let n = 2; used.has(own); n++) own = `${title(rawKeys[i])} (${n})`;
+        used.add(own);
+        return own;
+    });
+}
+
 export function parseSections(text) {
     // Remove header lines (product header, timestamps at very top)
     const lines = text.split('\n');
@@ -38,9 +68,9 @@ export function parseSections(text) {
             if (currentKey) {
                 sections.push({ key: currentKey, text: currentLines.join('\n').trim() });
             }
-            const rawKey = headerMatch[1].trim();
-            // Map to canonical name
-            currentKey = SECTION_NAMES[rawKey] || rawKey.charAt(0) + rawKey.slice(1).toLowerCase();
+            // The raw header for now: display keys are given per product
+            // at the end (sectionDisplayKeys), so no two sections share one.
+            currentKey = headerMatch[1].trim();
             currentLines = [line.replace(headerMatch[0], '').trim()];
             continue;
         }
@@ -89,6 +119,9 @@ export function parseSections(text) {
             }
         }
     }
+
+    const keys = sectionDisplayKeys(sections.map(s => s.key));
+    sections.forEach((s, i) => { s.key = keys[i]; });
 
     return { sections, forecaster };
 }
@@ -140,6 +173,7 @@ export function reorderSections(sections, office, hasAlerts) {
         'Messages': 1.5,
         'What has changed': 1.8,
         'Update': 1.9,
+        'Near Term': 2,
         'Short Term': 2,
         'Discussion': 2,
         'Long Term': 3,
