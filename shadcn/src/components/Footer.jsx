@@ -22,8 +22,10 @@ function OfficeLink({ code, office, className = '' }) {
             aria-current={code === office ? 'page' : undefined}
         >
             {/* A no-break space: a wrapped name never leaves its code alone
-                on the next line ("Greenville-Spartanburg" / "(GSP)"). */}
-            {OFFICE_NAMES[code]}{'\u00a0'}({code})
+                on the next line ("Greenville-Spartanburg" / "(GSP)"). A
+                slash may break instead ("Mobile/" / "Pensacola (MOB)"). */}
+            {OFFICE_NAMES[code].split('/').flatMap((part, i) => (i ? ['/', <wbr key={i} />, part] : [part]))}
+            {'\u00a0'}({code})
         </a>
     );
 }

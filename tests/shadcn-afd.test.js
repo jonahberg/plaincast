@@ -103,9 +103,10 @@ describe('time-zone labels (formatInZone)', () => {
     const opts = (timeZone) => ({ hour: 'numeric', minute: '2-digit', timeZone, timeZoneName: 'short' });
 
     it('names Guam and American Samoa time as NWS does', () => {
-        expect(formatInZone(at, opts('Pacific/Guam'))).toBe('5:51 AM ChST');
-        expect(formatInZone(at, opts('Pacific/Pago_Pago'))).toBe('8:51 AM SST');
-        expect(formatIssueTime(at, 'Pacific/Guam')).toBe('Thursday, November 19 at 5:51 AM ChST');
+        // \s: some ICU builds put a narrow no-break space before AM/PM.
+        expect(formatInZone(at, opts('Pacific/Guam'))).toMatch(/^5:51\sAM ChST$/);
+        expect(formatInZone(at, opts('Pacific/Pago_Pago'))).toMatch(/^8:51\sAM SST$/);
+        expect(formatIssueTime(at, 'Pacific/Guam')).toMatch(/November 19\b.*5:51\sAM ChST$/);
     });
 
     it('is toLocaleString everywhere else, and without a zone name', () => {

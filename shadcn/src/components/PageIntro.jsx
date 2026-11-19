@@ -211,12 +211,14 @@ function AlertStatus({ row, onJump }) {
 // the relative time each stay whole, so a narrow row wraps between them,
 // never inside "(1 hour ago)" or "1:42 PM PST".
 function IssuedAt({ at, ago }) {
+    // An engine that formats without " at " keeps the date breakable;
+    // only the relative time is held together then.
     const cut = at.lastIndexOf(' at ');
-    const day = cut > 0 ? at.slice(0, cut + 4) : '';
-    const clock = cut > 0 ? at.slice(cut + 4) : at;
+    const day = cut > 0 ? at.slice(0, cut + 4) : at;
+    const clock = cut > 0 ? at.slice(cut + 4) : '';
     return (
         <span>
-            Issued {day}<span className="whitespace-nowrap">{clock}</span>
+            Issued {day}{clock && <span className="whitespace-nowrap">{clock}</span>}
             {ago && <>{' '}<span className="whitespace-nowrap">({ago})</span></>}
         </span>
     );

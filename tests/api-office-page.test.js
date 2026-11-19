@@ -268,9 +268,10 @@ describe('office-page helpers', () => {
 
     it('buildSsrHtml labels Guam and American Samoa times as NWS does (ChST, SST)', () => {
         const text = '.SYNOPSIS...\nTrade winds continue with isolated showers through the weekend across the islands.\n\n$$';
-        expect(buildSsrHtml('GUM', 'Guam', text, '2026-11-18T19:51:00+00:00', '')).toContain('5:51 AM ChST');
-        expect(buildSsrHtml('PPG', 'Pago Pago', text, '2026-11-18T01:28:00+00:00', '')).toContain('2:28 PM SST');
-        expect(buildSsrHtml('LOX', 'Los Angeles', text, '2026-11-18T21:42:00+00:00', '')).toContain('1:42 PM PST');
+        // \s: some ICU builds put a narrow no-break space before AM/PM.
+        expect(buildSsrHtml('GUM', 'Guam', text, '2026-11-18T19:51:00+00:00', '')).toMatch(/5:51\sAM ChST/);
+        expect(buildSsrHtml('PPG', 'Pago Pago', text, '2026-11-18T01:28:00+00:00', '')).toMatch(/2:28\sPM SST/);
+        expect(buildSsrHtml('LOX', 'Los Angeles', text, '2026-11-18T21:42:00+00:00', '')).toMatch(/1:42\sPM PST/);
     });
 
     it('buildSsrHtml escapes NWS-derived text', () => {
