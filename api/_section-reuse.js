@@ -25,7 +25,7 @@
 // it was written, which is the reading the forecaster meant. The stored text
 // is sanitized again with the NEW issuance time on every reuse.
 //
-// Entries: `ts:v1:<OFFICE>:<sha256>` → { office, key, hash, text }, untagged,
+// Entries: `ts:v2:<OFFICE>:<sha256>` → { office, key, hash, text }, untagged,
 // one week. They hold a single section's finished, sanitized translation
 // (what translate.js's own per-section cache keeps), never a partial edition.
 // Bump SECTION_KEY_VERSION with TRANSLATION_KEY_VERSION.

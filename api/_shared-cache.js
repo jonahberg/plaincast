@@ -28,14 +28,16 @@
 import { createHash } from 'node:crypto';
 
 // Key versions, one per family. Bump when that output's rules change.
-export const TRANSLATION_KEY_VERSION = 'v5'; // api/translate-issuance.js (+ translate.js prompt/sanitizer). v2: date-range sanitizer + no-added-advice prompt rule (Nov 18 2026). v3-v5: no document/calendar narration (prompt + sanitizer), "Issued at" line out of the prompt input, Zulu weekday only when the text fixes the day (Nov 18 2026)
+export const TRANSLATION_KEY_VERSION = 'v6'; // api/translate-issuance.js (+ translate.js prompt/sanitizer). v2: date-range sanitizer + no-added-advice prompt rule (Nov 18 2026). v3-v5: no document/calendar narration (prompt + sanitizer), "Issued at" line out of the prompt input, Zulu weekday only when the text fixes the day (Nov 18 2026). v6: section selection (tables and sections under 25 words never translated), a distinct "Near Term" key, Zulu weekday abbreviations and 24Z, ChST/SST in the prompt (Nov 18 2026)
 export const CHANGELOG_KEY_VERSION = 'v3';   // api/changelog.js. v2: no-added-advice prompt rule (Nov 18 2026). v3: that rule's reason reworded neutrally (Nov 18 2026)
 export const LEDE_KEY_VERSION = 'v3';        // api/national-lede.js (+ translate.js sanitizer). v2: date-range sanitizer + no-added-advice prompt rule (Nov 18 2026). v3: that rule's reason reworded + narration sanitizer (Nov 18 2026)
 // The engine's families (api/_store.js, api/cron-refresh.js). None of them is
 // tagged: a CDN purge by tag also deletes Runtime Cache items carrying that
 // tag, and the engine purges pages by tag.
-export const SECTION_KEY_VERSION = 'v1';     // ts: one section's translation, for reuse. Same prompt,
+export const SECTION_KEY_VERSION = 'v2';     // ts: one section's translation, for reuse. Same prompt,
                                              //     sanitizer and model as ti: bump the two together.
+                                             //     v2: with ti v6 (section selection, "Near Term",
+                                             //     Zulu weekday abbreviations and 24Z; Nov 18 2026)
 export const EDITION_KEY_VERSION = 'v1';     // ed: an office's current + previous edition
 export const POLL_KEY_VERSION = 'v1';        // poll: the poller's state and heartbeat
 export const COUNTER_KEY_VERSION = 'v1';     // mc: model calls per UTC day
@@ -56,7 +58,7 @@ export const SET_TIMEOUT_MS = 750;
 const OFFICE_RE = /^[A-Z]{3}$/;
 const ID_RE = /^[\w.:-]{1,64}$/; // the endpoints' own id contract
 
-// `ti:v5:LOX:<id>`: a complete translate-issuance payload.
+// `ti:v6:LOX:<id>`: a complete translate-issuance payload.
 export function translationKey(office, id) {
     const o = String(office ?? '').toUpperCase();
     if (!OFFICE_RE.test(o) || typeof id !== 'string' || !ID_RE.test(id)) return null;
@@ -89,7 +91,7 @@ export function modelCallsKey(day) {
     return typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day) ? `mc:${COUNTER_KEY_VERSION}:${day}` : null;
 }
 
-// `ts:v1:LOX:<sha256 hex>`: one section's translation, keyed by a hash of
+// `ts:v2:LOX:<sha256 hex>`: one section's translation, keyed by a hash of
 // everything the model's answer depends on (api/_store.js sectionHash).
 export function sectionKey(office, hash) {
     const o = String(office ?? '').toUpperCase();
