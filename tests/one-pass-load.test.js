@@ -303,6 +303,12 @@ describe('touch hit areas (pointer: coarse)', () => {
         expect(header).toContain('pointer-coarse:min-h-11');
     });
 
+    it('select rows (office and edition pickers) are 44px on touch', () => {
+        const select = read('shadcn/src/components/ui/select.jsx');
+        const item = select.slice(select.indexOf('function SelectItem('), select.indexOf('function SelectSeparator('));
+        expect(item).toContain('pointer-coarse:min-h-11');
+    });
+
     it('phones reach the National Desk from the header (an icon link where md+ has the text nav)', () => {
         const header = read('shadcn/src/components/Header.jsx');
         expect(header).toContain('className="md:hidden pointer-coarse:size-11"');
