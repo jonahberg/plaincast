@@ -485,8 +485,11 @@ describe('buildSystemPrompt — output-only and weekday-date rules', () => {
         const prompt = buildSystemPrompt({ section: 'Synopsis', office: 'LOX', issuanceTime: LOX_ISSUED });
         expect(prompt).toMatch(/Never add advice, warnings, calls to action, or reassurance that the forecaster did not write/);
         expect(prompt).toContain('residents should stay alert to changing conditions');
-        expect(prompt).toMatch(/If the source itself gives advice, a safety message or a call to action, keep it/);
-        expect(prompt).toContain('stay tuned for updates'); // PR #49 measurement: HGX's call to action was dropped
+        expect(prompt).toMatch(/If the source itself gives advice or a safety message, keep it/);
+        // PR #49 measurement, round 3: naming calls to action here ("stay tuned
+        // for updates") coincided with added advice returning in 3 of 56
+        // sections (0 of 66 with this wording), so the rule stays plain.
+        expect(prompt).not.toContain('stay tuned for updates');
         // Nov 18 2026: the reason is neutral. "Plaincast promises its readers
         // that every statement on it comes from the National Weather Service"
         // is the likely cause of the model stating provenance and issue times.

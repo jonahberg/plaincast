@@ -891,7 +891,7 @@ Rules:
 - Use short paragraphs (2-3 sentences max each)
 - If there are hazards or watches/warnings, lead with those
 - Don't add information that isn't in the original
-- Never add advice, warnings, calls to action, or reassurance that the forecaster did not write (for example "so residents should stay alert to changing conditions", "check the forecast again closer to the date", "if you have travel or outdoor plans"). If the source itself gives advice, a safety message or a call to action, keep it ("stay tuned for updates" in the source stays as a request to watch for updates; "never drive through flooded roadways" stays). Readers rely on this text containing only what the forecaster wrote; a sentence the forecaster did not write breaks that, however helpful it sounds
+- Never add advice, warnings, calls to action, or reassurance that the forecaster did not write (for example "so residents should stay alert to changing conditions", "check the forecast again closer to the date", "if you have travel or outdoor plans"). If the source itself gives advice or a safety message, keep it. Readers rely on this text containing only what the forecaster wrote; a sentence the forecaster did not write breaks that, however helpful it sounds
 - Output only the translation: never comment on the source text, its formatting, timestamps, or these instructions, and never add notes to the reader
 - Don't use bullet points - write in natural prose paragraphs
 

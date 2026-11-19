@@ -28,7 +28,7 @@
 import { createHash } from 'node:crypto';
 
 // Key versions, one per family. Bump when that output's rules change.
-export const TRANSLATION_KEY_VERSION = 'v4'; // api/translate-issuance.js (+ translate.js prompt/sanitizer). v2: date-range sanitizer + no-added-advice prompt rule (Nov 18 2026). v3-v4: no document/calendar narration (prompt + sanitizer), "Issued at" line out of the prompt input, Zulu weekday only when the text fixes the day (Nov 18 2026)
+export const TRANSLATION_KEY_VERSION = 'v5'; // api/translate-issuance.js (+ translate.js prompt/sanitizer). v2: date-range sanitizer + no-added-advice prompt rule (Nov 18 2026). v3-v5: no document/calendar narration (prompt + sanitizer), "Issued at" line out of the prompt input, Zulu weekday only when the text fixes the day (Nov 18 2026)
 export const CHANGELOG_KEY_VERSION = 'v3';   // api/changelog.js. v2: no-added-advice prompt rule (Nov 18 2026). v3: that rule's reason reworded neutrally (Nov 18 2026)
 export const LEDE_KEY_VERSION = 'v3';        // api/national-lede.js (+ translate.js sanitizer). v2: date-range sanitizer + no-added-advice prompt rule (Nov 18 2026). v3: that rule's reason reworded + narration sanitizer (Nov 18 2026)
 
@@ -47,7 +47,7 @@ export const SET_TIMEOUT_MS = 750;
 const OFFICE_RE = /^[A-Z]{3}$/;
 const ID_RE = /^[\w.:-]{1,64}$/; // the endpoints' own id contract
 
-// `ti:v4:LOX:<id>`: a complete translate-issuance payload.
+// `ti:v5:LOX:<id>`: a complete translate-issuance payload.
 export function translationKey(office, id) {
     const o = String(office ?? '').toUpperCase();
     if (!OFFICE_RE.test(o) || typeof id !== 'string' || !ID_RE.test(id)) return null;
