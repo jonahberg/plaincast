@@ -29,7 +29,8 @@ import { fetchAFDList, fetchAFDProduct, productUrlFromItem } from './_utils.js';
 import { regexTranslate } from './_afd-sections.js';
 import {
     loadTemplate, editionSections as fullEdition, wantsBoot,
-    aiForSections, aiSectionBody, issuedHtml, withAi, STORE_CACHE, CACHE_TAG_HEADER,
+    aiForSections, aiSectionBody, issuedHtml, withAi, withDateModified, HOME_PAGE_ID,
+    STORE_CACHE, CACHE_TAG_HEADER,
 } from './office-page.js';
 import { buildBoot, cacheControlFor, fetchBootExtras, insertBoot, SHORT_CACHE } from './_boot.js';
 import { AI_FOR_AGENTS, HOME_TAG, STORE_RENDER, officeTag, readRenderableEdition, switchOn } from './_store.js';
@@ -87,11 +88,11 @@ export function editionSections(productText) {
 // The homepage's #sections content: a standfirst that says what this site is
 // (the part an agent most needs and JavaScript cannot be relied on to deliver),
 // then the decoded edition, then a pointer to the canonical office page.
-// `opts` only with PLAINCAST_AI_FOR_AGENTS=1 ({ ai, issuanceTime }; see
-// api/office-page.js buildSsrHtml): absent, the output is the switch-off page.
-export function buildHomeSsr(code, city, sections, issued, opts = null) {
+// `issuanceTime` (the NWS ISO instant) becomes <time datetime> in the
+// dateline. `ai` only with PLAINCAST_AI_FOR_AGENTS=1 (see api/office-page.js
+// buildSsrHtml): absent, the output is the switch-off page.
+export function buildHomeSsr(code, city, sections, issued, { ai = null, issuanceTime = null } = {}) {
     if (sections.length === 0) throw new Error('home: no renderable sections');
-    const ai = opts?.ai || null;
     const offices = Object.keys(OFFICE_NAMES).length;
 
     const standfirst = ai
@@ -111,7 +112,7 @@ export function buildHomeSsr(code, city, sections, issued, opts = null) {
           `<a href="/national/">${offices} forecast offices</a> has its own edition.</p>\n`;
 
     const metaLine = issued
-        ? `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}) · issued ${issuedHtml(issued, opts?.issuanceTime, Boolean(opts))}.</p>\n`
+        ? `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}) · issued ${issuedHtml(issued, issuanceTime)}.</p>\n`
         : `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}).</p>\n`;
 
     const articles = sections.map(s => {
@@ -237,8 +238,10 @@ export default async function handler(req, res) {
         if (baked) {
             if (!baked.includes(LOADING_DIV)) throw new Error('skeleton marker missing from template');
             // replacer fn: `$`-sequences in forecast text must not be interpreted
-            html = baked.replace(LOADING_DIV, () => buildHomeSsr(code, city, sections, issued,
-                aiForAgents ? { ai, issuanceTime: product.issuanceTime } : null));
+            html = withDateModified(
+                baked.replace(LOADING_DIV, () => buildHomeSsr(code, city, sections, issued,
+                    { ai, issuanceTime: product.issuanceTime })),
+                HOME_PAGE_ID, product.issuanceTime);
             if (boot && extrasPending) {
                 const bootData = buildBoot({
                     office: code,

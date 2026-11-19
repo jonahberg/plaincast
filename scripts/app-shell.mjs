@@ -48,6 +48,15 @@ export function injectOfficeIndex(html, codes = officeIndexCodes()) {
     return html.replace(whole, () => `${ulIndent}${open}\n${lis.join('\n')}\n${closeIndent}</ul>`);
 }
 
+// The office count in the homepage's structured data ("123 NWS forecast
+// offices") is a placeholder in shadcn/index.html, filled here from the
+// roster, so the published number cannot drift from the office list.
+export const OFFICE_COUNT_TOKEN = '__OFFICE_COUNT__';
+
+export function fillOfficeCount(html, n = Object.keys(OFFICE_NAMES).length) {
+    return html.split(OFFICE_COUNT_TOKEN).join(String(n));
+}
+
 export function buildAppShell(source = readFileSync(APP_SHELL_SOURCE, 'utf8')) {
     if (!source.includes(DEV_SCRIPT)) {
         throw new Error(`app-shell: dev script marker missing from shadcn/index.html (${DEV_SCRIPT})`);
@@ -55,7 +64,7 @@ export function buildAppShell(source = readFileSync(APP_SHELL_SOURCE, 'utf8')) {
     if (!source.includes(CSS_MARKER)) {
         throw new Error(`app-shell: css marker missing from shadcn/index.html (${CSS_MARKER})`);
     }
-    return injectOfficeIndex(source
+    return injectOfficeIndex(fillOfficeCount(source
         .replace(CSS_MARKER, PROD_HEAD)
-        .replace(DEV_SCRIPT, PROD_SCRIPT));
+        .replace(DEV_SCRIPT, PROD_SCRIPT)));
 }

@@ -133,9 +133,18 @@ function createRes() {
 
 // A body relative to the shell it was rendered from: the shell bytes become
 // placeholders, so the golden pins what the handler inserted and where.
+// The one insertion into the shell's <head> (dateModified, the issuance
+// time, in the page's WebPage JSON-LD) is lifted into the head placeholder.
+const DATE_MODIFIED_LINE = /\n[ \t]*"dateModified": ("[^"\n]*"),(?=\n)/;
 function normalize(body, shell) {
     if (typeof body !== 'string' || !body.startsWith('<!DOCTYPE')) return body;
     if (body === shell) return '<<SHELL>>';
+    let headMark = '<<HEAD>>';
+    const dm = body.match(DATE_MODIFIED_LINE);
+    if (dm && !shell.includes(dm[0])) {
+        body = body.replace(dm[0], '');
+        headMark = `<<HEAD dateModified=${dm[1]}>>`;
+    }
     const [head, tail] = shell.split(LOADING_DIV);
     if (!body.startsWith(head)) throw new Error('body does not start with the shell head');
     let rest = body.slice(head.length);
@@ -148,7 +157,7 @@ function normalize(body, shell) {
     if (scriptAt < 0) throw new Error('app script not found in body');
     const inserted = rest.slice(0, scriptAt);
     if (rest.slice(scriptAt + PROD_SCRIPT.length) !== end) throw new Error('shell tail differs');
-    return `<<HEAD>>${ssr}<<MID>>${inserted}<<SCRIPT>><<TAIL>>`;
+    return `${headMark}${ssr}<<MID>>${inserted}<<SCRIPT>><<TAIL>>`;
 }
 
 const officeShell = (query) => {

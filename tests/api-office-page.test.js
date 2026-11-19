@@ -159,6 +159,21 @@ describe('GET /api/office-page (SSR /o/<CODE>/ pages)', () => {
         expect(res.body).toContain('/?office=LOX');
     });
 
+    it('carries the issuance time as data: <time datetime> in the dateline, dateModified in its only JSON-LD block', async () => {
+        setScenario();
+        const res = createRes();
+        await handler(createReq({ query: { code: 'LOX' } }), res);
+        expect(res.body).toContain('· issued <time datetime="2026-07-03T11:40:00+00:00">Friday, July 3 at 4:40 AM PDT</time>.');
+        const blocks = [...res.body.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => JSON.parse(m[1]));
+        expect(blocks.length).toBe(1);
+        expect(blocks[0]['@type']).toBe('WebPage');
+        expect(blocks[0]['@id']).toBe('https://plaincast.live/o/LOX/');
+        expect(blocks[0].dateModified).toBe('2026-07-03T11:40:00+00:00');
+        // dateModified is the only change to the baked <head>.
+        const head = (html) => html.slice(0, html.indexOf('</head>'));
+        expect(head(res.body).replace('\n        "dateModified": "2026-07-03T11:40:00+00:00",', '')).toBe(head(BAKED_LOX));
+    });
+
     it('adds a deterministic changelog line when the previous issuance differs (no AI)', async () => {
         setScenario({ prev: PREV });
         const res = createRes();

@@ -26,10 +26,11 @@
 //                              NWS calls) when it is fresh and current; tag
 //                              every response with the office's cache tag.
 //   PLAINCAST_AI_FOR_AGENTS=1  the stored AI text in <main> and the Markdown,
-//                              labelled, with the NWS original kept; the
-//                              issuance time as <time> and dateModified.
-// With both off, every response is byte-for-byte the pre-engine page
-// (tests/engine-switches-off.test.js). Every response path sets
+//                              labelled, with the NWS original kept.
+// With both off, every response is the pre-engine page, pinned byte for byte
+// by tests/engine-switches-off.test.js. Regardless of the switches, the
+// issuance time is data: <time datetime> in the dateline and dateModified in
+// the page's WebPage JSON-LD. Every response path sets
 // `Vary: Accept` — with two bodies behind one URL, omitting it lets the CDN
 // hand an agent the HTML variant or a browser the Markdown one, whichever
 // landed in the cache first.
@@ -218,18 +219,17 @@ export function withAi(sections, ai) {
     return sections.map(s => (ai.get(s.key) ? { ...s, ai: ai.get(s.key) } : s));
 }
 
-// Assemble the server-rendered #sections content: dateline, optional
-// deterministic changelog line (no AI), one <article> per narrative section,
-// and a closing line pointing at the interactive experience.
+// Assemble the server-rendered #sections content: dateline (the issuance
+// time as <time datetime>), optional deterministic changelog line (no AI),
+// one <article> per narrative section, and a closing line pointing at the
+// interactive experience.
 //
-// `opts` exists only with PLAINCAST_AI_FOR_AGENTS=1 (absent, the output is
-// byte-for-byte the switch-off page):
-//   machineTime  the issuance time as <time datetime> in the dateline;
-//   ai           Map(raw section key → stored translation) when a COMPLETE
-//                set for this exact edition covers every rendered section
-//                (aiForSections). Each section then leads with the AI text,
-//                labelled as an AI summary, and keeps the NWS text in a
-//                closed <details> labelled as the original.
+// `opts.ai` exists only with PLAINCAST_AI_FOR_AGENTS=1 (absent, the output is
+// the switch-off page): Map(raw section key → stored translation) when a
+// COMPLETE set for this exact edition covers every rendered section that can
+// carry one (aiForSections). Each such section then leads with the AI text,
+// labelled as an AI summary, and keeps the NWS text in a closed <details>
+// labelled as the original.
 export function buildSsrHtml(code, city, productText, issuanceTime, changelogHtml, opts = null) {
     const ai = opts?.ai || null;
     const articles = [];
@@ -258,7 +258,7 @@ export function buildSsrHtml(code, city, productText, issuanceTime, changelogHtm
     const tz = OFFICE_TIMEZONES[code] || 'America/Los_Angeles';
     const issued = formatIssued(issuanceTime, tz);
     const metaLine = issued
-        ? `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}) · issued ${issuedHtml(issued, issuanceTime, opts?.machineTime)}.</p>\n`
+        ? `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}) · issued ${issuedHtml(issued, issuanceTime)}.</p>\n`
         : `        <p class="ssr-meta">Area Forecast Discussion · National Weather Service ${escHtml(city)} (${escHtml(code)}).</p>\n`;
 
     const note = ai
@@ -274,9 +274,10 @@ export function buildSsrHtml(code, city, productText, issuanceTime, changelogHtm
     return `\n${metaLine}${changelogHtml || ''}${articles.join('\n')}\n${note}\n    `;
 }
 
-// "issued <date>", with the instant as machine-readable data when asked.
-export function issuedHtml(issued, issuanceTime, machineTime) {
-    const iso = machineTime ? isoInstant(issuanceTime) : null;
+// "issued <date>", with the instant as machine-readable data (the NWS
+// issuanceTime, ISO 8601) whenever it parses.
+export function issuedHtml(issued, issuanceTime) {
+    const iso = isoInstant(issuanceTime);
     return iso ? `<time datetime="${escHtml(iso)}">${escHtml(issued)}</time>` : escHtml(issued);
 }
 
@@ -329,12 +330,18 @@ export function aiForSections(productText, entry, office, id, limit = Infinity) 
     return out.size ? out : null;
 }
 
-// dateModified (the issuance instant) in the office page's WebPage JSON-LD
-// (scripts/build-offices.mjs officeJsonLd). PLAINCAST_AI_FOR_AGENTS=1 only.
-export function withDateModified(html, code, issuanceTime) {
+// dateModified (the issuance instant) in the page's WebPage JSON-LD, the
+// block whose @id is `pageId`: https://plaincast.live/o/<CODE>/ on an office
+// page (scripts/build-offices.mjs officeJsonLd), https://plaincast.live/ on
+// the homepage (shadcn/index.html). No such block, or no parseable time: the
+// page is returned unchanged.
+export const HOME_PAGE_ID = 'https://plaincast.live/';
+export const officePageId = (code) => `https://plaincast.live/o/${code}/`;
+
+export function withDateModified(html, pageId, issuanceTime) {
     const iso = isoInstant(issuanceTime);
     if (!iso) return html;
-    const anchor = `"@id": "https://plaincast.live/o/${code}/",`;
+    const anchor = `"@id": ${JSON.stringify(pageId)},`;
     const at = html.indexOf(anchor);
     if (at < 0) return html;
     const lineStart = html.lastIndexOf('\n', at) + 1;
@@ -489,7 +496,7 @@ export default async function handler(req, res) {
         const extras = extrasPending ? await extrasPending : null;
         const ai = aiForAgents ? aiForSections(text, extras?.translation, code, product.id) : null;
         const ssr = buildSsrHtml(code, city, text, product.issuanceTime, changelog.html,
-            aiForAgents ? { ai, machineTime: true } : null);
+            aiForAgents ? { ai } : null);
         if (!baked.includes(LOADING_DIV)) throw new Error('skeleton marker missing from template');
 
         const canonical = `https://plaincast.live/o/${code}/`;
@@ -504,8 +511,7 @@ export default async function handler(req, res) {
         });
 
         // replacer fn: `$`-sequences in forecast text must not be interpreted
-        let html = baked.replace(LOADING_DIV, () => ssr);
-        if (aiForAgents) html = withDateModified(html, code, product.issuanceTime);
+        let html = withDateModified(baked.replace(LOADING_DIV, () => ssr), officePageId(code), product.issuanceTime);
         const fullCache = src.fromStore ? STORE_CACHE : FULL_CACHE;
         let cacheControl = fullCache;
         if (boot && extrasPending) {

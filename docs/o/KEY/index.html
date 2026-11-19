@@ -10,7 +10,11 @@
          docs/o/<CODE>/ page, and api/home.js + api/office-page.js inject the
          server-rendered digest at the #loading marker. Change them only
          together with scripts/build-offices.mjs, then regenerate
-         (bun scripts/build-offices.mjs). -->
+         (bun scripts/build-offices.mjs). The structured data below is the
+         HOMEPAGE's: the office pages drop every block and carry their own
+         WebPage (scripts/build-offices.mjs officeJsonLd). The OFFICE_COUNT
+         placeholders in it are filled from the office roster by
+         scripts/app-shell.mjs, so the number cannot go stale. -->
     <title>Key West NWS Forecast in Plain English · Plaincast</title>
     <meta name="description" content="The latest National Weather Service Area Forecast Discussion for Key West (KEY), translated into plain English — the real forecast, decoded. Updated 3–4 times daily.">
     <meta name="theme-color" content="#ffffff">
@@ -57,112 +61,6 @@
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "Plaincast",
-        "url": "https://plaincast.live",
-        "description": "NWS Area Forecast Discussions decoded into plain English with side-by-side translation, 230+ term jargon glossary, forecaster confidence indicators, edition history and per-edition diffs.",
-        "applicationCategory": "WeatherApplication",
-        "operatingSystem": "Any",
-        "browserRequirements": "Requires JavaScript",
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "author": { "@type": "Person", "name": "Jonah Berg", "url": "https://jonahberg.com" },
-        "sourceOrganization": { "@type": "GovernmentOrganization", "name": "National Weather Service", "url": "https://www.weather.gov" },
-        "featureList": [
-            "AI-powered plain English summaries via Claude",
-            "Side-by-side translation with annotated original",
-            "230+ term meteorological jargon glossary",
-            "Forecaster confidence indicator",
-            "Edition history with per-section diffs",
-            "Active weather alerts with plain-English leads",
-            "68 NWS forecast offices"
-        ],
-        "sameAs": ["https://github.com/jonahberg/plaincast"]
-    }
-    </script>
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        "mainEntity": [
-            {
-                "@type": "Question",
-                "name": "What is an Area Forecast Discussion (AFD)?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "An Area Forecast Discussion is a detailed narrative forecast written 3-4 times daily by National Weather Service meteorologists. Unlike weather apps that show icons and numbers, AFDs explain the reasoning behind the forecast - why models disagree, what forecasters are watching, and where uncertainty exists."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "How does Plaincast translate NWS forecasts?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "Plaincast uses Anthropic's Claude AI to summarize each forecast section into natural, readable prose. It also annotates the original text with a 230+ term jargon glossary, converts Zulu (UTC) times to local time zones, and highlights key information for quick scanning."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "Which NWS offices does Plaincast support?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "Plaincast supports 68 NWS forecast offices across all US regions including Los Angeles (LOX), New York (OKX), Chicago (LOT), Houston (HGX), Phoenix (PSR), San Francisco (MTR), Miami (MFL), Seattle (SEW), Denver (BOU), and many more."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "Is Plaincast free?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "Yes, Plaincast is completely free and open source. It uses the NWS public API for forecast data and Anthropic's Claude for AI summaries. No account or API key required."
-                }
-            }
-        ]
-    }
-    </script>
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org",
-        "@type": "HowTo",
-        "name": "How to Read an NWS Area Forecast Discussion",
-        "description": "Learn how to read and understand the detailed weather forecasts written by National Weather Service meteorologists using Plaincast's AI translation.",
-        "step": [
-            {
-                "@type": "HowToStep",
-                "name": "Select your NWS office",
-                "text": "Choose your local NWS forecast office from the picker. Plaincast supports 68 offices across the United States, or can find your nearest one from your location."
-            },
-            {
-                "@type": "HowToStep",
-                "name": "Read the AI summary",
-                "text": "Each forecast section opens on a plain English summary translated by Claude AI. Key details like temperatures, wind speeds, and dates are highlighted in bold."
-            },
-            {
-                "@type": "HowToStep",
-                "name": "Check the original with annotations",
-                "text": "Switch to the Original tab to see the forecaster's own text with 230+ meteorological jargon terms highlighted. Hover or tap any highlighted term to see its definition."
-            },
-            {
-                "@type": "HowToStep",
-                "name": "Review the takeaway, confidence, and what changed",
-                "text": "The key takeaway at the top summarizes the most important point, the confidence indicator reads the forecaster's own certainty language, and the What Changed tab shows what this edition revised."
-            }
-        ]
-    }
-    </script>
-
-    <!-- Pre-paint theme (blocking, external file: the CSP has no
-         script-src 'unsafe-inline'): must run before first paint. -->
-    <script src="/theme-init.js"></script>
-    <!-- Vercel Web Analytics + Speed Insights (same-origin /_vercel/*, so
-         script-src 'self' covers them). Web Analytics also defines window.va,
-         which the app's failure telemetry (src/lib/track.js) reports through. -->
-    <script defer src="/_vercel/insights/script.js"></script>
-    <script defer src="/_vercel/speed-insights/script.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/app.css">
-    <link rel="modulepreload" crossorigin href="/assets/vendor.js">
-<script type="application/ld+json">
-    {
-        "@context": "https://schema.org",
         "@type": "WebPage",
         "@id": "https://plaincast.live/o/KEY/",
         "url": "https://plaincast.live/o/KEY/",
@@ -199,6 +97,17 @@
         "significantLink": "https://plaincast.live/o/KEY/?view=changelog"
     }
     </script>
+
+    <!-- Pre-paint theme (blocking, external file: the CSP has no
+         script-src 'unsafe-inline'): must run before first paint. -->
+    <script src="/theme-init.js"></script>
+    <!-- Vercel Web Analytics + Speed Insights (same-origin /_vercel/*, so
+         script-src 'self' covers them). Web Analytics also defines window.va,
+         which the app's failure telemetry (src/lib/track.js) reports through. -->
+    <script defer src="/_vercel/insights/script.js"></script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/app.css">
+    <link rel="modulepreload" crossorigin href="/assets/vendor.js">
 </head>
 <body>
     <div id="root"></div>

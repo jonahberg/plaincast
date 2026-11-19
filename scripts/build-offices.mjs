@@ -64,8 +64,10 @@ export function officeImageAlt(city) {
 }
 
 // Office-specific structured data: WebPage (with BreadcrumbList home→office)
-// about a Place. The generic WebApplication/FAQ/HowTo JSON-LD stays shared;
-// this block is what makes each /o/<CODE>/ page's structured data unique.
+// about a Place. It is the office page's ONLY block: the template's own
+// blocks (the homepage's WebPage, and the site-wide WebApplication, FAQPage
+// and HowTo) describe the homepage and stay there (renderOfficePage).
+// api/office-page.js adds dateModified (the issuance time) after the @id line.
 export function officeJsonLd(code, city) {
     const url = `https://plaincast.live/o/${code}/`;
     const data = {
@@ -100,10 +102,28 @@ export function officeJsonLd(code, city) {
     return `<script type="application/ld+json">\n    ${json.split('\n').join('\n    ')}\n    </script>`;
 }
 
+// One JSON-LD <script> block, with its indentation and line break.
+const JSON_LD_BLOCK_RE = /[ \t]*<script type="application\/ld\+json">[\s\S]*?<\/script>\n?/g;
+
+// The template's structured data replaced by the office's own block, at the
+// position of the first one (before </head> if the template has none).
+export function withOfficeJsonLd(html, code, city) {
+    let placed = false;
+    const out = html.replace(JSON_LD_BLOCK_RE, () => {
+        if (placed) return '';
+        placed = true;
+        return `    ${officeJsonLd(code, city)}\n`;
+    });
+    return placed ? out : out.replace('</head>', () => `${officeJsonLd(code, city)}\n</head>`);
+}
+
 export function renderOfficePage(template, code, city) {
     const title = escHtml(officeTitle(city));
     const desc = escHtml(officeDescription(city, code));
-    let html = template;
+    // Structured data first: the homepage's WebPage block repeats the title
+    // and description template strings, which the rewrites below would
+    // otherwise turn into a second, contradictory office WebPage.
+    let html = withOfficeJsonLd(template, code, city);
     // title appears in <title>, og:title, twitter:title; desc in 3 meta tags.
     html = html.split(TITLE_TEMPLATE).join(title);
     html = html.split(DESC_TEMPLATE).join(desc);
@@ -139,8 +159,6 @@ export function renderOfficePage(template, code, city) {
     html = html.replace('href="manifest.json"', 'href="/manifest.json"');
     html = html.replace('href="styles.css"', 'href="/styles.css"');
     html = html.replace('src="js/app.js"', 'src="/js/app.js"');
-    // office-specific structured data (WebPage + Place + BreadcrumbList)
-    html = html.replace('</head>', `${officeJsonLd(code, city)}\n</head>`);
     // mark this office's own entry in the footer office index
     html = html.replace(`<a href="/o/${code}/">`, `<a href="/o/${code}/" aria-current="page">`);
     return html;
