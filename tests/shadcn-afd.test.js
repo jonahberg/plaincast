@@ -106,6 +106,8 @@ describe('time-zone labels (formatInZone)', () => {
         // \s: some ICU builds put a narrow no-break space before AM/PM.
         expect(formatInZone(at, opts('Pacific/Guam'))).toMatch(/^5:51\sAM ChST$/);
         expect(formatInZone(at, opts('Pacific/Pago_Pago'))).toMatch(/^8:51\sAM SST$/);
+        // an ordinary space before AM/PM: the reading font has no U+202F
+        expect(formatInZone(at, opts('Pacific/Guam'))).toBe('5:51 AM ChST');
         expect(formatIssueTime(at, 'Pacific/Guam')).toMatch(/November 19\b.*5:51\sAM ChST$/);
     });
 

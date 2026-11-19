@@ -22,7 +22,10 @@ export function formatInZone(date, options) {
     if (!name) return date.toLocaleString('en-US', options);
     return new Intl.DateTimeFormat('en-US', options).formatToParts(date)
         .map(p => (p.type === 'timeZoneName' ? name : p.value))
-        .join('');
+        .join('')
+        // Newer ICU puts a narrow no-break space (U+202F) before AM/PM; the
+        // reading font has no glyph for it, so it falls back mid-line.
+        .replace(/\u202f/g, ' ');
 }
 
 // The short zone name formatInZone prints for this instant ("PST", "ChST",

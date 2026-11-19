@@ -5,7 +5,7 @@ import { describe, it, expect } from 'bun:test';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TRANSLATE_START_MS, FETCH_PHASE_MS } from '../api/cron-refresh.js';
+import { TRANSLATE_START_MS, FETCH_PHASE_MS, PURGE_BATCH } from '../api/cron-refresh.js';
 import { HEARTBEAT_FRESH_MS } from '../api/_store.js';
 import { STORE_CACHE } from '../api/office-page.js';
 
@@ -22,6 +22,14 @@ function matches(source, path) {
         .replace(/:[a-z]+/g, '[^/]+');
     return new RegExp(`^${re}$`).test(path);
 }
+
+describe('purge batching', () => {
+    // Vercel documents 16 tags per bulk purge call; the poller used to send 50.
+    it('sends well under 16 tags per purge call', () => {
+        expect(PURGE_BATCH).toBeGreaterThan(0);
+        expect(PURGE_BATCH).toBeLessThanOrEqual(12);
+    });
+});
 
 describe('vercel.json: the edition poller', () => {
     it('is scheduled every 5 minutes', () => {
