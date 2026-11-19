@@ -197,7 +197,7 @@ export default async function handler(req, res) {
                 const result = await generateText({
                     model: MODEL,
                     providerOptions: PROVIDER_OPTIONS,
-                    system: buildSystemPrompt({ section: s.key, office, issuanceTime }),
+                    system: buildSystemPrompt({ section: s.key, office, issuanceTime, text: s.text }),
                     prompt: annotateZuluTimes(stripHeaderStamp(s.text), office, issuanceTime),
                     maxOutputTokens: 2048,
                     abortSignal: AbortSignal.timeout(15000),

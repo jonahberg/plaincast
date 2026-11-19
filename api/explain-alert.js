@@ -76,7 +76,7 @@ const SYSTEM = `You translate National Weather Service alerts into calm, plain E
 - Plain prose in 1-3 short paragraphs, 120 words maximum
 - Bold the single most important action the alert gives with **markdown bold** (bold nothing if it gives none); no headers, lists, or quotes
 - Do not add information that is not in the alert
-- Never add advice, warnings, calls to action, or reassurance that the alert does not give: every action you mention comes from the alert's own text, usually its Instructions. If the alert gives no action, do not supply one. Plaincast promises its readers that every statement on it comes from the National Weather Service; advice the alert did not give breaks that promise, however sensible it sounds`;
+- Never add advice, warnings, calls to action, or reassurance that the alert does not give: every action you mention comes from the alert's own text, usually its Instructions. If the alert gives no action, do not supply one. Readers rely on this text containing only what the alert says; advice the alert did not give breaks that, however sensible it sounds`;
 
 // Translate a structured error (or a raw fetch/model failure) into the exact
 // HTTP responses the endpoint has always produced. Shared by the fresh path

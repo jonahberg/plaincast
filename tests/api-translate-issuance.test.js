@@ -453,7 +453,7 @@ $$`;
         const res = createRes();
         await handler(createReq({ office: 'LOT', id }), res);
         expect(res.statusCode).toBe(200);
-        expect(prompts.join('\n')).toContain('6-9Z (1-4 AM CDT Tue)');
+        expect(prompts.join('\n')).toContain('6-9Z (1-4 AM CDT)'); // bare token: clock only (Nov 18 2026)
         expect(prompts.join('\n')).toContain('15Z (10 AM CDT)');
     });
 });
